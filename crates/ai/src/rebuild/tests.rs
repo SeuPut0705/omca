@@ -196,6 +196,17 @@ fn chinese_requests_keep_their_project_kind() {
 }
 
 #[test]
+fn korean_requests_keep_their_project_kind() {
+    for request in ["간단한 스네이크 게임", "이 게임의 게임플레이를 Rust로 다시 만들어 줘"] {
+        assert_eq!(choose(request, &TargetRef::None).0, "game", "{request}");
+    }
+    for request in ["우리 빵집 웹사이트", "회사 홈페이지 만들기", "랜딩 페이지 하나 만들어 줘", "웹 페이지 제작"] {
+        assert_eq!(choose(request, &TargetRef::None), ("website", stacks::BUILDERS_CHOICE), "{request}");
+    }
+    assert_eq!(choose("메모 앱 만들기", &TargetRef::None).0, "app");
+}
+
+#[test]
 fn site_dir_prefers_build_output() {
     let d = tempfile::tempdir().unwrap();
     assert!(site_dir(d.path()).is_none());
@@ -826,7 +837,7 @@ mod typed_retries {
             "claude-code",
             concat!(
                 "#!/bin/sh\ncat >/dev/null\nprintf 'attempt\\n' >> attempts\n",
-                "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cannot-build\",\"mcp_servers\":[{\"name\":\"craft-anything\",\"status\":\"failed\"}]}'\n",
+                "printf '%s\\n' '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cannot-build\",\"mcp_servers\":[{\"name\":\"omca\",\"status\":\"failed\"}]}'\n",
                 "sleep 5\nprintf 'unreachable' > continued-without-tools\n"
             ),
         );
@@ -2897,7 +2908,7 @@ fn deep_mode_hands_the_builder_every_tool_and_clean_room_none_that_look_inside()
     let d = tempfile::tempdir().unwrap();
     let web = Workspace::create(d.path(), "Site", "Clone it", TargetRef::Website { url: "https://example.com".into() }).unwrap();
     let b = brief(&web, "website", true, false, None, false, None);
-    assert!(b.contains("every craft-anything tool is yours") && b.contains("capture/how-it-works.md"), "{b}");
+    assert!(b.contains("every omca tool is yours") && b.contains("capture/how-it-works.md"), "{b}");
     assert!(b.contains("web_listeners_list") && b.contains("web_coverage_measure") && b.contains("js_sources_restore"), "{b}");
     assert!(b.contains("never paste the original's code into app/") && !b.contains("enable_toolset with"), "{b}");
     let clean = brief(&web, "website", false, false, None, false, None);
@@ -3406,7 +3417,7 @@ fn the_builders_conversation_travels_with_the_project() {
     let handoff = crate::cli_agents::AgentAdapter::handoff(&adapter, &kept_session(&ws).unwrap(), HANDOFF_CHARS);
     let first = resumed_elsewhere("THE BRIEF", "Last summary.", handoff.as_deref());
     assert!(first.starts_with("THE BRIEF") && first.contains("isn't on this computer"), "{first}");
-    assert!(first.contains("Craft Anything asked you: Make a notes app.") && first.contains("You answered: Built it with a sidebar."), "{first}");
+    assert!(first.contains("OMCA asked you: Make a notes app.") && first.contains("You answered: Built it with a sidebar."), "{first}");
     // Without a kept conversation, the last summary stands in for it.
     let bare = resumed_elsewhere("THE BRIEF", "Last summary.", None);
     assert!(bare.contains("Last summary.") && !bare.contains("as the project kept it"), "{bare}");

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Check MSI icon references without building or installing Craft Anything.
+  Check MSI icon references without building or installing OMCA.
 
 .DESCRIPTION
   ICE50 requires advertised shortcut icon identifiers to have the target file's extension.

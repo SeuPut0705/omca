@@ -80,12 +80,12 @@ fn full_setup_preserves_comments_backs_up_and_is_idempotent() {
     assert!(hermes.contains("# friend") && hermes.contains("enabled: true"));
     assert!(h.join(".cursor/mcp.json").exists());
     // backups hold the originals; created files get none
-    assert_eq!(read(h.join(".codex/config.toml.craft-anything.backup")), CODEX);
-    assert!(!h.join(".cursor/mcp.json.craft-anything.backup").exists());
+    assert_eq!(read(h.join(".codex/config.toml.omca.backup")), CODEX);
+    assert!(!h.join(".cursor/mcp.json.omca.backup").exists());
     // skill landed in the shared folder and Claude Code's own
-    assert!(h.join(".agents/skills/craft-anything/SKILL.md").exists());
-    assert!(h.join(".claude/skills/craft-anything/SKILL.md").exists());
-    assert!(h.join(".hermes/skills/craft-anything/SKILL.md").exists());
+    assert!(h.join(".agents/skills/omca/SKILL.md").exists());
+    assert!(h.join(".claude/skills/omca/SKILL.md").exists());
+    assert!(h.join(".hermes/skills/omca/SKILL.md").exists());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
@@ -105,7 +105,7 @@ fn full_setup_preserves_comments_backs_up_and_is_idempotent() {
     moved.command = vec!["/opt/new/craft-anything-cli".into(), "mcp".into()];
     let r = apply(&plan(&fx.host, &moved).unwrap());
     assert_eq!(r.status, "configured");
-    assert_eq!(read(h.join(".codex/config.toml.craft-anything.backup")), CODEX);
+    assert_eq!(read(h.join(".codex/config.toml.omca.backup")), CODEX);
 
     // Doctor sees the aligned registrations and the stale one.
     let rep = doctor(&fx.host, &DoctorRequest { cli_path: Some(fx.cli.clone()), self_test: false, engines: false, ..Default::default() });
@@ -123,7 +123,7 @@ fn full_setup_preserves_comments_backs_up_and_is_idempotent() {
     assert!(codex.contains("# theirs") && !codex.contains("craft-anything-cli"));
     let hermes = read(h.join(".hermes/config.yaml"));
     assert_eq!(hermes, HERMES);
-    assert!(!h.join(".agents/skills/craft-anything/SKILL.md").exists());
+    assert!(!h.join(".agents/skills/omca/SKILL.md").exists());
     assert_eq!(uninstall(&fx.host).status, "nothing_to_remove");
 }
 
@@ -155,7 +155,7 @@ fn pi_config_is_created_when_missing() {
     assert!(!p.blocked, "{p:?}");
     assert_eq!(apply(&p).status, "configured");
     let v: serde_json::Value = serde_json::from_str(&read(&pi)).unwrap();
-    assert_eq!(v["mcpServers"]["craft-anything"]["args"][0], "mcp");
+    assert_eq!(v["mcpServers"]["omca"]["args"][0], "mcp");
     std::fs::write(&pi, "").unwrap();
     assert!(plan(&fx.host, &req(&fx, &["pi"])).unwrap().blocked);
 }
@@ -173,7 +173,7 @@ fn strict_json_client_rejects_comments() {
     assert!(!p.blocked);
     assert_eq!(apply(&p).status, "configured");
     let v: serde_json::Value = serde_json::from_str(&read(&pi)).unwrap();
-    assert_eq!(v["mcpServers"]["craft-anything"]["type"], "stdio");
+    assert_eq!(v["mcpServers"]["omca"]["type"], "stdio");
 }
 
 #[test]
@@ -223,7 +223,7 @@ fn unknown_client_and_manual_client() {
 fn foreign_entry_with_our_name_is_replaced_but_not_uninstalled() {
     let fx = fixture();
     let cursor = fx.host.home.join(".cursor/mcp.json");
-    std::fs::write(&cursor, "{\"mcpServers\": {\"craft-anything\": {\"command\": \"npx\", \"args\": [\"something\"]}}}").unwrap();
+    std::fs::write(&cursor, "{\"mcpServers\": {\"omca\": {\"command\": \"npx\", \"args\": [\"something\"]}}}").unwrap();
     assert_eq!(uninstall(&fx.host).status, "nothing_to_remove");
     let p = plan(&fx.host, &req(&fx, &["cursor"])).unwrap();
     assert!(p.actions[0].reason.as_deref().unwrap_or_default().contains("replaced"));

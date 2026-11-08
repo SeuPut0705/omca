@@ -213,7 +213,7 @@ mod tests {
         let r = Registry::with_all_tools();
         assert_eq!(r.canonical("core_session_show"), Some("core_session_show"));
         assert_eq!(r.canonical("core-session-show"), Some("core_session_show"));
-        assert_eq!(r.canonical("mcp__craft-anything__core_session_show"), Some("core_session_show"));
+        assert_eq!(r.canonical("mcp__omca__core_session_show"), Some("core_session_show"));
         assert_eq!(r.canonical("mcp__other__nope"), None);
         assert_eq!(r.canonical("Read"), None, "an agent's own tool isn't ours");
     }

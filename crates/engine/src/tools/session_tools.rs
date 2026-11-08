@@ -272,7 +272,7 @@ fn core_session_show(ctx: &mut Ctx<'_>, _params: Value) -> Result<ToolOutput, To
         "evidence_not_loaded": s.unloaded_evidence(),
         "unknowns": s.unknowns().count(),
         "project": s.project.as_ref().map(|p| json!({"name": p.meta.name, "path": p.root, "purpose": p.meta.purpose})),
-        "server": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")},
+        "server": {"name": "omca", "version": env!("CARGO_PKG_VERSION")},
         "host": craft_anything_evidence::host_triple(),
     })))
 }
@@ -408,7 +408,7 @@ fn core_evidence_import(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
     let bytes = std::fs::read(&path).map_err(|e| ToolError::io(path.display(), e))?;
     let v: Value = serde_json::from_slice(&bytes).map_err(|e| ToolError::invalid(format!("not a bundle: {e}")))?;
     if v.get("format").and_then(Value::as_str) != Some(BUNDLE_FORMAT) {
-        return Err(ToolError::invalid("not a Craft Anything evidence bundle"));
+        return Err(ToolError::invalid("not a OMCA evidence bundle"));
     }
     let mut imported = 0usize;
     let mut rejected = Vec::new();

@@ -328,7 +328,8 @@ fn decide_command(cmd: &str, app: &Path) -> Decision {
     let parts: Vec<&str> = c.split("&&").map(str::trim).collect();
     if parts.iter().any(|p| never_exits(p)) {
         return Decision::Deny(
-            "Don't start dev servers or watchers: they never exit. Run `npm run build` (or `cargo build`) instead; Craft Anything serves and checks the build itself.".into(),
+            "Don't start dev servers or watchers: they never exit. Run `npm run build` (or `cargo build`) instead; OMCA serves and checks the build itself."
+                .into(),
         );
     }
     if c.contains(['|', ';', '<', '>', '`', '$', '\n']) || c.replace("&&", "").contains('&') {

@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-formats"
-description = "Pure, standalone file-format parsers for Craft Anything (no workspace dependencies)"
+description = "Pure, standalone file-format parsers for OMCA (no workspace dependencies)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

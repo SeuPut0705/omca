@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-ai"
-description = "AI backends, the agent loop and crews for Craft Anything"
+description = "AI backends, the agent loop and crews for OMCA"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

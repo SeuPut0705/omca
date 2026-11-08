@@ -129,7 +129,7 @@ struct Job {
 
 fn job(ctx: &Ctx<'_>) -> Result<Job, ToolError> {
     // First: outside a project no keys are loaded, so "no key" would be wrong for a saved one (#923).
-    let not_project = || ToolError::new(ErrorCode::FeatureMissing, "Assets can only be generated inside a Craft Anything project.");
+    let not_project = || ToolError::new(ErrorCode::FeatureMissing, "Assets can only be generated inside a OMCA project.");
     let inbox = inbox(ctx).ok_or_else(not_project)?;
     let ws = workspace_of(&inbox).ok_or_else(not_project)?;
     let keys = ctx.session.ext.get::<AssetKeys>().unwrap_or_default();
@@ -466,7 +466,7 @@ mod tests {
         let err =
             e.call("assets_image_generate", json!({"prompt": "a crate", "save_as": "crate.png"}), crate::CallOptions::new(crate::Caller::Cli)).err().unwrap();
         assert_eq!(err.code, ErrorCode::FeatureMissing);
-        assert!(err.message.contains("inside a Craft Anything project"), "{}", err.message);
+        assert!(err.message.contains("inside a OMCA project"), "{}", err.message);
     }
 
     #[test]

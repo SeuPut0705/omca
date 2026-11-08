@@ -1,0 +1,50 @@
+# The only GitHub Actions workflow: the Windows x64 build of a release, which needs WiX and so
+# can't be made on the Mac. It never runs on push or PR; packaging/release.sh starts it after
+# publishing the macOS build locally. CI runs locally (`cargo xtask ci`, the pre-push hook).
+name: Release (Windows x64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach to, e.g. v0.5.0"
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Rust
+        run: rustup update stable --no-self-update && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - name: WiX v5
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
+      - name: Korean fonts (craft-fonts, pinned in packaging/env.sh)
+        shell: bash
+        run: |
+          . packaging/env.sh
+          ensure_craft_fonts
+          echo "CRAFT_FONTS_DIR=$(cygpath -w "$CRAFT_FONTS_DIR")" >>"$GITHUB_ENV"
+          echo "CRAFT_FONTS_REQUIRED=1" >>"$GITHUB_ENV"
+      - name: Package
+        shell: pwsh
+        run: pwsh packaging/windows/package.ps1
+      - name: Attach to the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" (Get-ChildItem dist/release/*.msi, dist/release/*.zip).FullName --clobber

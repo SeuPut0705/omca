@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-web"
-description = "Craft Anything in the browser: drop a file to see what it is (eframe web runner, WebGPU with WebGL2 fallback)"
+description = "OMCA in the browser: drop a file to see what it is (eframe web runner, WebGPU with WebGL2 fallback)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

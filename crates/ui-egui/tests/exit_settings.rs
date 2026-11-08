@@ -36,7 +36,7 @@ fn exit_save_preserves_latest_ai_and_pending_app_settings() {
     hub.add_backend_with(entry.clone(), None).unwrap();
     let mut app = CraftApp::new(engine.clone(), hub.clone());
     app.settings.mode = Mode::Experienced;
-    app.settings.language = "de".into();
+    app.settings.language = "ko".into();
     app.settings_changed();
 
     // Commit the newer selection through the hub, leaving the app's AI snapshot stale.
@@ -73,13 +73,13 @@ fn exit_save_preserves_latest_ai_and_pending_app_settings() {
         let saved = Settings::load();
         assert_eq!(saved.ai, latest_ai, "startup keeps even an AI commit made after shutdown returned");
         assert_eq!(saved.mode, Mode::Experienced);
-        assert_eq!(saved.language, "de");
+        assert_eq!(saved.language, "ko");
         assert!(!Settings::path().with_extension("pending.toml").exists());
         assert_eq!(Settings::load(), saved, "recovery is durable and runs only once");
         return;
     }
     // A sidecar left by an earlier failed recovery must not undo this successful full save.
-    let stale = Settings { language: "fr".into(), mode: Mode::Beginner, ..app.settings.clone() };
+    let stale = Settings { language: "en".into(), mode: Mode::Beginner, ..app.settings.clone() };
     stale.defer_save_to(&Settings::path()).unwrap();
     app.on_exit();
     assert!(!Settings::path().with_extension("pending.toml").exists());
@@ -88,7 +88,7 @@ fn exit_save_preserves_latest_ai_and_pending_app_settings() {
     let saved = Settings::load();
     assert_eq!(AiConfig::from_table(&saved.ai).unwrap().get("OpenCode"), Some(&entry));
     assert_eq!(saved.mode, Mode::Experienced);
-    assert_eq!(saved.language, "de");
+    assert_eq!(saved.language, "ko");
     assert_eq!(app.settings.ai, latest_ai);
     let session = engine.session();
     assert_eq!(session.settings.ai, latest_ai);

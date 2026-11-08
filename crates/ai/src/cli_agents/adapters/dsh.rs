@@ -23,7 +23,7 @@ const OVERLAY_ID: &str = "mcp-craft-anything-run";
 
 /// The run's server name: not `craft-anything`, which the person's own registration uses, as the
 /// harness refuses to start two clients with one name.
-const OVERLAY_SERVER: &str = "craft-anything-run";
+const OVERLAY_SERVER: &str = "omca-run";
 
 /// DeepSeek Harness run as a coding agent: one task in, its last message out.
 pub struct DeepSeekHarness;
@@ -146,7 +146,7 @@ fn overlay_yaml(mcp: &McpCommand) -> String {
     let q = |s: &str| format!("'{}'", s.replace('\'', "''"));
     let args: String = mcp.args.iter().map(|a| format!("\n          - {}", q(a))).collect();
     format!(
-        "# Craft Anything's tool server for this run. Generated; safe to delete.\n\
+        "# OMCA's tool server for this run. Generated; safe to delete.\n\
          - insert:\n    \
            - id: {OVERLAY_ID}\n      \
              name: '@deepseek-ai/dsh-mcp-client'\n      \
@@ -167,7 +167,7 @@ mod tests {
     /// A tool server command for a run's project.
     fn mcp() -> McpCommand {
         McpCommand {
-            command: r"C:\Program Files\Craft Anything\craft-anything-cli.exe".into(),
+            command: r"C:\Program Files\OMCA\craft-anything-cli.exe".into(),
             args: vec!["mcp".into(), "--project".into(), r"C:\w\p\investigation.cany".into()],
             notes: None,
         }
@@ -202,7 +202,7 @@ mod tests {
         let written = std::fs::read_to_string(&path).expect("read the overlay");
         assert!(written.contains("- insert:"), "{written}");
         assert!(written.contains(OVERLAY_ID), "{written}");
-        assert!(written.contains("serverName: craft-anything-run\n"), "the person's own registration keeps its name: {written}");
+        assert!(written.contains("serverName: omca-run\n"), "the person's own registration keeps its name: {written}");
         // The server's own arguments, including the run's project, quoted for YAML.
         assert!(written.contains("- 'mcp'"), "{written}");
         assert!(written.contains(&format!("- '{}'", mcp.args[2])), "{written}");

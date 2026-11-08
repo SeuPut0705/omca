@@ -1195,7 +1195,7 @@ fn readable(e: &Entry) -> Result<bool, ToolError> {
     }
     let method = e.compression.to_lowercase();
     if method != "none" && method != "zlib" {
-        let oodle = if method.contains("oodle") { " Oodle is a commercial library the game ships; Craft Anything doesn't run it." } else { "" };
+        let oodle = if method.contains("oodle") { " Oodle is a commercial library the game ships; OMCA doesn't run it." } else { "" };
         return Err(ToolError::unsupported(format!("{file} is compressed with {}, which isn't supported here.{oodle}", e.compression)));
     }
     Ok(method == "zlib")

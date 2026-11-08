@@ -255,30 +255,30 @@ mod tests {
     #[test]
     fn insert_replace_remove_preserve_comments() {
         let entry = json!({"command": "/opt/craft-anything-cli", "args": ["mcp"], "enabled": true});
-        let new = set(FIXTURE, "mcp_servers", "craft-anything", &entry).unwrap();
+        let new = set(FIXTURE, "mcp_servers", "omca", &entry).unwrap();
         assert!(new.contains("# a friend") && new.contains("# tail comment") && new.contains("model: big # inline"));
         let v = parse(&new).unwrap();
-        assert_eq!(v["mcp_servers"]["craft-anything"], entry);
+        assert_eq!(v["mcp_servers"]["omca"], entry);
         assert_eq!(v["mcp_servers"]["other"]["command"], "x");
         assert_eq!(v["skills"], "on");
         let changed = json!({"command": "/new", "args": ["mcp"], "enabled": true});
-        let new2 = set(&new, "mcp_servers", "craft-anything", &changed).unwrap();
-        assert_eq!(parse(&new2).unwrap()["mcp_servers"]["craft-anything"], changed);
-        assert_eq!(new2.matches("craft-anything").count(), 1);
-        assert_eq!(remove(&new2, "mcp_servers", "craft-anything").unwrap(), FIXTURE);
-        assert!(remove(FIXTURE, "mcp_servers", "craft-anything").is_none());
+        let new2 = set(&new, "mcp_servers", "omca", &changed).unwrap();
+        assert_eq!(parse(&new2).unwrap()["mcp_servers"]["omca"], changed);
+        assert_eq!(new2.matches("omca").count(), 1);
+        assert_eq!(remove(&new2, "mcp_servers", "omca").unwrap(), FIXTURE);
+        assert!(remove(FIXTURE, "mcp_servers", "omca").is_none());
     }
 
     #[test]
     fn creates_table_and_handles_flow_style() {
         let e = json!({"command": "c", "args": []});
-        let new = set("", "mcp_servers", "craft-anything", &e).unwrap();
-        assert_eq!(parse(&new).unwrap()["mcp_servers"]["craft-anything"], e);
-        let new = set("a: 1\n", "mcp_servers", "craft-anything", &e).unwrap();
+        let new = set("", "mcp_servers", "omca", &e).unwrap();
+        assert_eq!(parse(&new).unwrap()["mcp_servers"]["omca"], e);
+        let new = set("a: 1\n", "mcp_servers", "omca", &e).unwrap();
         assert_eq!(parse(&new).unwrap()["a"], 1);
-        let new = set("mcp_servers: {}\n", "mcp_servers", "craft-anything", &e).unwrap();
-        assert_eq!(parse(&new).unwrap()["mcp_servers"]["craft-anything"], e);
-        assert!(set("mcp_servers: {a: 1}\n", "mcp_servers", "craft-anything", &e).is_err());
+        let new = set("mcp_servers: {}\n", "mcp_servers", "omca", &e).unwrap();
+        assert_eq!(parse(&new).unwrap()["mcp_servers"]["omca"], e);
+        assert!(set("mcp_servers: {a: 1}\n", "mcp_servers", "omca", &e).is_err());
         assert!(set("a: [", "mcp_servers", "x", &e).is_err());
         assert!(parse("- 1\n").is_err());
     }

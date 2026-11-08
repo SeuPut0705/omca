@@ -1,0 +1,4 @@
+#!/bin/sh
+# Local CI: the full gate (`cargo xtask ci`) before every push, in place of GitHub Actions.
+# Enable once per clone: git config core.hooksPath .githooks   (skip once: git push --no-verify)
+exec cargo xtask ci

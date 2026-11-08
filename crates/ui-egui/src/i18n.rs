@@ -3,7 +3,8 @@
 //! time. A string with no translation is shown in English. Tool ids, the CLI and MCP never see
 //! translated text.
 //!
-//! Adding a language: put `xx.tsv` in `i18n/` and add one row to [`LANGUAGES`].
+//! Supported: English (built in) and Korean (`i18n/ko.tsv`). Adding a language: put `xx.tsv` in
+//! `i18n/`, add one row to [`LANGUAGES`] and its code to `xtask/src/i18n_coverage.rs`.
 
 use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
@@ -18,49 +19,14 @@ pub struct LangInfo {
     pub source: &'static str,
 }
 
-pub static LANGUAGES: &[LangInfo] = &[
-    LangInfo { code: "en", name: "English", source: "" },
-    LangInfo { code: "de", name: "Deutsch", source: include_str!("i18n/de.tsv") },
-    LangInfo { code: "ka", name: "ქართული", source: include_str!("i18n/ka.tsv") },
-    LangInfo { code: "fr", name: "Français", source: include_str!("fr.tsv") },
-    LangInfo { code: "it", name: "Italiano", source: include_str!("i18n/it.tsv") },
-    LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv") },
-    LangInfo { code: "zh-hans", name: "简体中文", source: include_str!("i18n/zh-hans.tsv") },
-    LangInfo { code: "zh-hant", name: "繁體中文", source: include_str!("i18n/zh-hant.tsv") },
-    LangInfo { code: "ru", name: "Русский", source: include_str!("i18n/ru.tsv") },
-    LangInfo { code: "ko", name: "한국어", source: include_str!("i18n/ko.tsv") },
-    LangInfo { code: "cs", name: "Čeština", source: include_str!("i18n/cs.tsv") },
-    LangInfo { code: "es", name: "Español", source: include_str!("i18n/es.tsv") },
-    LangInfo { code: "vi", name: "Tiếng Việt", source: include_str!("i18n/vi.tsv") },
-    LangInfo { code: "pt-br", name: "Português (Brasil)", source: include_str!("i18n/pt-br.tsv") },
-    LangInfo { code: "tr", name: "Türkçe", source: include_str!("i18n/tr.tsv") },
-    LangInfo { code: "th", name: "ไทย", source: include_str!("i18n/th.tsv") },
-];
+pub static LANGUAGES: &[LangInfo] =
+    &[LangInfo { code: "en", name: "English", source: "" }, LangInfo { code: "ko", name: "한국어", source: include_str!("i18n/ko.tsv") }];
 
-/// Match a locale to a registered UI language. An explicit script wins over the region.
+/// Match a locale (`ko-KR`, `ko_KR.UTF-8`, `en-US`…) to a registered UI language.
 pub fn language_from_tag(tag: &str) -> Option<&'static str> {
     let tag = tag.trim().split(['.', '@']).next().unwrap_or_default().replace('_', "-").to_ascii_lowercase();
-    if let Some(lang) = LANGUAGES.iter().find(|l| l.code == tag) {
-        return Some(lang.code);
-    }
-    let mut parts = tag.split('-');
-    let primary = parts.next()?;
-    match primary {
-        "zh" => {
-            let parts: Vec<_> = parts.take_while(|p| p.len() != 1).collect();
-            if parts.contains(&"hant") {
-                Some("zh-hant")
-            } else if parts.contains(&"hans") {
-                Some("zh-hans")
-            } else if parts.iter().any(|p| matches!(*p, "tw" | "hk" | "mo")) {
-                Some("zh-hant")
-            } else {
-                Some("zh-hans")
-            }
-        }
-        "pt" => Some("pt-br"),
-        _ => LANGUAGES.iter().find(|l| l.code == primary).map(|l| l.code),
-    }
+    let primary = tag.split('-').next()?;
+    LANGUAGES.iter().find(|l| l.code == primary).map(|l| l.code)
 }
 
 fn preferred_language(tags: impl IntoIterator<Item = impl AsRef<str>>) -> &'static str {
@@ -138,73 +104,44 @@ mod tests {
         assert_eq!(tr("Untranslated"), "Untranslated");
     }
 
-    /// Script and region matching: an explicit script wins over a region, a registered language
-    /// resolves from any of its regions, and a locale with no catalogue falls back to English.
+    /// A locale resolves to its language from any region or encoding; anything else is English.
     #[test]
-    fn chinese_scripts_regions_and_fallback() {
-        for tag in ["zh", "zh-CN", "zh_SG.UTF-8", "ZH-Hans", "zh-Hans-TW"] {
-            assert_eq!(language_from_tag(tag), Some("zh-hans"), "{tag}");
-        }
-        for tag in ["zh-TW", "zh-HK", "zh-MO", "zh-Hant", "zh-Hant-CN"] {
-            assert_eq!(language_from_tag(tag), Some("zh-hant"), "{tag}");
+    fn locales_resolve_to_korean_or_english() {
+        for tag in ["ko", "ko-KR", "ko_KR.UTF-8", "KO-kr"] {
+            assert_eq!(language_from_tag(tag), Some("ko"), "{tag}");
         }
         assert_eq!(language_from_tag("en-US"), Some("en"));
-        assert_eq!(language_from_tag("ja-JP"), Some("ja"));
-        assert_eq!(language_from_tag("fr-CA"), Some("fr"));
-        assert_eq!(language_from_tag("de-DE"), Some("de"));
-        assert_eq!(language_from_tag("de_AT.UTF-8"), Some("de"));
-        assert_eq!(language_from_tag("es-ES"), Some("es"));
-        assert_eq!(language_from_tag("es-MX"), Some("es"));
-        assert_eq!(language_from_tag("sv-SE"), None);
-        assert_eq!(preferred_language(["sv-SE", "zh-HK", "en-US"]), "zh-hant");
-        assert_eq!(language_from_tag("vi-VN"), Some("vi"));
-        assert_eq!(language_from_tag("vi_VN.UTF-8"), Some("vi"));
-        assert_eq!(language_from_tag("pt_BR.UTF-8"), Some("pt-br"));
-        assert_eq!(language_from_tag("pt-PT"), Some("pt-br"));
-        assert_eq!(language_from_tag("tr-TR"), Some("tr"));
-        assert_eq!(language_from_tag("th-TH"), Some("th"));
-        assert_eq!(language_from_tag("th_TH.UTF-8"), Some("th"));
-        assert_eq!(preferred_language(["de-DE", "zh-HK"]), "de");
-        assert_eq!(preferred_language(["sv-SE", "vi-VN", "en-US"]), "vi");
-        assert_eq!(preferred_language(["en-US", "zh-CN"]), "en");
-        assert_eq!(preferred_language(["sv-SE"]), "en");
+        assert_eq!(language_from_tag("ja-JP"), None);
+        assert_eq!(preferred_language(["ja-JP", "ko-KR", "en-US"]), "ko");
+        assert_eq!(preferred_language(["en-US", "ko-KR"]), "en");
+        assert_eq!(preferred_language(["zh-CN"]), "en");
         assert_eq!(preferred_language(std::iter::empty::<&str>()), "en");
     }
 
-    /// Every registered catalogue parses, and all of them carry the same key set: a language that
-    /// missed keys would fall back to English mid-interface.
+    /// The Korean catalogue parses cleanly: one key and one translation per line, no duplicates,
+    /// and placeholders and trailing ellipses kept.
     #[test]
-    fn catalogs_are_valid_and_have_matching_keys() {
+    fn korean_catalog_is_valid() {
         fn placeholders(s: &str) -> Vec<&str> {
             let mut out: Vec<_> = s.split('{').skip(1).filter_map(|s| s.split_once('}').map(|(p, _)| p)).collect();
             out.sort_unstable();
             out
         }
-        let mut catalogs = Vec::new();
-        for lang in
-            LANGUAGES.iter().filter(|l| matches!(l.code, "zh-hans" | "zh-hant" | "ru" | "ko" | "cs" | "de" | "ka" | "es" | "it" | "vi" | "pt-br" | "tr" | "th"))
-        {
-            let mut keys = std::collections::BTreeSet::new();
-            for (i, line) in lang.source.lines().enumerate() {
-                if line.trim().is_empty() || line.starts_with('#') {
-                    continue;
-                }
-                let (key, value) = line.split_once('\t').unwrap_or_else(|| panic!("{}:{}: missing tab", lang.code, i + 1));
-                assert!(!key.is_empty() && !value.trim().is_empty(), "{}:{}: empty column", lang.code, i + 1);
-                assert!(!value.contains('\t'), "{}:{}: extra column", lang.code, i + 1);
-                assert!(keys.insert(key.to_string()), "{}:{}: duplicate {key}", lang.code, i + 1);
-                assert_eq!(placeholders(key), placeholders(value), "{}: {key}", lang.code);
-                assert_eq!(key.ends_with('…'), value.ends_with('…'), "{}: {key}", lang.code);
+        let lang = LANGUAGES.iter().find(|l| l.code == "ko").unwrap();
+        let mut keys = std::collections::BTreeSet::new();
+        for (i, line) in lang.source.lines().enumerate() {
+            if line.trim().is_empty() || line.starts_with('#') {
+                continue;
             }
-            let parsed = parse(lang.source);
-            assert_eq!(parsed.len(), keys.len());
-            assert!(keys.len() > 500, "{}: incomplete catalog", lang.code);
-            catalogs.push(keys);
+            let (key, value) = line.split_once('\t').unwrap_or_else(|| panic!("ko:{}: missing tab", i + 1));
+            assert!(!key.is_empty() && !value.trim().is_empty(), "ko:{}: empty column", i + 1);
+            assert!(!value.contains('\t'), "ko:{}: extra column", i + 1);
+            assert!(keys.insert(key.to_string()), "ko:{}: duplicate {key}", i + 1);
+            assert_eq!(placeholders(key), placeholders(value), "ko: {key}");
+            assert_eq!(key.ends_with('…'), value.ends_with('…'), "ko: {key}");
         }
-        assert!(catalogs.len() >= 2);
-        for c in catalogs.iter().skip(1) {
-            assert_eq!(catalogs.first(), Some(c));
-        }
+        assert_eq!(parse(lang.source).len(), keys.len());
+        assert!(keys.len() > 500, "ko: incomplete catalog");
     }
 
     /// Every translation keeps its key's `{placeholders}`, or `trf` would leave them unfilled.

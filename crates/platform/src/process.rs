@@ -438,7 +438,7 @@ fn spawn_error_for(name: &str, program: &OsStr, e: std::io::Error, remediation: 
 fn interpreter_missing_error(name: &str, program: &OsStr, interpreter: &str, e: &std::io::Error) -> ToolError {
     ToolError::new(ErrorCode::EngineMissing, format!("{name} was installed with npm and needs `{interpreter}` (Node.js) to run, but `{interpreter}` wasn't found."))
         .with_remediation(format!(
-            "Install Node.js, or if you use nvm for Windows, run `nvm use <version>` in a terminal opened as administrator. Then restart Craft Anything. Installing {name} without npm also works, when it offers that."
+            "Install Node.js, or if you use nvm for Windows, run `nvm use <version>` in a terminal opened as administrator. Then restart OMCA. Installing {name} without npm also works, when it offers that."
         ))
         .with_details(serde_json::json!({"program": program.to_string_lossy(), "reason": "interpreter_missing", "interpreter": interpreter, "error": e.to_string()}))
 }
@@ -1483,7 +1483,7 @@ mod launch_tests {
     fn paths_for_explorer_use_backslashes_and_no_verbatim_prefix() {
         // Project folders are kept as `D:/Projects/Craft Anything\name`; Explorer opened
         // Documents for those instead of the folder.
-        assert_eq!(windows_form(r"D:/Projects/Craft Anything\notepad"), r"D:\Projects\Craft Anything\notepad");
+        assert_eq!(windows_form(r"D:/Projects/OMCA\notepad"), r"D:\Projects\OMCA\notepad");
         assert_eq!(windows_form(r"\\?\D:\Projects\x"), r"D:\Projects\x");
         assert_eq!(windows_form(r"\\?\UNC\server\share\x"), r"\\server\share\x");
         assert_eq!(windows_form(r"\\server/share"), r"\\server\share");

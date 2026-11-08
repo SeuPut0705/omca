@@ -99,7 +99,7 @@ pub struct ExternalEngine {
     pub id: &'static str,
     /// The name people see ("Install {name} from Settings → Engines").
     pub name: &'static str,
-    /// What Craft Anything uses it for, in a few plain words.
+    /// What OMCA uses it for, in a few plain words.
     pub needed_for: &'static str,
     /// Executable names on macOS and Linux, preferred first.
     pub exes: &'static [&'static str],

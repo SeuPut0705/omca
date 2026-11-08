@@ -1,4 +1,4 @@
-// Craft Anything headless bridge for Ghidra (our own clean-room implementation).
+// OMCA headless bridge for Ghidra (our own clean-room implementation).
 //
 // Run as a Ghidra post-script: analyzeHeadless ... -postScript CraftAnythingBridge.java <descriptor>
 //
@@ -203,7 +203,7 @@ public class CraftAnythingBridge extends GhidraScript {
             throw new NotFound("the address is not in executable memory");
         }
         TimeoutTaskMonitor limit = TimeoutTaskMonitor.timeoutIn(CREATE_SECONDS, TimeUnit.SECONDS, monitor);
-        int tx = currentProgram.startTransaction("Craft Anything: function on demand");
+        int tx = currentProgram.startTransaction("OMCA: function on demand");
         Function f = null;
         try {
             if (currentProgram.getListing().getInstructionAt(a) == null) {

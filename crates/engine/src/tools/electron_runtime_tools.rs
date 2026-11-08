@@ -345,7 +345,7 @@ fn js_electron_walkthrough_record(ctx: &mut Ctx<'_>, params: Value) -> Result<To
     )
     .params(json!({"application_executable": p.application_executable, "action_count": p.actions.len(), "sensitive_value_declarations": p.hidden_values.len()}))
     .result(json!({
-        "browser": {"started_by": "craft-anything", "cleanup": "closed", "product": browser.product},
+        "browser": {"started_by": "omca", "cleanup": "closed", "product": browser.product},
         "start_url": start_url,
         "steps": steps,
         "network": network,

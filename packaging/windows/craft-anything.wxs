@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Craft Anything MSI (WiX Toolset v5: `dotnet tool install -g wix`, plus the UI and Util extensions:
+  OMCA MSI (WiX Toolset v5: `dotnet tool install -g wix`, plus the UI and Util extensions:
   `wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2`). Built by package.ps1:
 
     wix build craft-anything.wxs -arch x64 -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext
@@ -8,50 +8,50 @@
       -d BinDir=... -d IconPath=... -d BannerBmp=... -d DialogBmp=... -d HasCli=1 -o out.msi
 
   Per-machine install with a setup wizard that names the version: Welcome, install folder
-  (Program Files\Craft Anything by default, remembered for upgrades), Ready, a progress page, and a
-  Finish page with a ticked "Launch Craft Anything" box. Installs a Start Menu shortcut and an
+  (Program Files\OMCA by default, remembered for upgrades), Ready, a progress page, and a
+  Finish page with a ticked "Launch OMCA" box. Installs a Start Menu shortcut and an
   App Paths entry (Win+R "craft-anything"), plus craft-anything-cli when HasCli=1. No file types are
-  claimed: Craft Anything opens anything, so it never takes over another app's default.
+  claimed: OMCA opens anything, so it never takes over another app's default.
   `msiexec /qn` still installs silently.
 
-  UpgradeCode is fixed for Craft Anything forever (generated once; never reuse another app's).
+  UpgradeCode is fixed for OMCA forever (generated once; never reuse another app's).
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
-      Name="Craft Anything"
+      Name="OMCA"
       Manufacturer="Learning Machines LLC"
       Version="$(var.Version)"
-      UpgradeCode="8F69A8B5-4384-479B-B3FF-93C5374BCA51"
+      UpgradeCode="A2D8C48E-578F-495D-ACB0-D9F85CCB26F6"
       Scope="perMachine"
       Compressed="yes"
       Language="1033">
-    <SummaryInformation Description="Craft Anything: find out how any software works" Manufacturer="Learning Machines LLC" />
+    <SummaryInformation Description="OMCA: find out how any software works" Manufacturer="Learning Machines LLC" />
     <!-- Same-version upgrades let successive pre-releases of one X.Y.Z replace each other
          (MSI versions are numeric, so 1.2.3-rc.1 and 1.2.3-rc.2 are both 1.2.3). -->
     <MajorUpgrade AllowSameVersionUpgrades="yes"
-        DowngradeErrorMessage="A newer version of Craft Anything is already installed." />
+        DowngradeErrorMessage="A newer version of OMCA is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <!-- MSI caches this icon using its Id as the filename. Advertised shortcuts to an
          .exe need an .exe icon identifier (ICE50), even when the source is an ICO. -->
     <Icon Id="CraftAnythingIcon.exe" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="CraftAnythingIcon.exe" />
-    <Property Id="ARPURLINFOABOUT" Value="https://getartcraft.com/apps/craft-anything" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://getartcraft.com/apps/craft-anything" />
-    <Property Id="ARPHELPLINK" Value="https://discord.gg/artcraft" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/SeuPut0705/omca" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/SeuPut0705/omca" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/SeuPut0705/omca/issues" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="INSTALLFOLDER" Name="Craft Anything" />
+      <Directory Id="INSTALLFOLDER" Name="OMCA" />
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder" />
 
     <!-- An upgrade installs where the user put the previous version (written by CraftAnythingApp). -->
     <Property Id="INSTALLFOLDER">
-      <RegistrySearch Id="PreviousInstallFolder" Root="HKLM" Key="Software\Craft Anything" Name="InstallDir" Type="raw" />
+      <RegistrySearch Id="PreviousInstallFolder" Root="HKLM" Key="Software\OMCA" Name="InstallDir" Type="raw" />
     </Property>
 
-    <Feature Id="Main" Title="Craft Anything" Level="1">
+    <Feature Id="Main" Title="OMCA" Level="1">
       <ComponentGroupRef Id="CraftAnythingFiles" />
     </Feature>
 
@@ -73,8 +73,8 @@
     <Property Id="CraftAnythingVersion" Value="$(var.DisplayVersion)" />
 
     <!-- Finish page: say where to find the app, and offer to start it (ticked by default). -->
-    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Craft Anything $(var.DisplayVersion) is installed. You can start it any time from the Start menu." />
-    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Craft Anything" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="OMCA $(var.DisplayVersion) is installed. You can start it any time from the Start menu." />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch OMCA" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <Property Id="WixShellExecTarget" Value="[#CraftAnythingExe]" />
     <!-- Runs in the wizard's own (unelevated) process, so the app starts as the user, not as admin. -->
@@ -85,16 +85,16 @@
     <ComponentGroup Id="CraftAnythingFiles" Directory="INSTALLFOLDER">
       <Component Id="CraftAnythingApp" Guid="60FCAC4D-3674-43B5-824E-D73D95F95627">
         <File Id="CraftAnythingExe" Source="$(var.BinDir)\craft-anything.exe" KeyPath="yes">
-          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="Craft Anything"
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="OMCA"
               Description="Find out how any software works, then craft your own" WorkingDirectory="INSTALLFOLDER" Advertise="yes"
               Icon="CraftAnythingIcon.exe" IconIndex="0" />
         </File>
 
         <!-- The "Open with" app list (any file) and the Run dialog (Win+R "craft-anything"). -->
-        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\craft-anything.exe" Name="FriendlyAppName" Value="Craft Anything" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\Classes\Applications\craft-anything.exe" Name="FriendlyAppName" Value="OMCA" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Classes\Applications\craft-anything.exe\shell\open\command" Value="&quot;[#CraftAnythingExe]&quot; &quot;%1&quot;" Type="string" />
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\craft-anything.exe" Value="[#CraftAnythingExe]" Type="string" />
-        <RegistryValue Root="HKLM" Key="Software\Craft Anything" Name="InstallDir" Value="[INSTALLFOLDER]" Type="string" />
+        <RegistryValue Root="HKLM" Key="Software\OMCA" Name="InstallDir" Value="[INSTALLFOLDER]" Type="string" />
       </Component>
 
 <?if $(var.HasCli) = 1 ?>

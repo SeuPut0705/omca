@@ -387,7 +387,7 @@ impl Drop for LinkGuard {
 #[test]
 fn a_store_under_a_dot_folder_reaches_ghidra_through_a_dot_free_link() {
     let home = tempfile::tempdir().unwrap();
-    let store = home.path().join(".config").join("craft-anything").join("engines");
+    let store = home.path().join(".config").join("omca").join("engines");
     let (_link, root) = LinkGuard::root(&store);
     assert!(!has_dot_part(&root), "{}", root.display());
     assert!(!has_dot_part(&project_cache_dir(&root, &"ab".repeat(32), &"cd".repeat(32))));

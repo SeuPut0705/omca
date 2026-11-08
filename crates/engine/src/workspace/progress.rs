@@ -71,8 +71,8 @@ impl BuildProgress {
             }
         };
         if found > BUILD_PROGRESS_VERSION {
-            return Err(ToolError::unsupported(format!("{BUILD_PROGRESS_FILE} was written by a newer Craft Anything, so this build is left alone."))
-                .with_remediation("Update Craft Anything to continue this build."));
+            return Err(ToolError::unsupported(format!("{BUILD_PROGRESS_FILE} was written by a newer OMCA, so this build is left alone."))
+                .with_remediation("Update OMCA to continue this build."));
         }
         let version = crate::versioned::upgrade(&mut doc, found, 0, STEPS)
             .map_err(|e| ToolError::invalid(format!("Couldn't bring {BUILD_PROGRESS_FILE} up to date: {e}")))?;

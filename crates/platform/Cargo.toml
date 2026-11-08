@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-platform"
-description = "Native platform services for Craft Anything: owned processes, capture, sandbox, engine store"
+description = "Native platform services for OMCA: owned processes, capture, sandbox, engine store"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

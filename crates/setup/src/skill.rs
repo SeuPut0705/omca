@@ -5,12 +5,12 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// Folder name under each skills directory.
-pub const SKILL_DIR: &str = "craft-anything";
+pub const SKILL_DIR: &str = "omca";
 /// Bumped whenever the skill text changes.
 pub const SKILL_VERSION: &str = "2";
 /// How an installed SKILL.md identifies itself as ours.
-pub const SKILL_PREFIX: &str = "---\nname: craft-anything\n";
-const REFERENCE_MARKER: &str = "<!-- craft-anything skill reference -->";
+pub const SKILL_PREFIX: &str = "---\nname: omca\n";
+const REFERENCE_MARKER: &str = "<!-- omca skill reference -->";
 
 pub const SKILL_MD: &str = include_str!("skill.md");
 pub const RECOVERY_MD: &str = include_str!("skill_recovery.md");
@@ -56,7 +56,7 @@ pub struct SkillFileAction {
 
 pub fn backup_path(p: &Path) -> PathBuf {
     let mut s = p.as_os_str().to_os_string();
-    s.push(".craft-anything.backup");
+    s.push(".omca.backup");
     PathBuf::from(s)
 }
 
@@ -113,7 +113,7 @@ fn rollback(done: &[(PathBuf, Option<Vec<u8>>)]) {
             None => std::fs::remove_file(path).map_err(|e| e.to_string()),
         };
         if let Err(e) = r {
-            log::warn!("could not roll back {}: {e}; restore it from its .craft-anything.backup copy", path.display());
+            log::warn!("could not roll back {}: {e}; restore it from its .omca.backup copy", path.display());
         }
     }
 }

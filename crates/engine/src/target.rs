@@ -44,7 +44,7 @@ impl TargetContext {
             let target = Target::load(&self.path)?;
             if target.sha256 != self.sha256 {
                 return Err(ToolError::invalid("The shared target changed after it was opened.")
-                    .with_remediation("Reopen the target in Craft Anything, then start a new conversation."));
+                    .with_remediation("Reopen the target in OMCA, then start a new conversation."));
             }
             target
         };

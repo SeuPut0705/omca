@@ -1,4 +1,4 @@
-// Craft Anything: turn off Ghidra's slowest whole-program analysis passes before a target is
+// OMCA: turn off Ghidra's slowest whole-program analysis passes before a target is
 // analysed. Each runs the decompiler over every function in the program, which can take hours on
 // a big game; decompiling a chosen function later works that function out by itself.
 //@category CraftAnything
@@ -20,7 +20,7 @@ public class CraftAnythingFastAnalysis extends GhidraScript {
         for (String name : SLOW) {
             if (options.containsKey(name)) {
                 setAnalysisOption(currentProgram, name, "false");
-                println("Craft Anything: skipping " + name);
+                println("OMCA: skipping " + name);
             }
         }
     }

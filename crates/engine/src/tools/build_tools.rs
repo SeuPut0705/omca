@@ -426,7 +426,7 @@ mod tests {
     }
 
     /// "Work on my project" keeps the app in the project root: the default listing must be that
-    /// root, not a missing or nested `app/`, and not Craft Anything's own records.
+    /// root, not a missing or nested `app/`, and not OMCA's own records.
     #[test]
     fn a_project_edited_in_place_is_listed_from_its_own_folder() {
         let d = tempfile::tempdir().unwrap();
@@ -459,7 +459,7 @@ mod tests {
         assert!(entries.contains("main.py") && entries.contains("src/app.py"), "{list}");
         assert!(entries.contains("app/other.txt"), "a real nested folder is still part of the root: {list}");
         assert!(entries.contains("checks/notes.md"), "the builder's own check notes stay visible: {list}");
-        assert!(!entries.contains("craft.json"), "Craft Anything's own records are not app files: {list}");
+        assert!(!entries.contains("craft.json"), "OMCA's own records are not app files: {list}");
         assert!(!entries.contains("capture/"), "capture stays out of the default root listing: {list}");
         assert!(entries.contains("vendor/"), "the dependency folder is listed but not walked: {list}");
         assert_eq!(list["truncated"], false, "vendor must not consume the entry cap: {list}");

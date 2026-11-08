@@ -94,7 +94,7 @@ impl McpClient {
         let mut client = McpClient { name: name.to_string(), transport, next_id: 1 };
         client.request(
             "initialize",
-            json!({"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")}}),
+            json!({"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "omca", "version": env!("CARGO_PKG_VERSION")}}),
             timeout,
             &|| false,
         )?;

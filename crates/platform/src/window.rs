@@ -39,9 +39,7 @@ fn permission_result(allowed: bool) -> Result<(), ToolError> {
         return Ok(());
     }
     Err(ToolError::new(ErrorCode::NoPermission, "The program wasn't started: this app can't see windows without Screen Recording permission.")
-        .with_remediation(
-            "Allow the app running Craft Anything in System Settings → Privacy & Security → Screen Recording, restart that app, then run this again.",
-        ))
+        .with_remediation("Allow the app running OMCA in System Settings → Privacy & Security → Screen Recording, restart that app, then run this again."))
 }
 
 /// Whether a window's owner is the program called `want` (lowercase): the name on its own or as

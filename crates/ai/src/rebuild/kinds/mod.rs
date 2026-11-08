@@ -75,7 +75,7 @@ pub struct KindWords {
     pub change_hint: &'static str,
 }
 
-/// A kind of thing Craft Anything can make.
+/// A kind of thing OMCA can make.
 pub trait TargetKind: Send + Sync {
     /// Stable id, stored with the project: `"website"`, `"app"`, `"game"`.
     fn id(&self) -> &'static str;

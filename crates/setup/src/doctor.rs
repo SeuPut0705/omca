@@ -72,10 +72,9 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
     let cli = req.cli_path.clone().or_else(craft_anything_platform::self_cli_path);
     match &cli {
         Some(p) if p.is_file() => checks.push(Check::new("binary", CheckStatus::Ok, format!("craft-anything-cli is at {}", p.display()))),
-        Some(p) => checks.push(Check::new("binary", CheckStatus::Fail, format!("{} does not exist.", p.display())).fix("Reinstall Craft Anything.")),
-        None => checks.push(
-            Check::new("binary", CheckStatus::Fail, "craft-anything-cli was not found.").fix("Install Craft Anything; the CLI ships next to the desktop app."),
-        ),
+        Some(p) => checks.push(Check::new("binary", CheckStatus::Fail, format!("{} does not exist.", p.display())).fix("Reinstall OMCA.")),
+        None => checks
+            .push(Check::new("binary", CheckStatus::Fail, "craft-anything-cli was not found.").fix("Install OMCA; the CLI ships next to the desktop app.")),
     }
     let on_path = craft_anything_platform::which_all("craft-anything-cli");
     if on_path.len() > 1 {
@@ -121,17 +120,17 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
                     .fix(setup_cmd)
             }
             Ok(Some(e)) if !is_owned_entry(&e) => {
-                Check::new(name, CheckStatus::Warn, format!("{} has a \"craft-anything\" entry that doesn't launch craft-anything-cli.", c.display))
+                Check::new(name, CheckStatus::Warn, format!("{} has a \"omca\" entry that doesn't launch craft-anything-cli.", c.display))
                     .fix(format!("{setup_cmd} (replaces it)"))
             }
             Ok(Some(e)) => {
                 let desired = cli.as_ref().map(|p| c.desired_entry(&[p.display().to_string(), "mcp".into()]));
                 let program_ok = entry_command(&e).and_then(|v| v.into_iter().next()).is_some_and(|p| Path::new(&p).is_file());
                 if config::is_disabled(c, &text) {
-                    Check::new(name, CheckStatus::Warn, format!("{} lists Craft Anything as disabled.", c.display)).fix(setup_cmd)
+                    Check::new(name, CheckStatus::Warn, format!("{} lists OMCA as disabled.", c.display)).fix(setup_cmd)
                 } else if config::entry_turned_off(c, &text) {
-                    Check::new(name, CheckStatus::Warn, format!("{} has Craft Anything turned off (enabled = false).", c.display))
-                        .fix(format!("Set enabled = true (or remove it) under [mcp_servers.craft-anything] in {}.", c.config.display()))
+                    Check::new(name, CheckStatus::Warn, format!("{} has OMCA turned off (enabled = false).", c.display))
+                        .fix(format!("Set enabled = true (or remove it) under [mcp_servers.omca] in {}.", c.config.display()))
                 } else if !program_ok {
                     Check::new(name, CheckStatus::Fail, format!("{} points to a craft-anything-cli that no longer exists.", c.display)).fix(setup_cmd)
                 } else if desired.as_ref().is_some_and(|d| c.entry_is_current(&e, d)) {
@@ -148,10 +147,10 @@ pub fn doctor(host: &Host, req: &DoctorRequest) -> DoctorReport {
     for d in &skill_dirs {
         let name = format!("skill:{}", d.display());
         checks.push(match skill::inspect(d) {
-            SkillState::Current => Check::new(name, CheckStatus::Ok, "The Craft Anything skill is installed and current."),
-            SkillState::Outdated => Check::new(name, CheckStatus::Warn, "The Craft Anything skill is out of date.").fix("craft-anything-cli setup --yes"),
-            SkillState::Missing => Check::new(name, CheckStatus::Info, "The Craft Anything skill isn't installed here.").fix("craft-anything-cli setup --yes"),
-            SkillState::Foreign => Check::new(name, CheckStatus::Warn, "Another skill uses the craft-anything folder name."),
+            SkillState::Current => Check::new(name, CheckStatus::Ok, "The OMCA skill is installed and current."),
+            SkillState::Outdated => Check::new(name, CheckStatus::Warn, "The OMCA skill is out of date.").fix("craft-anything-cli setup --yes"),
+            SkillState::Missing => Check::new(name, CheckStatus::Info, "The OMCA skill isn't installed here.").fix("craft-anything-cli setup --yes"),
+            SkillState::Foreign => Check::new(name, CheckStatus::Warn, "Another skill uses the omca folder name."),
         });
     }
 
@@ -266,7 +265,7 @@ pub fn mcp_self_test(program: &str, args: &[String], timeout: Duration) -> Check
     };
     let server = init["result"]["serverInfo"]["name"].as_str().unwrap_or_default();
     let protocol = init["result"]["protocolVersion"].as_str().unwrap_or_default();
-    if server != "craft-anything" || protocol.is_empty() {
+    if server != "omca" || protocol.is_empty() {
         return Check::new(name, CheckStatus::Fail, format!("Unexpected initialize reply (server {server:?}, protocol {protocol:?})."));
     }
     let tools: Vec<&str> =
@@ -384,12 +383,12 @@ mod tests {
 
     #[test]
     fn self_test_against_fake_servers() {
-        let good = r#"cat >/dev/null; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"craft-anything","version":"0"}}}'; echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"core_session_show"}]}}'"#;
+        let good = r#"cat >/dev/null; echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","serverInfo":{"name":"omca","version":"0"}}}'; echo '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"core_session_show"}]}}'"#;
         assert_eq!(sh(good).status, CheckStatus::Ok);
         let wrong = r#"echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"x","serverInfo":{"name":"other"}}}'"#;
         assert_eq!(sh(wrong).status, CheckStatus::Fail);
         assert_eq!(sh("echo nonsense").status, CheckStatus::Fail);
-        let no_tools = r#"echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","serverInfo":{"name":"craft-anything"}}}'"#;
+        let no_tools = r#"echo '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"1","serverInfo":{"name":"omca"}}}'"#;
         assert_eq!(sh(no_tools).status, CheckStatus::Fail);
         let hang = mcp_self_test("sleep", &["30".to_string()], Duration::from_millis(300));
         assert_eq!(hang.status, CheckStatus::Fail);

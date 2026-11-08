@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// The name our server is registered under in every client.
-pub const SERVER_NAME: &str = "craft-anything";
+pub const SERVER_NAME: &str = "omca";
 
 /// Environment variables that affect where clients keep their config. Only these are read.
 pub const ENV_KEYS: &[&str] = &[

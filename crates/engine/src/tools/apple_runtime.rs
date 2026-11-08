@@ -427,10 +427,10 @@ mod macos {
         let reason = result.get("reason").and_then(Value::as_str).unwrap_or("helper_error");
         let error = if reason == "accessibility_not_granted" {
             ToolError::new(ErrorCode::NoPermission, "The app's screen was not read: this app does not have Accessibility permission.".to_string())
-                .with_remediation("Allow the app running Craft Anything in System Settings → Privacy & Security → Accessibility, then run this again.")
+                .with_remediation("Allow the app running OMCA in System Settings → Privacy & Security → Accessibility, then run this again.")
         } else {
             ToolError::new(ErrorCode::Internal, format!("The accessibility helper refused the request: {message}"))
-                .with_remediation("This is a bug in Craft Anything; report it with the details below.")
+                .with_remediation("This is a bug in OMCA; report it with the details below.")
         };
         Some(error.with_details(json!({"reason": reason})))
     }

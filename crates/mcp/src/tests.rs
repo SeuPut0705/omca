@@ -110,7 +110,7 @@ fn initialize_negotiates_version() {
     ]);
     let r = response(&out, 1);
     assert_eq!(r["result"]["protocolVersion"], "2025-03-26");
-    assert_eq!(r["result"]["serverInfo"]["name"], "craft-anything");
+    assert_eq!(r["result"]["serverInfo"]["name"], "omca");
     assert_eq!(r["result"]["capabilities"]["tools"]["listChanged"], true);
     assert_eq!(response(&out, 2)["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
     assert_eq!(response(&out, 3)["result"], json!({}));
@@ -146,7 +146,7 @@ fn tool_call_success_and_error_shapes() {
     ]);
     let ok = response(&out, 1);
     assert_eq!(ok["result"]["isError"], false);
-    assert_eq!(ok["result"]["structuredContent"]["result"]["server"]["name"], "craft-anything");
+    assert_eq!(ok["result"]["structuredContent"]["result"]["server"]["name"], "omca");
     let text: Value = serde_json::from_str(ok["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
     assert_eq!(text, ok["result"]["structuredContent"]);
     let err = response(&out, 2);
@@ -406,7 +406,7 @@ fn restricted_mode_refuses_calling_turned_off_tools() {
             req(5, "tools/call", json!({"name": "plugins_add", "arguments": {}})),
             req(6, "tools/call", json!({"name": "engines_install", "arguments": {}})),
             req(7, "tools/call", json!({"name": "adb_device_show", "arguments": {}})),
-            req(8, "tools/call", json!({"name": "mcp__craft-anything__web_site_open", "arguments": {}})),
+            req(8, "tools/call", json!({"name": "mcp__omca__web_site_open", "arguments": {}})),
             req(9, "tools/call", json!({"name": "web-site-open", "arguments": {}})),
         ],
     );

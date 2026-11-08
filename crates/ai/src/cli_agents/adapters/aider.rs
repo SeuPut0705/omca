@@ -243,7 +243,7 @@ fn check_setup(options: &BackendOptions, env: &dyn Fn(&str) -> Option<String>, h
             "Aider has no model or API key set up, so it would offer to sign in to OpenRouter and wait for a browser nobody is at.",
         )
         .with_remediation(
-                        "Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY for the computer Craft Anything runs on, or name a model in Aider's own ~/.aider.conf.yml. Aider's ~/.env counts too.",
+                        "Set OPENROUTER_API_KEY, ANTHROPIC_API_KEY or OPENAI_API_KEY for the computer OMCA runs on, or name a model in Aider's own ~/.aider.conf.yml. Aider's ~/.env counts too.",
         )),
         Some(model) if model.starts_with("openrouter/") && !key_seen("OPENROUTER_API_KEY", options, env, home) => Err(ToolError::new(
             ErrorCode::BadSettings,

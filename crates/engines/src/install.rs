@@ -72,7 +72,7 @@ pub fn install(
     }
     let engine = crate::engine(engine_id).ok_or_else(|| {
         ToolError::new(ErrorCode::NotSupported, format!("There is no engine called {engine_id:?}."))
-            .with_remediation("See Settings → Engines for the engines Craft Anything knows.")
+            .with_remediation("See Settings → Engines for the engines OMCA knows.")
     })?;
     let pins = match engine.install {
         Install::Pinned(pins) => pins,
@@ -80,7 +80,7 @@ pub fn install(
             return Err(ToolError::new(ErrorCode::NotSupported, format!("{} is installed by its own setup, not here.", engine.name)).with_remediation(how));
         }
         Install::Manual => {
-            return Err(ToolError::new(ErrorCode::NotSupported, format!("Craft Anything doesn't install {} for you.", engine.name))
+            return Err(ToolError::new(ErrorCode::NotSupported, format!("OMCA doesn't install {} for you.", engine.name))
                 .with_remediation("Install it by hand and set its path in Settings → Engines."));
         }
     };

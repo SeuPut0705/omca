@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-mcp"
-description = "The Craft Anything MCP server"
+description = "The OMCA MCP server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

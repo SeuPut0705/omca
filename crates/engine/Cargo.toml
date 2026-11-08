@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-engine"
-description = "Craft Anything engine: session, projects, the tool registry every surface dispatches through, settings and jobs"
+description = "OMCA engine: session, projects, the tool registry every surface dispatches through, settings and jobs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

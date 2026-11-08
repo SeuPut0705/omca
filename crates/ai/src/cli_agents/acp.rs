@@ -219,7 +219,7 @@ impl AcpCore {
             "protocolVersion": PROTOCOL_VERSION,
             // The agent reads and writes files and runs commands itself, asking us first.
             "clientCapabilities": {"fs": {"readTextFile": false, "writeTextFile": false}, "terminal": false},
-            "clientInfo": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")},
+            "clientInfo": {"name": "omca", "version": env!("CARGO_PKG_VERSION")},
         });
         vec![self.request("initialize", params, Pending::Initialize)]
     }
@@ -938,9 +938,7 @@ mod tests {
         core.sign_in_fix = super::super::adapter_for("copilot").sign_in_fix();
         core.start();
         let output = events(core.line(r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Authentication required"}}"#));
-        assert!(
-            matches!(&output[0], AgentEvent::Error { remediation: Some(fix), .. } if fix.contains("copilot login") && fix.contains("restart Craft Anything"))
-        );
+        assert!(matches!(&output[0], AgentEvent::Error { remediation: Some(fix), .. } if fix.contains("copilot login") && fix.contains("restart OMCA")));
     }
 
     #[test]
@@ -1002,7 +1000,7 @@ mod tests {
         let new = sent(&c.line(r#"{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}"#));
         assert_eq!(new[0]["method"], "session/new");
         assert_eq!(new[0]["params"]["cwd"], "/w/project");
-        assert_eq!(new[0]["params"]["mcpServers"][0]["name"], "craft-anything");
+        assert_eq!(new[0]["params"]["mcpServers"][0]["name"], "omca");
         assert!(new[0]["params"]["mcpServers"][0].get("type").is_none(), "only an adapter that asks sends type");
         assert_eq!(new[0]["params"]["mcpServers"][0]["env"], json!([]));
         let prompt = sent(&c.line(r#"{"jsonrpc":"2.0","id":2,"result":{"sessionId":"s-1"}}"#));
@@ -1308,7 +1306,7 @@ printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn"}}\n' "$prompt
         grok.start();
         let typed = sent(&grok.line(r#"{"jsonrpc":"2.0","id":1,"result":{"agentCapabilities":{"loadSession":true}}}"#));
         assert_eq!(typed[0]["params"]["mcpServers"][0]["type"], "stdio");
-        assert_eq!(typed[0]["params"]["mcpServers"][0]["name"], "craft-anything");
+        assert_eq!(typed[0]["params"]["mcpServers"][0]["name"], "omca");
 
         let mut question = core(None);
         question.question = true;

@@ -88,6 +88,7 @@ impl TargetKind for GameKind {
                 "游戏",
                 "遊戲",
                 "玩法",
+                "게임",
                 " spiel",
                 "-spiel",
                 "gioco",

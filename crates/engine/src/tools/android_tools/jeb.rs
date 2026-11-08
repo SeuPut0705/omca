@@ -27,7 +27,7 @@ pub fn specs() -> Vec<ToolSpec> {
             "engines_jeb_check",
             "Check the JEB connection",
             "Connect to the user-run JEB MCP server set in Settings → Engines (jeb_url, loopback only), report its server information, upstream tools and client information. Never starts JEB.",
-            "Check that Craft Anything can talk to your running JEB.",
+            "Check that OMCA can talk to your running JEB.",
             Toolset::Android,
             Effects::NETWORK_EVIDENCE,
             Requires::Nothing,
@@ -465,7 +465,7 @@ impl Client {
     fn initialize(&mut self) -> Result<Value, ToolError> {
         let r = self.request(
             "initialize",
-            json!({"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": {"name": "craft-anything", "version": env!("CARGO_PKG_VERSION")}}),
+            json!({"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": {"name": "omca", "version": env!("CARGO_PKG_VERSION")}}),
         )?;
         self.post(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}), None)?;
         Ok(r)

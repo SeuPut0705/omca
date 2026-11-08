@@ -35,7 +35,7 @@ use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 /// Name our MCP server is registered under.
-pub const MCP_NAME: &str = "craft-anything";
+pub const MCP_NAME: &str = "omca";
 
 /// Known agent CLIs: (agent id, program, display name).
 pub const KNOWN: &[(&str, &str, &str)] = &[
@@ -224,14 +224,14 @@ impl McpCommand {
 /// that ran out of time says nothing about the program, so the build goes ahead. Stopping the
 /// build ends the check, as `ErrorCode::Cancelled`.
 pub fn cli_can_start(cli: Option<&Path>, stop: &CancelToken) -> Result<(), ToolError> {
-    const REINSTALL: &str = "Install the latest Craft Anything again: it keeps this helper next to the app. If you built the app yourself, run `cargo build -p craft-anything-cli` too.";
+    const REINSTALL: &str =
+        "Install the latest OMCA again: it keeps this helper next to the app. If you built the app yourself, run `cargo build -p craft-anything-cli` too.";
     let Some(cli) = cli else {
-        return Err(ToolError::new(ErrorCode::EngineMissing, "Craft Anything's helper program (craft-anything-cli) is missing, so the builder can't start.")
+        return Err(ToolError::new(ErrorCode::EngineMissing, "OMCA's helper program (craft-anything-cli) is missing, so the builder can't start.")
             .with_remediation(REINSTALL));
     };
     let failed = |why: String| {
-        ToolError::new(ErrorCode::EngineMissing, format!("Craft Anything's helper program at {} wouldn't start: {why}", cli.display()))
-            .with_remediation(REINSTALL)
+        ToolError::new(ErrorCode::EngineMissing, format!("OMCA's helper program at {} wouldn't start: {why}", cli.display())).with_remediation(REINSTALL)
     };
     let stop = stop.clone();
     match Process::new(cli.as_os_str()).arg("--version").timeout(Duration::from_secs(30)).stdout_cap(64 * 1024).cancel_when(move || stop.is_cancelled()).run() {
@@ -371,12 +371,13 @@ pub(crate) fn sign_in_hint_in(message: &str, flatpak: bool, folder: Option<&Path
 }
 
 /// Signing in for the Claude Code that a Flatpak build starts: the same folder it will use.
-const FLATPAK_SIGN_IN: &str = "flatpak run --command=sh ai.storyteller.craft-anything -c 'CLAUDE_CONFIG_DIR=\"$XDG_DATA_HOME/craft-anything/claude\" \"$HOME/.local/bin/claude\" auth login'";
+const FLATPAK_SIGN_IN: &str =
+    "flatpak run --command=sh com.seuput.omca -c 'CLAUDE_CONFIG_DIR=\"$XDG_DATA_HOME/craft-anything/claude\" \"$HOME/.local/bin/claude\" auth login'";
 
 /// [`FLATPAK_SIGN_IN`] for a chosen folder, already quoted for the sandbox's shell.
 fn flatpak_sign_in(quoted: &str) -> String {
     let inner = format!("CLAUDE_CONFIG_DIR={quoted} \"$HOME/.local/bin/claude\" auth login");
-    format!("flatpak run --command=sh ai.storyteller.craft-anything -c {}", crate::ssh::shell_quote(&inner))
+    format!("flatpak run --command=sh com.seuput.omca -c {}", crate::ssh::shell_quote(&inner))
 }
 
 /// Words in an API's answer when the installed Claude Code is older than the model it was asked
@@ -404,7 +405,7 @@ pub(crate) fn claude_code_failure_in(why: &str, folder: Option<&Path>) -> (Strin
     (format!("Claude Code stopped: {why}"), sign_in_hint_in(why, adapters::in_flatpak(), folder))
 }
 
-/// Variables a Claude Code session sets for its own child processes. When Craft Anything itself
+/// Variables a Claude Code session sets for its own child processes. When OMCA itself
 /// runs inside such a session, they'd make the person's `claude` act as part of that session
 /// instead of as their own install, so they're removed. The person's own settings (provider
 /// choice `CLAUDE_CODE_USE_*`, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_*`) are kept.
@@ -1013,7 +1014,7 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
                 Ok(out) => (Some(out), None),
                 Err(e) => (None, Some(e.message.as_str())),
             };
-            if let Some(path) = shown.save_with(&agent, out, Some("Craft Anything's tools did not start."), error).0 {
+            if let Some(path) = shown.save_with(&agent, out, Some("OMCA's tools did not start."), error).0 {
                 let _ = tx.send(AgentEvent::Status { text: format!("The details are in {}", path.display()) });
             }
         }
@@ -1321,7 +1322,7 @@ mod tests {
     #[test]
     fn failed_craft_tool_server_is_reported_from_its_init_status() {
         let mut p = StreamParser::new(adapter_for("claude-code"));
-        let events = p.line(r#"{"type":"system","subtype":"init","session_id":"cannot-build","mcp_servers":[{"name":"craft-anything","status":"failed"}]}"#);
+        let events = p.line(r#"{"type":"system","subtype":"init","session_id":"cannot-build","mcp_servers":[{"name":"omca","status":"failed"}]}"#);
         assert!(
             events.iter().any(|e| matches!(e, AgentEvent::Error { message, .. } if message.contains("tools") && message.contains("start"))),
             "a failed required tool server must end the turn with an actionable error: {events:?}"
@@ -1333,12 +1334,12 @@ mod tests {
     fn optional_or_pending_mcp_servers_do_not_block_the_builder() {
         for status in ["connected", "pending"] {
             let mut p = StreamParser::new(adapter_for("claude-code"));
-            let init = json!({"type":"system","subtype":"init","mcp_servers":[{"name":"craft-anything","status":status},{"name":"optional-service","status":"failed"}]});
+            let init = json!({"type":"system","subtype":"init","mcp_servers":[{"name":"omca","status":status},{"name":"optional-service","status":"failed"}]});
             assert!(p.line(&init.to_string()).is_empty());
             assert!(p.failure.is_none());
         }
         let mut p = StreamParser::new(adapter_for("claude-code"));
-        assert!(!p.line(r#"{"type":"system","subtype":"init","mcp_servers":[{"name":"craft-anything","status":"needs-auth"}]}"#).is_empty());
+        assert!(!p.line(r#"{"type":"system","subtype":"init","mcp_servers":[{"name":"omca","status":"needs-auth"}]}"#).is_empty());
         assert_eq!(p.failure, Some(TurnFailure::new(FailureKind::ToolsUnavailable)));
     }
 
@@ -1364,9 +1365,9 @@ mod tests {
     /// normal install are left as they are, and the sign-in hint says how to sign in there.
     #[test]
     fn under_a_flatpak_claude_code_keeps_its_conversations_in_a_folder_it_can_write() {
-        let data = || Some(std::path::PathBuf::from("/home/u/.var/app/ai.storyteller.craft-anything/data"));
+        let data = || Some(std::path::PathBuf::from("/home/u/.var/app/com.seuput.omca/data"));
         let dir = adapters::flatpak_claude_dir_in(true, false, data()).unwrap();
-        assert!(dir.ends_with("craft-anything/claude") && dir.starts_with("/home/u/.var/app/ai.storyteller.craft-anything/data"), "{dir:?}");
+        assert!(dir.ends_with("omca/claude") && dir.starts_with("/home/u/.var/app/com.seuput.omca/data"), "{dir:?}");
         assert_eq!(adapters::flatpak_claude_dir_in(true, true, data()), None, "their own choice stays");
         assert_eq!(adapters::flatpak_claude_dir_in(false, false, data()), None, "a normal install keeps ~/.claude");
         assert_eq!(adapters::flatpak_claude_dir_in(true, false, None), None);
@@ -1566,13 +1567,13 @@ mod tests {
             assert!(tools.split(',').any(|tool| tool == "Write"), "{access:?}: {tools}");
         }
         assert_eq!(a[pos("--resume") + 1], "sess-1");
-        assert_eq!(a[pos("--allowedTools") + 1], "mcp__craft-anything__*");
+        assert_eq!(a[pos("--allowedTools") + 1], "mcp__omca__*");
         assert_eq!(a[pos("--model") + 1], "claude-opus-5-5", "Opus 5.5 unless configured otherwise");
         let o = BackendOptions { cli_model: Some("opus".into()), ..Default::default() };
         let b = build_args(adapter_for("claude-code").as_ref(), &o, "q", "PRE", &mcp(), None, Access::Analyse);
         assert_eq!(b[b.iter().position(|x| x == "--model").unwrap() + 1], "opus");
         let cfg: Value = serde_json::from_str(&a[pos("--mcp-config") + 1]).unwrap();
-        assert_eq!(cfg["mcpServers"]["craft-anything"]["args"][0], "mcp");
+        assert_eq!(cfg["mcpServers"]["omca"]["args"][0], "mcp");
         // variadic flags come last: nothing after them is read as one of their values
         assert!(pos("--mcp-config") > pos("--resume"));
     }
@@ -1591,14 +1592,14 @@ mod tests {
     #[test]
     fn a_codex_tool_refused_for_approval_explains_the_way_out() {
         let mut p = StreamParser::new(adapter_for("codex"));
-        let line = r#"{"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","server":"craft-anything","tool":"rebuild_start","status":"failed","result":null,"error":{"message":"tool rebuild_start requires approval, but approval policy is never"}}}"#;
+        let line = r#"{"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","server":"omca","tool":"rebuild_start","status":"failed","result":null,"error":{"message":"tool rebuild_start requires approval, but approval policy is never"}}}"#;
         let v: Value = serde_json::from_str(line).unwrap();
         let events = adapter_for("codex").parse(&mut p, &v);
         let text = format!("{events:?}");
         assert!(text.contains("setup --client codex --yes"), "{text}");
         // Another server's refusal keeps Codex's words: our setup can't fix it.
         let mut p = StreamParser::new(adapter_for("codex"));
-        let theirs = line.replace("craft-anything", "other-server");
+        let theirs = line.replace("omca", "other-server");
         let text = format!("{:?}", adapter_for("codex").parse(&mut p, &serde_json::from_str::<Value>(&theirs).unwrap()));
         assert!(text.contains("approval policy is never") && !text.contains("setup --client codex"), "{text}");
         let mut p = StreamParser::new(adapter_for("codex"));
@@ -1624,20 +1625,20 @@ mod tests {
         assert_eq!(skip(&a), 1);
         let o = BackendOptions { args: vec!["--skip-git-repo-check".into()], ..Default::default() };
         assert_eq!(skip(&build_args(adapter_for("codex").as_ref(), &o, "q", "P:", &mcp(), None, Access::Build)), 1);
-        assert!(a.contains(&"mcp_servers.craft-anything.command=\"/opt/ca/craft-anything-cli\"".to_string()));
+        assert!(a.contains(&"mcp_servers.omca.command=\"/opt/ca/craft-anything-cli\"".to_string()));
         // #538: Codex doesn't refresh its callable tools after enable_toolset, so list all permitted
         // tools from startup. Clean room still filters what the server lists and allows.
-        assert!(a.contains(&"mcp_servers.craft-anything.args=[\"mcp\", \"--project\", \"/p/x.cany\", \"--all-tools\"]".to_string()));
+        assert!(a.contains(&"mcp_servers.omca.args=[\"mcp\", \"--project\", \"/p/x.cany\", \"--all-tools\"]".to_string()));
         let mut already_all = mcp();
         already_all.args.push("--all-tools".into());
         let deep = build_args(adapter_for("codex").as_ref(), &BackendOptions::default(), "q", "P:", &already_all, None, Access::Build);
-        let args = deep.iter().find(|a| a.starts_with("mcp_servers.craft-anything.args=")).unwrap();
+        let args = deep.iter().find(|a| a.starts_with("mcp_servers.omca.args=")).unwrap();
         assert_eq!(args.matches("--all-tools").count(), 1, "a Deep build already lists every tool");
         // #528: the message goes in on stdin; `-` tells `codex exec` to read it there.
         assert_eq!(a.last().unwrap(), "-");
         // #540: `codex exec` can't ask, so the tools that ask for themselves are approved in the
         // same -c list, and nothing wider.
-        assert!(a.contains(&"mcp_servers.craft-anything.tools.rebuild_start.approval_mode=\"approve\"".to_string()));
+        assert!(a.contains(&"mcp_servers.omca.tools.rebuild_start.approval_mode=\"approve\"".to_string()));
         assert!(!a.iter().any(|x| x.contains("default_tools_approval_mode")));
         let g = build_args(adapter_for("gemini-cli").as_ref(), &BackendOptions::default(), "q", "", &mcp(), None, Access::Analyse);
         assert!(g.windows(2).any(|w| w[0] == "--output-format" && w[1] == "stream-json"));
@@ -1658,8 +1659,8 @@ mod tests {
         assert_eq!(&a[..2], &["exec".to_string(), "--json".to_string()]);
         assert!(a.contains(&"--skip-git-repo-check".to_string()));
         assert!(a.windows(2).any(|w| w[0] == "--sandbox" && w[1] == "workspace-write"));
-        assert!(a.contains(&"mcp_servers.craft-anything.command=\"/opt/ca/craft-anything-cli\"".to_string()));
-        assert!(a.contains(&"mcp_servers.craft-anything.args=[\"mcp\", \"--project\", \"/p/x.cany\", \"--all-tools\"]".to_string()));
+        assert!(a.contains(&"mcp_servers.omca.command=\"/opt/ca/craft-anything-cli\"".to_string()));
+        assert!(a.contains(&"mcp_servers.omca.args=[\"mcp\", \"--project\", \"/p/x.cany\", \"--all-tools\"]".to_string()));
     }
 
     #[test]
@@ -1788,7 +1789,7 @@ mod tests {
     fn builder_args_route_permissions_and_questions_to_us() {
         let a = build_args(adapter_for("claude-code").as_ref(), &BackendOptions::default(), "build it", "PRE", &mcp(), None, Access::Build);
         let pos = |f: &str| a.iter().position(|x| x == f).unwrap();
-        assert_eq!(a[pos("--permission-prompt-tool") + 1], "mcp__craft-anything__core_action_approve");
+        assert_eq!(a[pos("--permission-prompt-tool") + 1], "mcp__omca__core_action_approve");
         assert_eq!(a[pos("--disallowedTools") + 1], "AskUserQuestion");
         assert!(a[pos("--allowedTools")..].contains(&"Read".to_string()));
         assert!(!a.iter().any(|x| x == "Write" || x == "Bash"), "writes and commands always go through the approval tool");
@@ -1822,7 +1823,7 @@ mod tests {
             assert!(denied.contains(&t.to_string()), "{t} is refused: {denied:?}");
         }
         let allowed = &clean[clean.iter().position(|x| x == "--allowedTools").unwrap() + 1..clean.iter().position(|x| x == "--disallowedTools").unwrap()];
-        assert_eq!(allowed, ["mcp__craft-anything__*"], "only our tools are allowed");
+        assert_eq!(allowed, ["mcp__omca__*"], "only our tools are allowed");
         let deep = args(Access::Analyse);
         assert!(!deep.contains(&"--disallowedTools".to_string()), "Deep mode keeps its defaults: {deep:?}");
         // A Clean room question refuses reading too (it used to leave that to the default).
@@ -1914,7 +1915,7 @@ mod tests {
         let ev = format!("ev_{}", "a".repeat(64));
         let lines = [
             json!({"type":"system","subtype":"init","session_id":"s1"}).to_string(),
-            json!({"type":"assistant","message":{"content":[{"type":"text","text":"Looking"},{"type":"tool_use","id":"t1","name":"mcp__craft-anything__core_session_show","input":{}}]}}).to_string(),
+            json!({"type":"assistant","message":{"content":[{"type":"text","text":"Looking"},{"type":"tool_use","id":"t1","name":"mcp__omca__core_session_show","input":{}}]}}).to_string(),
             json!({"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":format!("{{\"evidence_id\":\"{ev}\"}}")}]}]}}).to_string(),
             json!({"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.12,"usage":{"input_tokens":5,"cache_read_input_tokens":5,"output_tokens":7}}).to_string(),
             "not json warning".to_string(),
@@ -1971,9 +1972,9 @@ mod tests {
         let config = tempfile::tempdir().unwrap();
         let id = "0e4a6b1c-1111-4222-8333-944455556666";
         let saved = format!("{{\"type\":\"user\",\"sessionId\":\"{id}\",\"message\":{{\"content\":\"Make a notes app.\"}}}}\n");
-        let cwd = Path::new("/home/someone/Craft Anything/notes.app");
+        let cwd = Path::new("/home/someone/OMCA/notes.app");
         assert!(adapters::claude_restore(config.path(), id, saved.as_bytes(), cwd).unwrap());
-        let put = config.path().join("projects").join("-home-someone-Craft-Anything-notes-app").join(format!("{id}.jsonl"));
+        let put = config.path().join("projects").join("-home-someone-OMCA-notes-app").join(format!("{id}.jsonl"));
         assert_eq!(std::fs::read_to_string(&put).unwrap(), saved);
         assert_eq!(adapters::claude_session_file(config.path(), id), Some(put.clone()), "Claude Code finds it by its id");
         // There already: left as it is (it may have moved on since the copy was kept).
@@ -2008,7 +2009,7 @@ mod tests {
         let all = adapters::claude_handoff(&saved, 10_000).unwrap();
         assert_eq!(
             all,
-            "Craft Anything asked you: Make a notes app.\n\nYou answered: Built a notes app with a sidebar.\n\nCraft Anything asked you: The person asks: \"make it blue\"\n\nYou answered: Made it blue."
+            "OMCA asked you: Make a notes app.\n\nYou answered: Built a notes app with a sidebar.\n\nOMCA asked you: The person asks: \"make it blue\"\n\nYou answered: Made it blue."
         );
         // Short of room, the newest is kept.
         let short = adapters::claude_handoff(&saved, 80).unwrap();
@@ -2027,7 +2028,7 @@ mod tests {
         let mut ev = Vec::new();
         for l in [
             json!({"type":"thread.started","thread_id":"th"}),
-            json!({"type":"item.started","item":{"id":"i1","type":"mcp_tool_call","server":"craft-anything","tool":"core_target_open","arguments":{"path":"/bin/ls"}}}),
+            json!({"type":"item.started","item":{"id":"i1","type":"mcp_tool_call","server":"omca","tool":"core_target_open","arguments":{"path":"/bin/ls"}}}),
             json!({"type":"item.completed","item":{"id":"i1","type":"mcp_tool_call","tool":"core_target_open","status":"completed","result":{"ok":true}}}),
             json!({"type":"item.completed","item":{"id":"i2","type":"agent_message","text":"It lists files."}}),
             json!({"type":"turn.completed","usage":{"input_tokens":3,"output_tokens":4}}),
@@ -2041,7 +2042,7 @@ mod tests {
         let mut g = StreamParser::new(adapter_for("gemini-cli"));
         let ev: Vec<_> = [
             json!({"type":"message","role":"assistant","content":"Hi","delta":true}),
-            json!({"type":"tool_use","tool_name":"craft-anything__core_targets_list","tool_id":"x","parameters":{}}),
+            json!({"type":"tool_use","tool_name":"omca__core_targets_list","tool_id":"x","parameters":{}}),
             json!({"type":"tool_result","tool_id":"x","status":"error","output":"boom"}),
         ]
         .iter()

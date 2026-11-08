@@ -77,6 +77,30 @@ warn() {
   if [ -n "${GITHUB_ACTIONS:-}" ]; then echo "::warning::$*"; else echo "warning: $*" >&2; fi
 }
 
+# craft-fonts (OFL-1.1): releases embed its Korean (Hangul) and symbol fonts, or Korean UI text
+# shows as boxes. OMCA supports Korean and English only, so the other scripts' fonts (CJK, Arabic,
+# Thai…, about 55 MB) are dropped from the pinned checkout. CRAFT_FONTS_DIR set by the caller wins.
+CRAFT_FONTS_REF=b076417b5880bd4154bd22f00695b1d28c6bea83
+ensure_craft_fonts() {
+  if [ -z "${CRAFT_FONTS_DIR:-}" ]; then
+    CRAFT_FONTS_DIR="$CARGO_TARGET_DIR/craft-fonts"
+    if [ "$(git -C "$CRAFT_FONTS_DIR" rev-parse HEAD 2>/dev/null)" != "$CRAFT_FONTS_REF" ]; then
+      rm -rf "$CRAFT_FONTS_DIR"
+      git init -q "$CRAFT_FONTS_DIR"
+      git -C "$CRAFT_FONTS_DIR" fetch -q --depth 1 https://github.com/storytold/craft-fonts.git "$CRAFT_FONTS_REF"
+      git -C "$CRAFT_FONTS_DIR" checkout -q FETCH_HEAD
+    fi
+    local manifest="$CRAFT_FONTS_DIR/fonts/manifest.txt" dir
+    git -C "$CRAFT_FONTS_DIR" checkout -q -- fonts
+    awk -F' [|] ' '/^#/ || $4 ~ /Hang|Zsym/' "$manifest" >"$manifest.kept"
+    mv "$manifest.kept" "$manifest"
+    for dir in "$CRAFT_FONTS_DIR"/fonts/*/; do
+      grep -q "fonts/$(basename "$dir")/" "$manifest" || rm -rf "$dir"
+    done
+  fi
+  export CRAFT_FONTS_DIR CRAFT_FONTS_REQUIRED=1
+}
+
 # Copy licence and readme files that exist into a package directory.
 copy_docs() {
   local dest="$1" f

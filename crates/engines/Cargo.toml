@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-engines"
-description = "Adapters for optional external engines (Ghidra, adb, Chromium, Frida, JADX…) used by Craft Anything"
+description = "Adapters for optional external engines (Ghidra, adb, Chromium, Frida, JADX…) used by OMCA"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

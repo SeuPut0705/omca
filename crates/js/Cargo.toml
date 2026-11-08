@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-js"
-description = "JavaScript, Electron and web-bundle analysis for Craft Anything"
+description = "JavaScript, Electron and web-bundle analysis for OMCA"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

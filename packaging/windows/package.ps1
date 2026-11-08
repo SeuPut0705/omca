@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Build, sign and package Craft Anything for Windows.
+  Build, sign and package OMCA for Windows.
 
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
@@ -18,12 +18,11 @@
              wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
 
 .EXAMPLE
-  pwsh packaging/windows/package.ps1 -Arch x64
-  pwsh packaging/windows/package.ps1 -Arch x86 -SkipBuild
-  pwsh packaging/windows/package.ps1 -Arch arm64     # cross-compiled; needs the MSVC ARM64 build tools
+  pwsh packaging/windows/package.ps1
+  pwsh packaging/windows/package.ps1 -SkipBuild
 #>
 param(
-  [ValidateSet('x64', 'x86', 'arm64')] [string] $Arch = 'x64',
+  [ValidateSet('x64')] [string] $Arch = 'x64',
   [switch] $SkipBuild
 )
 $ErrorActionPreference = 'Stop'
@@ -60,7 +59,7 @@ if (-not $env:CRAFT_ANYTHING_BUILD_DATE) { $env:CRAFT_ANYTHING_BUILD_DATE = (Get
 $HasCli = Test-Path (Join-Path $Root 'apps\craft-anything-cli\Cargo.toml')
 $Bins = @('craft-anything'); if ($HasCli) { $Bins += 'craft-anything-cli' }
 
-Write-Output "Craft Anything $Version for Windows $Arch ($Target): $($Bins -join ', ')"
+Write-Output "OMCA $Version for Windows $Arch ($Target): $($Bins -join ', ')"
 
 if (-not $SkipBuild) {
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
@@ -99,7 +98,7 @@ foreach ($exe in $Exes) { Copy-Item (Join-Path $Bin $exe) $Stage }
 & (Join-Path $PSScriptRoot 'sign.ps1') @($Exes | ForEach-Object { Join-Path $Stage $_ })
 
 # ---- MSI ---------------------------------------------------------------------------------------
-# The setup wizard's art, drawn here from the app icon so the MSI shows Craft Anything rather than
+# The setup wizard's art, drawn here from the app icon so the MSI shows OMCA rather than
 # WiX's stock bitmaps: a 493x58 banner across the top of the inner pages (the page title is drawn
 # over its left side, so that stays white) and a 493x312 backdrop for the Welcome and Finish pages
 # (their text sits on the right; the left 164 px are ours). Both must be 24-bit BMPs.
@@ -134,7 +133,7 @@ function New-InstallerArt([string] $IconPng, [string] $BannerOut, [string] $Dial
 }
 $Banner = Join-Path $Stage 'installer-banner.bmp'
 $Dialog = Join-Path $Stage 'installer-dialog.bmp'
-New-InstallerArt (Join-Path $Root 'assets\app-icon\hicolor\256x256\apps\ai.storyteller.craft-anything.png') $Banner $Dialog
+New-InstallerArt (Join-Path $Root 'assets\app-icon\hicolor\256x256\apps\com.seuput.omca.png') $Banner $Dialog
 
 $Msi = Join-Path $Dist "craft-anything-$Version-windows-$Arch.msi"
 & (Join-Path $PSScriptRoot 'check-icons.ps1')
@@ -169,7 +168,7 @@ if ($env:CRAFT_FONTS_DIR) {
   Get-ChildItem -Path (Join-Path $env:CRAFT_FONTS_DIR 'fonts\*\OFL.txt') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Portable "OFL-$($_.Directory.Name).txt") }
 }
 # portable.txt beside craft-anything.exe switches on portable mode: settings, logs and the engine
-# store go to CraftAnythingData\ next to the exe instead of %APPDATA% (crates/engine/src/settings.rs).
+# store go to OMCAData\ next to the exe instead of %APPDATA% (crates/engine/src/settings.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
 $Zip = Join-Path $Dist "craft-anything-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue

@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-cli"
-description = "Craft Anything on the command line: every tool, the MCP server, setup and doctor"
+description = "OMCA on the command line: every tool, the MCP server, setup and doctor"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

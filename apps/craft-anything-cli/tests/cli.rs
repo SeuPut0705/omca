@@ -160,7 +160,7 @@ fn mcp_over_stdio() {
     assert!(out.success);
     let msgs: Vec<Value> = out.stdout_text().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
     let by_id = |id: u64| msgs.iter().find(|m| m["id"] == json!(id)).unwrap().clone();
-    assert_eq!(by_id(1)["result"]["serverInfo"]["name"], "craft-anything");
+    assert_eq!(by_id(1)["result"]["serverInfo"]["name"], "omca");
     assert!(by_id(2)["result"]["tools"].as_array().unwrap().iter().any(|t| t["name"] == "core_session_show"));
     assert_eq!(by_id(3)["result"]["isError"], false);
 }

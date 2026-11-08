@@ -167,6 +167,13 @@ impl TargetKind for WebsiteKind {
             "網站",
             "网页",
             "網頁",
+            "웹사이트",
+            "웹 사이트",
+            "홈페이지",
+            "웹페이지",
+            "웹 페이지",
+            "랜딩 페이지",
+            "랜딩페이지",
         ]) {
             Some(50)
         } else if matches!(cx.target, TargetRef::None) && stacks::get(cx.stack).is_some_and(|s| s.site) {

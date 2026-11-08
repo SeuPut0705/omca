@@ -1,6 +1,6 @@
 [package]
 name = "craft-anything-disasm"
-description = "Craft Anything's own native engine: decoding, functions, control flow, references, pseudo-C"
+description = "OMCA's own native engine: decoding, functions, control flow, references, pseudo-C"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

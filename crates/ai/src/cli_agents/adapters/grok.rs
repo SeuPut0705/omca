@@ -6,7 +6,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 /// Grok Build's ACP-only adapter. `acp = false` or an SSH host fails closed: the plain runner
-/// would open the interactive TUI, which has no approval channel back to Craft Anything.
+/// would open the interactive TUI, which has no approval channel back to OMCA.
 pub struct Grok;
 
 impl AgentAdapter for Grok {
@@ -92,7 +92,7 @@ impl AgentAdapter for Grok {
         if options.args.is_empty() {
             Ok(())
         } else {
-            Err(ToolError::invalid("Extra Grok arguments could bypass Craft Anything's approval checks.")
+            Err(ToolError::invalid("Extra Grok arguments could bypass OMCA's approval checks.")
                 .with_remediation("Remove this backend's extra arguments. Set its program, model and thinking through the backend options instead."))
         }
     }
@@ -146,7 +146,7 @@ impl AgentAdapter for Grok {
     }
 
     fn sign_in_fix(&self) -> Option<String> {
-        Some("Sign in with `grok login` in a terminal, then try again. Grok keeps the sign-in; Craft Anything never sees it.".into())
+        Some("Sign in with `grok login` in a terminal, then try again. Grok keeps the sign-in; OMCA never sees it.".into())
     }
 
     fn signed_in(&self, _program: &str) -> Option<bool> {
@@ -373,7 +373,7 @@ mod tests {
         spec.builder = Some(super::super::Builder { investigation: Some(root.clone()), inbox: root.join("inbox") });
         let mut conv = super::super::builder_conversation(spec, approver);
         conv.send(
-            "Do exactly these two things in this folder, then stop. First call the craft-anything MCP tool core_session_show and no other MCP server. Then run this shell command and no other command: mkdir grok-live-marker",
+            "Do exactly these two things in this folder, then stop. First call the omca MCP tool core_session_show and no other MCP server. Then run this shell command and no other command: mkdir grok-live-marker",
         );
 
         let started = std::time::Instant::now();
@@ -388,7 +388,7 @@ mod tests {
                     crate::AgentEvent::ToolStarted { tool, input, .. } => {
                         let blob = format!("{tool} {input}");
                         let lower = blob.to_ascii_lowercase();
-                        if lower.contains("session_show") || lower.contains("craft-anything") || lower.contains("craft_anything") {
+                        if lower.contains("session_show") || lower.contains("omca") || lower.contains("craft_anything") {
                             saw_server = true;
                         }
                         let mut note = blob.chars().take(160).collect::<String>();
@@ -415,7 +415,7 @@ mod tests {
         let asked = permissions.lock().unwrap().clone();
         assert!(done, "the turn did not finish; tools={tools:?} permissions={asked:?} notes={notes:?} errors={errors:?}");
         assert!(!asked.is_empty(), "no permission was answered; tools={tools:?} notes={notes:?} errors={errors:?}");
-        assert!(saw_server, "craft-anything's tools did not run; tools={tools:?} permissions={asked:?} notes={notes:?} errors={errors:?}");
+        assert!(saw_server, "omca's tools did not run; tools={tools:?} permissions={asked:?} notes={notes:?} errors={errors:?}");
     }
 
     #[cfg(unix)]

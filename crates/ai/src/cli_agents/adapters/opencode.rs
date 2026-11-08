@@ -46,7 +46,7 @@ impl AgentAdapter for OpenCode {
         if !output.success {
             return Err(remote_failure(host, &output));
         }
-        Ok(Some(("OPENCODE_CONFIG", format!("~/.cache/craft-anything/{name}"))))
+        Ok(Some(("OPENCODE_CONFIG", format!("~/.cache/omca/{name}"))))
     }
 
     /// Discover enabled chat models and thinking variants from the selected local or SSH installation.
@@ -209,25 +209,25 @@ fn remote_check(host: &str, stop: Option<&CancelToken>) -> Result<(), ToolError>
 fn remote_prepare_line(name: &str, content: &str) -> String {
     let escaped = octal_escape(content.as_bytes());
     format!(
-        "command -v craft-anything-cli >/dev/null && mkdir -p \"$HOME/.cache/craft-anything\" && printf '{escaped}' > \"$HOME/.cache/craft-anything/{name}.tmp.$$\" && chmod 600 \"$HOME/.cache/craft-anything/{name}.tmp.$$\" && mv \"$HOME/.cache/craft-anything/{name}.tmp.$$\" \"$HOME/.cache/craft-anything/{name}\""
+        "command -v craft-anything-cli >/dev/null && mkdir -p \"$HOME/.cache/omca\" && printf '{escaped}' > \"$HOME/.cache/omca/{name}.tmp.$$\" && chmod 600 \"$HOME/.cache/omca/{name}.tmp.$$\" && mv \"$HOME/.cache/omca/{name}.tmp.$$\" \"$HOME/.cache/omca/{name}\""
     )
 }
 
 /// Map the remote failure onto the fix, reusing the ssh failure wording other remote runs use.
 fn remote_failure(host: &str, out: &craft_anything_platform::Output) -> ToolError {
     if let Some(failure) = crate::ssh::diagnose(host, "craft-anything-cli", crate::ssh::is_git_server(host), out.code, out.stderr_text().as_str()) {
-        return ToolError::new(ErrorCode::EngineMissing, format!("Craft Anything can't set up its tools on {host}: {}.", failure.what))
-            .with_remediation(failure.fix);
+        return ToolError::new(ErrorCode::EngineMissing, format!("OMCA can't set up its tools on {host}: {}.", failure.what)).with_remediation(failure.fix);
     }
     let stderr = out.stderr_text();
     let snippet: String = stderr.trim().chars().take(200).collect();
     let exit = out.code.map_or_else(|| "it was stopped".to_string(), |code| format!("exit {code}"));
-    ToolError::new(ErrorCode::EngineMissing, format!("Craft Anything couldn't set up its tools on {host}: ssh didn't come back as expected ({exit})."))
-        .with_remediation(if snippet.is_empty() {
+    ToolError::new(ErrorCode::EngineMissing, format!("OMCA couldn't set up its tools on {host}: ssh didn't come back as expected ({exit}).")).with_remediation(
+        if snippet.is_empty() {
             "Check that craft-anything-cli is on the PATH this ssh session uses, and that the host lets you run programs over ssh.".to_string()
         } else {
             format!("ssh said: {snippet}")
-        })
+        },
+    )
 }
 
 /// OpenCode's JSON error carries the provider status and its own retry decision. In particular,
@@ -432,7 +432,7 @@ mod tests {
         };
         let ok = run(&bin, &home);
         assert!(ok.success, "{}", ok.stderr_text());
-        let target = home.join(".cache/craft-anything").join(&name);
+        let target = home.join(".cache/omca").join(&name);
         assert_eq!(std::fs::read(&target).unwrap(), content.as_bytes());
         assert_eq!(std::fs::metadata(&target).unwrap().permissions().mode() & 0o777, 0o600);
 
@@ -452,8 +452,8 @@ mod tests {
         let name = config_name(&content);
         let line = remote_prepare_line(&name, &content);
         assert!(line.starts_with("command -v craft-anything-cli "), "{line}");
-        assert!(line.contains("mkdir -p \"$HOME/.cache/craft-anything\""), "{line}");
-        assert!(line.contains(&format!("\"$HOME/.cache/craft-anything/{name}\"")), "{line}");
+        assert!(line.contains("mkdir -p \"$HOME/.cache/omca\""), "{line}");
+        assert!(line.contains(&format!("\"$HOME/.cache/omca/{name}\"")), "{line}");
         assert!(line.contains("chmod 600"), "{line}");
         assert!(!line.contains('\n'), "{line}");
         // No byte in the content can end the printf format string: every octet is escaped.

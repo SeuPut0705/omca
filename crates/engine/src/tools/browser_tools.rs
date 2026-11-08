@@ -23,7 +23,7 @@ pub fn specs() -> Vec<ToolSpec> {
             "web_browser_connect",
             "Connect to a browser",
             "Attach to a loopback CDP endpoint (a browser started with --remote-debugging-port) or launch a located Chromium headless, and report the product, protocol version and debuggable target count. A quick connectivity check before the other browser tools.",
-            "Check Craft Anything can talk to a web browser for live inspection.",
+            "Check OMCA can talk to a web browser for live inspection.",
             Toolset::Browser,
             Effects::NETWORK_EVIDENCE.union(Effects::LAUNCHES_PROCESS),
             Requires::Nothing,
@@ -2294,7 +2294,7 @@ fn web_walkthrough_record(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput
     let summary =
         format!("Ran {} of {} scripted step(s) on {start_url}{}.", ok_steps, p.actions.len(), aborted.as_ref().map(|a| format!(" ({a})")).unwrap_or_default());
     let result = json!({
-        "browser": {"product": browser.product, "started_by": if browser.launched { "craft-anything" } else { "external" }, "cleanup": if browser.launched { "closed" } else { "disconnected" }},
+        "browser": {"product": browser.product, "started_by": if browser.launched { "omca" } else { "external" }, "cleanup": if browser.launched { "closed" } else { "disconnected" }},
         "start_url": start_url,
         "action_count": p.actions.len(),
         "keep_bodies": p.keep_bodies,

@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn a_codex_entry_keeps_the_persons_own_settings_when_it_gains_the_approval() {
         let c = client("codex");
-        let text = "[mcp_servers.craft-anything]\ncommand = \"/old/craft-anything-cli\"\nargs = [\"mcp\"]\nenabled_tools = [\"core_a\"] # mine\ntools = { other = { approval_mode = \"prompt\" } }\n\n[mcp_servers.craft-anything.env]\nK = \"v\"\n";
+        let text = "[mcp_servers.omca]\ncommand = \"/old/craft-anything-cli\"\nargs = [\"mcp\"]\nenabled_tools = [\"core_a\"] # mine\ntools = { other = { approval_mode = \"prompt\" } }\n\n[mcp_servers.omca.env]\nK = \"v\"\n";
         let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
         assert!(!c.entry_is_current(&read_entry(&c, text).unwrap().unwrap(), &e));
         let new = set_entry(&c, text, &e).unwrap();
@@ -248,7 +248,7 @@ mod tests {
     fn a_foreign_codex_entry_is_replaced_and_a_disabled_one_is_noticed() {
         let c = client("codex");
         let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let foreign = "[mcp_servers.craft-anything]\nurl = \"https://example.test/mcp\"\n";
+        let foreign = "[mcp_servers.omca]\nurl = \"https://example.test/mcp\"\n";
         let got = read_entry(&c, &set_entry(&c, foreign, &e).unwrap()).unwrap().unwrap();
         assert!(got.get("url").is_none(), "{got}");
         assert_eq!(got, e);
@@ -262,7 +262,7 @@ mod tests {
     fn an_inline_codex_entry_keeps_the_persons_own_settings() {
         let c = client("codex");
         let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let text = "[mcp_servers]\ncraft-anything = { command = \"/old/craft-anything-cli\", args = [\"mcp\"], enabled = false, disabled_tools = [\"x\"] }\n";
+        let text = "[mcp_servers]\nomca = { command = \"/old/craft-anything-cli\", args = [\"mcp\"], enabled = false, disabled_tools = [\"x\"] }\n";
         let new = set_entry(&c, text, &e).unwrap();
         let got = read_entry(&c, &new).unwrap().unwrap();
         assert_eq!(got["command"], "/b/craft-anything-cli");
@@ -277,7 +277,7 @@ mod tests {
     fn comments_on_our_codex_entry_and_its_tools_table_stay() {
         let c = client("codex");
         let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let inline = "[mcp_servers]\ncraft-anything = { command = \"/old/craft-anything-cli\", args = [\"mcp\"], enabled = false } # mine\n";
+        let inline = "[mcp_servers]\nomca = { command = \"/old/craft-anything-cli\", args = [\"mcp\"], enabled = false } # mine\n";
         let new = set_entry(&c, inline, &e).unwrap();
         assert!(new.contains("# mine"), "{new}");
         let got = read_entry(&c, &new).unwrap().unwrap();
@@ -285,7 +285,7 @@ mod tests {
         assert_eq!(got["tools"]["rebuild_start"]["approval_mode"], "approve");
         assert_eq!(set_entry(&c, &new, &e).unwrap(), new);
 
-        let table = "[mcp_servers.craft-anything]\ncommand = \"/old/craft-anything-cli\" # the program\nargs = [\"mcp\"]\n\n# about tools\n[mcp_servers.craft-anything.tools]\n# keep me\nother = { approval_mode = \"prompt\" } # theirs\n";
+        let table = "[mcp_servers.omca]\ncommand = \"/old/craft-anything-cli\" # the program\nargs = [\"mcp\"]\n\n# about tools\n[mcp_servers.omca.tools]\n# keep me\nother = { approval_mode = \"prompt\" } # theirs\n";
         let new = set_entry(&c, table, &e).unwrap();
         for note in ["# the program", "# about tools", "# keep me", "# theirs"] {
             assert!(new.contains(note), "{note} lost:\n{new}");
@@ -301,7 +301,7 @@ mod tests {
     fn a_comment_above_a_key_stays_when_its_value_changes() {
         let c = client("codex");
         let e = c.desired_entry(&["/b/craft-anything-cli".into(), "mcp".into()]);
-        let text = "[mcp_servers.craft-anything]\n# the program\ncommand = \"/old/craft-anything-cli\"\nargs = [\"mcp\"]\n# how long to wait\nstartup_timeout_sec = 10\n";
+        let text = "[mcp_servers.omca]\n# the program\ncommand = \"/old/craft-anything-cli\"\nargs = [\"mcp\"]\n# how long to wait\nstartup_timeout_sec = 10\n";
         let new = set_entry(&c, text, &e).unwrap();
         assert!(new.contains("# the program\ncommand = \"/b/craft-anything-cli\""), "{new}");
         assert!(new.contains("# how long to wait\nstartup_timeout_sec = 30"), "{new}");
@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn grok_enables_disabled_server() {
         let c = client("grok_build");
-        let text = "disabled_mcp_servers = [\"craft-anything\", \"x\"]\n";
+        let text = "disabled_mcp_servers = [\"omca\", \"x\"]\n";
         assert!(is_disabled(&c, text));
         let new = set_entry(&c, text, &json!({"command": "c", "args": ["mcp"]})).unwrap();
         assert!(!is_disabled(&c, &new));
@@ -326,6 +326,6 @@ mod tests {
         let z = client("zcode");
         let new = set_entry(&z, "", &json!({"command": "c"})).unwrap();
         assert_eq!(read_entry(&z, &new).unwrap(), Some(json!({"command": "c"})));
-        assert_eq!(parse(&z, &new).unwrap()["mcp"]["servers"]["craft-anything"]["command"], "c");
+        assert_eq!(parse(&z, &new).unwrap()["mcp"]["servers"]["omca"]["command"], "c");
     }
 }

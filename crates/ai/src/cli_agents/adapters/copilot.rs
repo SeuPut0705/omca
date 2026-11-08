@@ -4,7 +4,7 @@
 use super::*;
 
 /// Copilot's ACP-only adapter. Unsupported connection modes fail instead of falling back to
-/// a CLI invocation that has no way to ask Craft Anything for approval.
+/// a CLI invocation that has no way to ask OMCA for approval.
 pub struct Copilot;
 
 impl AgentAdapter for Copilot {
@@ -114,7 +114,7 @@ impl AgentAdapter for Copilot {
         if options.args.is_empty() {
             Ok(())
         } else {
-            Err(ToolError::invalid("Extra Copilot CLI arguments could bypass Craft Anything's tool restrictions.")
+            Err(ToolError::invalid("Extra Copilot CLI arguments could bypass OMCA's tool restrictions.")
                 .with_remediation("Remove this backend's extra arguments. Set its program, cli_model and effort through the backend options instead."))
         }
     }
@@ -133,7 +133,7 @@ impl AgentAdapter for Copilot {
     }
 
     fn sign_in_fix(&self) -> Option<String> {
-        Some("Sign in separately in a terminal with `copilot login`, then try again. If authentication still fails, restart Craft Anything. Copilot CLI manages your credentials.".into())
+        Some("Sign in separately in a terminal with `copilot login`, then try again. If authentication still fails, restart OMCA. Copilot CLI manages your credentials.".into())
     }
 }
 
@@ -223,7 +223,7 @@ mod tests {
         assert!(args.contains(&"--secret-env-vars=GH_TOKEN".to_string()));
         assert!(!args.iter().any(|arg| arg.starts_with("--allow-all")));
         let fix = Copilot.sign_in_fix().unwrap();
-        assert!(fix.contains("copilot login") && fix.contains("restart Craft Anything"));
+        assert!(fix.contains("copilot login") && fix.contains("restart OMCA"));
     }
 
     #[test]
@@ -231,10 +231,10 @@ mod tests {
         for access in [Access::Analyse, Access::Build, Access::CleanRoomBuild] {
             let args = Copilot.acp_options(&BackendOptions::default(), access);
             let tools = args.iter().find_map(|arg| arg.strip_prefix("--available-tools=")).unwrap();
-            assert!(tools.split(',').all(|tool| tool.starts_with("craft-anything-")));
-            assert!(tools.split(',').any(|tool| tool == "craft-anything-build_file_write"));
-            assert!(tools.split(',').any(|tool| tool == "craft-anything-enable_toolset"));
-            assert!(args.contains(&"--allow-tool=craft-anything".to_string()));
+            assert!(tools.split(',').all(|tool| tool.starts_with("omca-")));
+            assert!(tools.split(',').any(|tool| tool == "omca-build_file_write"));
+            assert!(tools.split(',').any(|tool| tool == "omca-enable_toolset"));
+            assert!(args.contains(&"--allow-tool=omca".to_string()));
             assert!(args.contains(&"--no-custom-instructions".to_string()));
         }
     }

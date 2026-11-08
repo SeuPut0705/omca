@@ -1369,7 +1369,7 @@ impl CraftApp {
         if self.headless {
             return;
         }
-        let name = self.view.active_target().map(|t| format!("{} report.md", t.name)).unwrap_or_else(|| "Craft Anything report.md".into());
+        let name = self.view.active_target().map(|t| format!("{} report.md", t.name)).unwrap_or_else(|| "OMCA report.md".into());
         let engine = self.engine.clone();
         #[cfg(not(target_arch = "wasm32"))]
         self.jobs.spawn("Export report", true, move |_| {
@@ -1936,7 +1936,7 @@ pub fn bounded_zoom(zoom: f32) -> f32 {
 }
 
 /// The 256 px app icon.
-pub static APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/ai.storyteller.craft-anything.png");
+pub static APP_ICON_PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/256x256/apps/com.seuput.omca.png");
 /// The app icon's master SVG, drawn at the exact pixel size wherever the app shows its icon.
 pub static APP_ICON_SVG: &[u8] = include_bytes!("../../../assets/app-icon/craft-anything.svg");
 

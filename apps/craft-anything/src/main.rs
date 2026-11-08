@@ -57,8 +57,8 @@ fn main() -> eframe::Result {
     log::info!("engine and AI ready; opening the window");
 
     let viewport = eframe::egui::ViewportBuilder::default()
-        .with_title("Craft Anything")
-        .with_app_id("ai.storyteller.craft-anything")
+        .with_title("OMCA")
+        .with_app_id("com.seuput.omca")
         .with_inner_size([1360.0, 860.0])
         .with_min_inner_size([760.0, 520.0])
         .with_resizable(true)
@@ -103,7 +103,7 @@ fn main() -> eframe::Result {
     // loop isn't retried; the app only reports the failure (below) and exits.
     let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         eframe::run_native(
-            "Craft Anything",
+            "OMCA",
             options,
             Box::new(move |cc| {
                 log::info!("window open");
@@ -151,7 +151,7 @@ fn main() -> eframe::Result {
             let retry = String::new();
             let _ = rfd::MessageDialog::new()
                 .set_level(rfd::MessageLevel::Error)
-                .set_title("Craft Anything couldn't open its window")
+                .set_title("OMCA couldn't open its window")
                 .set_description(format!(
                     "{e}\n\n{}{retry} What happened is written to {}; please attach it if you report this.",
                     graphics_advice(&e.to_string()),
@@ -220,7 +220,7 @@ fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
 fn graphics_advice(error: &str) -> &'static str {
     if error.to_lowercase().contains("device is lost") {
         if cfg!(target_os = "macos") {
-            "The Mac's graphics stopped while the window opened. Install the latest macOS update, then try again. If it keeps happening, please report it with the log file (Craft Anything issue #742 covers the Metal shader case)."
+            "The Mac's graphics stopped while the window opened. Install the latest macOS update, then try again. If it keeps happening, please report it with the log file (OMCA issue #742 covers the Metal shader case)."
         } else {
             "The graphics driver stopped while the window opened. Update it, then try again. If it keeps happening, set the environment variable CRAFT_ANYTHING_RENDERER=software to draw without the graphics card (slower), and start the app again."
         }
@@ -293,7 +293,7 @@ fn pick_renderer(config: &std::path::Path, last_failed: bool) -> Option<renderer
 fn relaunch(args: &[String]) -> bool {
     let started = std::env::current_exe()
         .map_err(|e| e.to_string())
-        .and_then(|exe| craft_anything_platform::process::Launch::new(&exe).args(args).label("Craft Anything").start().map_err(|e| e.to_string()));
+        .and_then(|exe| craft_anything_platform::process::Launch::new(&exe).args(args).label("OMCA").start().map_err(|e| e.to_string()));
     if let Err(e) = &started {
         log::warn!("couldn't start again: {e}");
     }

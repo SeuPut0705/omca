@@ -6,7 +6,7 @@
 #                                                    Developer ID signed with the hardened runtime,
 #                                                    timestamped and notarized
 #
-# Usage: packaging/macos/verify.sh [--arch universal|aarch64|x86_64]
+# Usage: packaging/macos/verify.sh   (Apple silicon artifacts only)
 #
 # With a real signing identity and notarization credentials in the environment (the same
 # MACOS_SIGN_IDENTITY / APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID that package.sh uses), every
@@ -22,20 +22,14 @@ set -euo pipefail
 # shellcheck source=../env.sh
 . "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 
-ARCH=universal
+ARCH=aarch64
+WANT_ARCHS="arm64"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --arch) ARCH="$2"; shift 2 ;;
     -h | --help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-case "$ARCH" in
-  universal) WANT_ARCHS="x86_64 arm64" ;;
-  aarch64) WANT_ARCHS="arm64" ;;
-  x86_64) WANT_ARCHS="x86_64" ;;
-  *) echo "unknown --arch $ARCH" >&2; exit 2 ;;
-esac
 
 DMG="$DIST/craft-anything-$VERSION-macos-$ARCH.dmg"
 CLI_ZIP="$DIST/craft-anything-cli-$VERSION-macos-$ARCH.zip"
