@@ -5,7 +5,7 @@
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
     craft-anything-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
-    craft-anything-<version>-windows-<arch>-portable.zip   craft-anything.exe (+ craft-anything-cli.exe), portable.txt and the licences
+    craft-anything-<version>-windows-<arch>-portable.zip   craft-anything.exe (+ craft-anything-cli.exe), portable.txt, the readme and the licences
 
   craft-anything-cli.exe is built and shipped once apps/craft-anything-cli exists in the workspace.
 
@@ -14,7 +14,8 @@
   warning when no signing secrets are set).
 
   Needs: Rust (MSVC toolchain + the target), the Windows SDK (rc.exe, signtool.exe),
-  and WiX v5: dotnet tool install --global wix --version 5.0.2
+  LICENCES_DIR (every licence text, staged by packaging/env.sh's stage_licences; the release
+  workflow sets it), and WiX v5: dotnet tool install --global wix --version 5.0.2
              wix extension add -g WixToolset.UI.wixext/5.0.2 WixToolset.Util.wixext/5.0.2
 
 .EXAMPLE
@@ -51,6 +52,11 @@ $Target = switch ($Arch) { 'x64' { 'x86_64-pc-windows-msvc' } 'x86' { 'i686-pc-w
 $Dist = if ($env:DIST) { $env:DIST } else { Join-Path $Root 'dist\release' }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Root 'target' }
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
+# The installer and the zip ship every licence text; a build without them can't be released.
+$Licences = $env:LICENCES_DIR
+if (-not $Licences -or -not (Test-Path (Join-Path $Licences 'THIRD-PARTY-LICENSES.html'))) {
+  throw 'LICENCES_DIR must hold the staged licences: in bash, . packaging/env.sh; stage_licences <dir>'
+}
 
 if (-not $env:CRAFT_ANYTHING_BUILD_SHA) { $env:CRAFT_ANYTHING_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
 if (-not $env:CRAFT_ANYTHING_BUILD_DATE) { $env:CRAFT_ANYTHING_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
@@ -104,8 +110,8 @@ foreach ($exe in $Exes) { Copy-Item (Join-Path $Bin $exe) $Stage }
 # (their text sits on the right; the left 164 px are ours). Both must be 24-bit BMPs.
 function New-InstallerArt([string] $IconPng, [string] $BannerOut, [string] $DialogOut) {
   Add-Type -AssemblyName System.Drawing
-  $paper = [System.Drawing.ColorTranslator]::FromHtml('#efe9dc')
-  $accent = [System.Drawing.ColorTranslator]::FromHtml('#c96f2d')
+  $paper = [System.Drawing.ColorTranslator]::FromHtml('#f5f5f8')
+  $accent = [System.Drawing.ColorTranslator]::FromHtml('#4b4fd6')
   $icon = [System.Drawing.Image]::FromFile($IconPng)
   try {
     foreach ($spec in @(@($BannerOut, 493, 58), @($DialogOut, 493, 312))) {
@@ -141,7 +147,7 @@ Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'craft-anything.wxs') -arch $Arch `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
     -culture en-US -loc (Join-Path $PSScriptRoot 'craft-anything.en-us.wxl') `
-    -d "Version=$MsiVersion" -d "DisplayVersion=$Version" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\craft-anything.ico')" `
+    -d "Version=$MsiVersion" -d "DisplayVersion=$Version" -d "BinDir=$Stage" -d "LicencesDir=$Licences" -d "IconPath=$(Join-Path $Root 'assets\app-icon\craft-anything.ico')" `
     -d "BannerBmp=$Banner" -d "DialogBmp=$Dialog" -d "HasCli=$([int]$HasCli)" `
     -o $Msi
 }
@@ -157,16 +163,8 @@ $Portable = Join-Path $TargetDir "windows-package\craft-anything-$Version-window
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
-foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE') {
-  $p = Join-Path $Root $f
-  if (Test-Path $p) { Copy-Item $p $Portable }
-}
-# The embedded fonts (assets/fonts, and craft-fonts' with CRAFT_FONTS_DIR as releases build) are
-# OFL-1.1: ship their licences, craft-fonts' as OFL-<font>.txt.
-Get-ChildItem -Path (Join-Path $Root 'assets\fonts') -Filter 'OFL-*.txt' -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName $Portable }
-if ($env:CRAFT_FONTS_DIR) {
-  Get-ChildItem -Path (Join-Path $env:CRAFT_FONTS_DIR 'fonts\*\OFL.txt') -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName (Join-Path $Portable "OFL-$($_.Directory.Name).txt") }
-}
+Copy-Item (Join-Path $Root 'README.md') $Portable
+Copy-Item (Join-Path $Licences '*') $Portable
 # portable.txt beside craft-anything.exe switches on portable mode: settings, logs and the engine
 # store go to OMCAData\ next to the exe instead of %APPDATA% (crates/engine/src/settings.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable

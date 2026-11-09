@@ -40,6 +40,14 @@ jobs:
           ensure_craft_fonts
           echo "CRAFT_FONTS_DIR=$(cygpath -w "$CRAFT_FONTS_DIR")" >>"$GITHUB_ENV"
           echo "CRAFT_FONTS_REQUIRED=1" >>"$GITHUB_ENV"
+      - name: cargo-about (the third-party licence bundle)
+        run: cargo install cargo-about --locked --features cli
+      - name: Licences (packaging/env.sh stage_licences)
+        shell: bash
+        run: |
+          . packaging/env.sh
+          CRAFT_FONTS_DIR="$(cygpath -u "$CRAFT_FONTS_DIR")" stage_licences "$CARGO_TARGET_DIR/licences"
+          echo "LICENCES_DIR=$(cygpath -w "$CARGO_TARGET_DIR/licences")" >>"$GITHUB_ENV"
       - name: Package
         shell: pwsh
         run: pwsh packaging/windows/package.ps1
