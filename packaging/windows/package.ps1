@@ -154,6 +154,20 @@ Invoke-Native 'wix build' {
 Invoke-Native 'MSI shortcut icon validation (ICE50)' {
   wix msi validate $Msi -ice ICE50 -intermediateFolder (Join-Path $Stage 'msi-validation')
 }
+# The licences are installed with the app: read the MSI's File table and refuse one without them.
+$Installer = New-Object -ComObject WindowsInstaller.Installer
+$Db = $Installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $Installer, @($Msi, 0))
+$View = $Db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $Db, @('SELECT `FileName` FROM `File`'))
+$View.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $View, $null) | Out-Null
+$Installed = @()
+while ($Record = $View.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $View, $null)) {
+  $Installed += ($Record.GetType().InvokeMember('StringData', 'GetProperty', $null, $Record, 1) -split '\|')[-1]
+}
+$View.GetType().InvokeMember('Close', 'InvokeMethod', $null, $View, $null) | Out-Null
+foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md', 'LICENSE-lucide.txt', 'THIRD-PARTY-LICENSES.html') {
+  if ($Installed -notcontains $f) { throw "$f is missing from the MSI" }
+}
+Write-Output "ok MSI installs the licences ($($Installed.Count) files)"
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
 Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Msi, '.wixpdb'))
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
