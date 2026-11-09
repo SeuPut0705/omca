@@ -55,8 +55,28 @@ pub fn show(ui: &mut egui::Ui, name: &str, size: f32, tint: Color32) -> Response
 
 /// Square icon button: transparent until hovered; `selected` gets the accent treatment.
 pub fn button(ui: &mut egui::Ui, name: &str, box_size: f32, selected: bool, tooltip: &str) -> Response {
+    button_scaled(ui, name, box_size, 1.0, selected, tooltip)
+}
+
+/// The glyph for an icon button whose box is `box_size` (unscaled): it steps with the box, on the
+/// icon scale.
+fn glyph_for(box_size: f32) -> f32 {
+    use crate::theme::size;
+    if box_size <= size::CONTROL_SM {
+        size::ICON_SM
+    } else if box_size <= size::CONTROL {
+        size::ICON
+    } else {
+        size::ICON_LG
+    }
+}
+
+/// [`button`] for a box `box_size` (unscaled) drawn at `scale` (the macOS title bar's, which keeps
+/// its size when the app zooms): the glyph is chosen for the unscaled box and scaled with it, so
+/// it always fits.
+pub fn button_scaled(ui: &mut egui::Ui, name: &str, box_size: f32, scale: f32, selected: bool, tooltip: &str) -> Response {
     let t = Tokens::get(ui.ctx());
-    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(box_size), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(box_size * scale), Sense::click());
     if selected {
         ui.painter().rect_filled(rect, t.radius_sm, t.accent_soft);
     } else {
@@ -70,15 +90,7 @@ pub fn button(ui: &mut egui::Ui, name: &str, box_size: f32, selected: bool, tool
     } else {
         t.icon
     };
-    // The glyph steps with the box, on the icon scale.
-    let glyph = if box_size <= crate::theme::size::CONTROL_SM {
-        crate::theme::size::ICON_SM
-    } else if box_size <= crate::theme::size::CONTROL {
-        crate::theme::size::ICON
-    } else {
-        crate::theme::size::ICON_LG
-    };
-    paint(ui, rect, name, glyph, tint);
+    paint(ui, rect, name, glyph_for(box_size) * scale, tint);
     crate::widgets::focus_ring(ui, &resp, rect);
     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::i18n::tr(if tooltip.is_empty() { name } else { tooltip })));
@@ -88,6 +100,16 @@ pub fn button(ui: &mut egui::Ui, name: &str, box_size: f32, selected: bool, tool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An icon button's glyph fits its box at every control size, the title bar's included; the
+    /// zoom scales both alike (`button_scaled`), so it fits at any zoom.
+    #[test]
+    fn an_icon_buttons_glyph_fits_its_box() {
+        use crate::theme::size;
+        for side in [size::CONTROL_XS, size::CONTROL_SM, size::CONTROL, size::CONTROL_LG, size::CONTROL_XL, 26.0, 30.0] {
+            assert!(glyph_for(side) < side, "a {} pt glyph in a {side} pt box", glyph_for(side));
+        }
+    }
 
     #[test]
     fn icons_are_recoloured_and_present() {

@@ -210,7 +210,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
                 usage_pill(app, ui);
                 return;
             }
-            if icons::button(ui, "settings", CONTROL * s, app.state.settings_open, "Settings").clicked() {
+            if icons::button_scaled(ui, "settings", CONTROL, s, app.state.settings_open, "Settings").clicked() {
                 app.state.settings_open = !app.state.settings_open;
             }
             rule(ui);
