@@ -242,11 +242,12 @@ pub fn icon_tile(ui: &mut Ui, icon: &str, side: f32) -> Response {
 }
 
 /// A compact radio-like chip with an icon: the chosen one has the app-colour edge, a wash and a
-/// tick. One [`size::CONTROL_LG`] high, as wide as its words; for pickers with few options.
+/// tick. One [`size::CONTROL_LG`] high and as wide as its words plus the tick's slot, which every
+/// chip keeps so choosing one never moves the others or changes how the row wraps.
 pub fn choice_chip(ui: &mut Ui, icon: &str, label: &str, on: bool) -> Response {
     let t = Tokens::get(ui.ctx());
     let g = label_galley(ui, &tr(label), theme::SMALL - 1.5, t.text);
-    let tick = if on { size::ICON_SM + space::S } else { 0.0 };
+    let tick = size::ICON_SM + space::S;
     let w = space::M + size::ICON + space::S + g.size().x + tick + space::M;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, size::CONTROL_LG), Sense::click());
     let h = hover_t(ui, &resp);
@@ -690,6 +691,37 @@ pub fn open_log_button(ui: &mut Ui, path: &std::path::Path) -> bool {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    /// Choosing another chip leaves every chip where it was: the tick's slot is kept on all of them.
+    #[test]
+    fn choosing_a_chip_moves_no_chip() {
+        use egui_kittest::kittest::Queryable as _;
+        let labels = ["A website", "An app", "A game", "Nothing — start fresh"];
+        // (chosen chip, fonts installed): the kit's fonts are bound from the frame after install.
+        let mut h = egui_kittest::Harness::new_ui_state(
+            move |ui, (chosen, ready): &mut (usize, bool)| {
+                if !*ready {
+                    theme::install_fonts(ui.ctx());
+                    *ready = true;
+                    return;
+                }
+                ui.horizontal_wrapped(|ui| {
+                    for (i, l) in labels.iter().enumerate() {
+                        choice_chip(ui, "globe", l, i == *chosen);
+                    }
+                });
+            },
+            (0usize, false),
+        );
+        h.run();
+        let rects = |h: &egui_kittest::Harness<'_, (usize, bool)>| labels.map(|l| h.get_by_label(l).rect());
+        let first = rects(&h);
+        for chosen in 1..labels.len() {
+            h.state_mut().0 = chosen;
+            h.run();
+            assert_eq!(rects(&h), first, "choosing chip {chosen} moved a chip");
+        }
+    }
 
     /// #579: egui's `Spinner` asks to be redrawn at once, every frame, for as long as it shows;
     /// ours waits for the animation's own pace, so an hour-long build isn't drawn at the display's
