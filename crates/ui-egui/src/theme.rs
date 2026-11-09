@@ -928,6 +928,8 @@ mod tests {
                 }
             }
             assert!(contrast(t.on_accent, t.accent) >= 4.5, "{k:?} text on the app colour: {:.2}", contrast(t.on_accent, t.accent));
+            // Send's icon on its hover colour (an icon, so 3:1).
+            assert!(contrast(t.on_accent, t.accent_hover) >= 3.0, "{k:?} icon on the hover colour: {:.2}", contrast(t.on_accent, t.accent_hover));
             assert!(contrast(t.field_border, t.canvas) >= 3.0, "{k:?} control borders: {:.2}", contrast(t.field_border, t.canvas));
             // Main buttons are filled in the app colour, a step lighter on hover; the label stays readable on both.
             assert!(contrast(t.on_accent, t.accent_hover) >= 4.5, "{k:?} main buttons on hover: {:.2}", contrast(t.on_accent, t.accent_hover));

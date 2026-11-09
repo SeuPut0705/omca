@@ -149,7 +149,7 @@ pub fn card(ui: &mut Ui, a: &mut Asked, glossary: bool) {
             toggle |= icons::button(ui, if a.collapsed { "chevron-right" } else { "chevron-down" }, size::CONTROL_SM, false, name).clicked();
             let (icon, _) = ui.allocate_exact_size(egui::Vec2::splat(size::ICON), egui::Sense::hover());
             icons::paint(ui, icon, "circle-help", size::ICON, t.icon);
-            let line = egui::Label::new(RichText::new(&a.question).strong()).sense(egui::Sense::click()).selectable(false);
+            let line = egui::Label::new(RichText::new(&a.question).font(theme::semibold(theme::BODY))).sense(egui::Sense::click()).selectable(false);
             let line = if a.collapsed { line.truncate() } else { line.wrap() };
             toggle |= ui.add(line).on_hover_cursor(egui::CursorIcon::PointingHand).clicked();
         });

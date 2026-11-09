@@ -8,6 +8,7 @@ use super::*;
 mod aider;
 mod antigravity;
 mod copilot;
+mod devin;
 mod dsh;
 mod grok;
 mod hermes;
@@ -16,6 +17,7 @@ mod opencode;
 pub use aider::Aider;
 pub use antigravity::Antigravity;
 pub use copilot::Copilot;
+pub use devin::Devin;
 pub use dsh::DeepSeekHarness;
 pub use grok::Grok;
 pub use hermes::Hermes;
@@ -276,7 +278,7 @@ impl Default for AgentAdapters {
 }
 
 impl AgentAdapters {
-    /// The built-in coding agents, including the ACP-only Copilot and Grok Build adapters.
+    /// The built-in coding agents, including the ACP-only Copilot and Grok Build adapters and Devin's.
     pub fn built_in() -> AgentAdapters {
         AgentAdapters {
             adapters: vec![
@@ -291,6 +293,7 @@ impl AgentAdapters {
                 Arc::new(Copilot),
                 Arc::new(Grok),
                 Arc::new(DeepSeekHarness),
+                Arc::new(Devin),
             ],
         }
     }
@@ -443,7 +446,13 @@ impl AgentAdapter for ClaudeCode {
         if let Some(r) = cx.resume {
             a.extend(["--resume".into(), r.to_string()]);
         }
-        let tools = if cx.builder { "Bash,PowerShell,Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,NotebookEdit" } else { "" };
+        // Deep builders keep subagents (#1105): a subagent has only these tools and the session's
+        // permissions. Clean room leaves them out, since its reads must all reach our approval tool.
+        let tools = match (cx.builder, cx.reads_checked) {
+            (true, false) => "Bash,PowerShell,Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,NotebookEdit,Agent",
+            (true, true) => "Bash,PowerShell,Read,Write,Edit,MultiEdit,Glob,Grep,TodoWrite,NotebookEdit",
+            (false, _) => "",
+        };
         a.extend(["--tools".into(), tools.into()]);
         if cx.builder {
             // Questions go through our core_person_ask tool, which the app shows as buttons.
