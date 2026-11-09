@@ -54,7 +54,7 @@ use state::{CenterTab, ChatItem, ConsentAnswer, Fill, RailKind, Screen, UiState}
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use theme::ThemeKind;
+use theme::{ThemeKind, space};
 
 pub use i18n::tr;
 
@@ -1039,7 +1039,7 @@ impl CraftApp {
             ProblemKind::Broken => "Part of the app got stuck, so it was stopped and the rest carried on. Your work is kept.",
             _ => "Part of the app is stuck. Restarting clears it, and your work is kept.",
         };
-        egui::Panel::top("stuck-banner").frame(egui::Frame::new().fill(t.card).inner_margin(egui::Margin::symmetric(14, 8))).show(ui, |ui| {
+        egui::Panel::top("stuck-banner").frame(widgets::pane(t.card, theme::pad_xy(space::L, space::SM))).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 icons::show(ui, "triangle-alert", 16.0, t.danger);
                 ui.label(egui::RichText::new(i18n::tr(text)).color(t.text)).on_hover_text(problem.summary.clone());
@@ -1774,7 +1774,9 @@ impl CraftApp {
         titlebar::bar(self, ui);
         self.stuck_banner(ui, &ctx);
         if !self.settings.first_run_done {
-            egui::CentralPanel::default().frame(egui::Frame::new().fill(t.canvas)).show(ui, |ui| guard_ui(ui, "first run", |ui| first_run::show(self, ui)));
+            egui::CentralPanel::default()
+                .frame(widgets::pane(t.canvas, egui::Margin::ZERO))
+                .show(ui, |ui| guard_ui(ui, "first run", |ui| first_run::show(self, ui)));
             // An AI added from the first run reports a failure here (a wrong address or key).
             self.toasts(&ctx);
             titlebar::window_edge(&ctx);
@@ -1786,9 +1788,9 @@ impl CraftApp {
             egui::Panel::left("app-sidebar")
                 .exact_size(sidebar::width(self, &ctx))
                 .resizable(false)
-                .frame(egui::Frame::new().fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 0)))
+                .frame(widgets::pane(t.chrome, theme::pad_xy(space::SM, 0.0)))
                 .show(ui, |ui| guard_ui(ui, "sidebar", |ui| sidebar::show(self, ui)));
-            egui::CentralPanel::default().frame(egui::Frame::new().fill(t.canvas)).show(ui, |ui| {
+            egui::CentralPanel::default().frame(widgets::pane(t.canvas, egui::Margin::ZERO)).show(ui, |ui| {
                 guard_ui(ui, "simple", |ui| match self.state.screen {
                     Screen::Home | Screen::Workbench => home::show(self, ui),
                     Screen::Ask => chat::ask_screen(self, ui),
@@ -1836,14 +1838,12 @@ impl CraftApp {
         egui::Area::new(egui::Id::new("toasts")).order(egui::Order::Foreground).anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -16.0)).show(ctx, |ui| {
             ui.set_width(width);
             for (i, (text, error)) in self.state.toasts.iter().enumerate() {
-                egui::Frame::new()
-                    .fill(t.raised)
-                    .stroke(egui::Stroke::new(1.0, if *error { t.danger.gamma_multiply(0.6) } else { t.card_border }))
+                widgets::pane(t.raised, theme::pad_xy(space::L, space::SM))
+                    .stroke(theme::hairline(if *error { t.danger.gamma_multiply(0.6) } else { t.card_border }))
                     .corner_radius(t.r_lg())
                     .shadow(egui::Shadow { offset: [0, 4], blur: 16, spread: 0, color: t.shadow })
-                    .inner_margin(egui::Margin::symmetric(14, 8))
                     .show(ui, |ui| {
-                        ui.set_width(width - 28.0);
+                        ui.set_width(width - 2.0 * space::L);
                         ui.horizontal(|ui| {
                             let (icon, col) = if *error { ("triangle-alert", t.danger) } else { ("check", t.success) };
                             icons::show(ui, icon, 15.0, col);
@@ -1855,7 +1855,7 @@ impl CraftApp {
                             });
                         });
                     });
-                ui.add_space(6.0);
+                ui.add_space(space::S);
             }
         });
         if let Some(i) = dismiss {
@@ -1875,7 +1875,7 @@ impl CraftApp {
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop")));
         painter.rect_filled(rect, 0.0, t.shadow);
         let inner = rect.shrink(40.0);
-        painter.rect_stroke(inner, t.radius_lg, egui::Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
+        painter.rect_stroke(inner, t.radius_lg, theme::line(theme::FOCUS, t.accent), egui::StrokeKind::Inside);
         // Pictures dropped on Make or a project are attached; anything else opens.
         let pictures = ctx.input(|i| i.raw.hovered_files.iter().all(|f| f.path.as_deref().is_some_and(craft_anything_engine::workspace::is_picture)));
         let attach = pictures && matches!(self.state.screen, Screen::Home | Screen::Project);

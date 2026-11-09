@@ -4,7 +4,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::slash::{self, Command, Typed};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, widgets};
 use craft_anything_engine::evidence::ToolError;
 use craft_anything_engine::workspace::{ACTION_KINDS, ActionKind, Approval};
@@ -134,7 +134,7 @@ pub(crate) fn menu(app: &mut CraftApp, ui: &mut Ui, root: &Path) {
     // A named id, so tests (and anything else) can tell whether it's open.
     let popup = egui::Popup::from_toggle_button_response(&button).id(egui::Id::new("project-approvals"));
     popup.close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-        egui::Grid::new("approvals").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+        egui::Grid::new("approvals").num_columns(2).spacing([space::M, space::S]).show(ui, |ui| {
             for row in ACTION_KINDS {
                 ui.label(RichText::new(tr(label(row.kind))).size(theme::SMALL));
                 let now = chosen.get(&row.kind).copied();
@@ -148,7 +148,7 @@ pub(crate) fn menu(app: &mut CraftApp, ui: &mut Ui, root: &Path) {
                 ui.end_row();
             }
         });
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         let note = tr("Default follows Auto mode: with it on, what can be undone goes ahead and the rest is refused; with it off, the builder asks.");
         ui.add(egui::Label::new(RichText::new(note).size(theme::SMALL).color(t.text_faint)).wrap());
     });

@@ -4,10 +4,10 @@
 use crate::evidence_ui::{self, json_tree, truncate};
 use crate::i18n::tr;
 use crate::state::{BottomTab, CenterTab, Fill, RailKind, RightTab};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, Pick, Route, chat, icons, widgets};
 use craft_anything_engine::Consent;
-use egui::{Margin, RichText, Ui, Vec2};
+use egui::{RichText, Ui, Vec2};
 use serde_json::{Value, json};
 
 /// Keys that usually hold a row's address.
@@ -98,17 +98,17 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     egui::Panel::left("wb-rail-icons")
         .exact_size(48.0)
         .resizable(false)
-        .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(6, 10)))
+        .frame(widgets::pane(t.chrome, theme::pad_xy(space::S, space::M)))
         .show(ui, |ui| rail_icons(app, ui));
     egui::Panel::left("wb-rail")
         .default_size(290.0)
         .size_range(200.0..=520.0)
-        .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin { left: 4, right: 8, top: 10, bottom: 8 }))
+        .frame(widgets::pane(t.chrome, theme::pad_sides(space::XS, space::SM, space::M, space::SM)))
         .show(ui, |ui| crate::guard_ui(ui, "rail", |ui| rail(app, ui)));
     egui::Panel::right("wb-right")
         .default_size(330.0)
         .size_range(240.0..=560.0)
-        .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin { left: 8, right: 10, top: 10, bottom: 8 }))
+        .frame(widgets::pane(t.chrome, theme::pad_sides(space::SM, space::M, space::M, space::SM)))
         .show(ui, |ui| crate::guard_ui(ui, "inspector", |ui| right(app, ui)));
     let mut open = app.state.bottom_open;
     // A new id: nobody could resize the old one, so its saved sizes were never anyone's choice.
@@ -116,25 +116,20 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         .resizable(true)
         .default_size(280.0)
         .size_range(120.0..=600.0)
-        .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin { left: 8, right: 10, top: 4, bottom: 8 }))
+        .frame(widgets::pane(t.chrome, theme::pad_sides(space::SM, space::M, space::XS, space::SM)))
         .show_collapsible(ui, &mut open, |ui| crate::guard_ui(ui, "bottom", |ui| bottom(app, ui)));
     app.state.bottom_open = open;
     if !app.state.bottom_open {
-        egui::Panel::bottom("wb-bottom-closed").exact_size(30.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 4))).show(
-            ui,
-            |ui| {
-                ui.horizontal(|ui| {
-                    if icons::button(ui, "chevron-up", 22.0, false, "Show the console").clicked() {
-                        app.state.bottom_open = true;
-                    }
-                    status_line(app, ui);
-                });
-            },
-        );
+        egui::Panel::bottom("wb-bottom-closed").exact_size(30.0).frame(widgets::pane(t.chrome, theme::pad_xy(space::M, space::XS))).show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if icons::button(ui, "chevron-up", 22.0, false, "Show the console").clicked() {
+                    app.state.bottom_open = true;
+                }
+                status_line(app, ui);
+            });
+        });
     }
-    egui::CentralPanel::default()
-        .frame(egui::Frame::new().fill(t.canvas).inner_margin(Margin::same(0)))
-        .show(ui, |ui| crate::guard_ui(ui, "centre", |ui| center(app, ui)));
+    egui::CentralPanel::default().frame(widgets::pane(t.canvas, egui::Margin::ZERO)).show(ui, |ui| crate::guard_ui(ui, "centre", |ui| center(app, ui)));
 }
 
 fn rail_icons(app: &mut CraftApp, ui: &mut Ui) {
@@ -146,7 +141,7 @@ fn rail_icons(app: &mut CraftApp, ui: &mut Ui) {
                 app.state.rail_filter.clear();
                 app.ensure_rail_loaded();
             }
-            ui.add_space(2.0);
+            ui.add_space(space::XXS);
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
             if icons::button(ui, "search", 34.0, app.state.palette.open, "Command palette (Ctrl/⌘ K)").clicked() {
@@ -203,7 +198,7 @@ fn rail_list(app: &mut CraftApp, ui: &mut Ui, kind: RailKind, fill: &Fill) {
             }
         });
     });
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     widgets::named(
         ui.add(
             egui::TextEdit::singleline(&mut app.state.rail_filter)
@@ -213,7 +208,7 @@ fn rail_list(app: &mut CraftApp, ui: &mut Ui, kind: RailKind, fill: &Fill) {
         ),
         "Filter",
     );
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     if app.view.active.is_none() {
         widgets::empty_state(ui, "folder-open", "Nothing open", "Open a file or drop one here.");
         ui.vertical_centered(|ui| {
@@ -317,7 +312,7 @@ fn targets_list(app: &mut CraftApp, ui: &mut Ui) {
             }
         });
     });
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     if app.view.targets.is_empty() {
         widgets::empty_state(ui, "layers", "No targets", "Open files, folders or apps; you can have several open at once.");
         return;
@@ -359,7 +354,7 @@ fn tab_strip(ui: &mut Ui, tabs: &[(&str, &str)], selected: usize) -> Option<usiz
     let t = Tokens::get(ui.ctx());
     let mut picked = None;
     ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.spacing_mut().item_spacing.x = space::XXS;
         for (i, (icon, title)) in tabs.iter().enumerate() {
             let on = i == selected;
             let g = widgets::label_galley(ui, &tr(title), 11.0, t.text);
@@ -385,7 +380,7 @@ fn tab_strip(ui: &mut Ui, tabs: &[(&str, &str)], selected: usize) -> Option<usiz
             }
             ui.painter().galley_with_override_text_color(egui::pos2(x, rect.center().y - g.size().y / 2.0), g, col);
             if on {
-                ui.painter().hline(rect.x_range().shrink(6.0), rect.bottom() - 1.0, egui::Stroke::new(2.0, t.accent));
+                ui.painter().hline(rect.x_range().shrink(6.0), rect.bottom() - 1.0, theme::line(theme::FOCUS, t.accent));
             }
             if resp.clicked() && !on {
                 picked = Some(i);
@@ -397,7 +392,7 @@ fn tab_strip(ui: &mut Ui, tabs: &[(&str, &str)], selected: usize) -> Option<usiz
 
 fn center(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 0)).show(ui, |ui| {
+    widgets::pane(t.chrome, theme::pad_xy(space::SM, 0.0)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         let tabs: Vec<(&str, &str)> = CenterTab::ALL.iter().map(|c| (c.icon(), c.title())).collect();
         let sel = CenterTab::ALL.iter().position(|c| *c == app.state.center).unwrap_or(0);
@@ -410,8 +405,8 @@ fn center(app: &mut CraftApp, ui: &mut Ui) {
             }
         }
     });
-    ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top(), egui::Stroke::new(1.0, t.separator));
-    egui::Frame::new().inner_margin(Margin::same(14)).show(ui, |ui| {
+    ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top(), theme::hairline(t.separator));
+    widgets::inset(theme::pad(space::L)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         if app.view.active.is_none() && app.state.center != CenterTab::Result {
             no_target(app, ui);
@@ -444,7 +439,7 @@ fn no_target(app: &mut CraftApp, ui: &mut Ui) {
                 app.pick(Pick::OpenFolder);
             }
         });
-        ui.add_space(10.0);
+        ui.add_space(space::M);
         let t = Tokens::get(ui.ctx());
         ui.label(RichText::new(tr("Tip: press Ctrl/⌘ K to run any tool.")).color(t.text_faint));
     });
@@ -482,7 +477,7 @@ fn tool_view(app: &mut CraftApp, ui: &mut Ui, tab: CenterTab) {
                 widgets::confidence_badge(ui, Some(e.confidence));
                 ui.label(RichText::new(&e.summary).color(Tokens::get(ui.ctx()).text_dim));
             });
-            ui.add_space(6.0);
+            ui.add_space(space::S);
             render_result(ui, &e.result, tab);
         }
         Fill::Value(v) => render_result(ui, &v, tab),
@@ -518,12 +513,12 @@ fn render_result(ui: &mut Ui, v: &Value, tab: CenterTab) {
 fn code_view(ui: &mut Ui, code: &str, t: &Tokens) {
     let lines: Vec<&str> = code.lines().collect();
     let row_h = 18.0;
-    egui::Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(Margin::same(8)).show(ui, |ui| {
+    widgets::code_block(t).show(ui, |ui| {
         egui::ScrollArea::both().auto_shrink([false, false]).show_rows(ui, row_h, lines.len(), |ui, range| {
             for i in range {
                 let Some(line) = lines.get(i) else { continue };
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 12.0;
+                    ui.spacing_mut().item_spacing.x = space::M;
                     ui.add_sized(Vec2::new(38.0, row_h), egui::Label::new(RichText::new(format!("{:>4}", i + 1)).font(theme::mono(12.0)).color(t.text_faint)));
                     ui.label(highlight(line, t));
                 });
@@ -649,10 +644,10 @@ fn hex_view(app: &mut CraftApp, ui: &mut Ui) {
         });
     });
     ui.data_mut(|d| d.insert_temp(goto_id, goto));
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     let rows = bytes.len().div_ceil(16);
     let row_h = 18.0;
-    egui::Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(Margin::same(8)).show(ui, |ui| {
+    widgets::code_block(&t).show(ui, |ui| {
         let mut area = egui::ScrollArea::both().auto_shrink([false, false]);
         if let Some(r) = scroll_to {
             area = area.vertical_scroll_offset(r as f32 * (row_h + ui.spacing().item_spacing.y));
@@ -717,7 +712,7 @@ fn result_view(app: &mut CraftApp, ui: &mut Ui) {
 fn evidence_view(ui: &mut Ui, e: &craft_anything_engine::evidence::Evidence, t: &Tokens) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         evidence_ui::proof_card(ui, e, true, false);
-        ui.add_space(10.0);
+        ui.add_space(space::M);
         if let Some(code) = code_text(&e.result) {
             code_view(ui, code, t);
         } else {
@@ -736,7 +731,7 @@ fn right(app: &mut CraftApp, ui: &mut Ui) {
     if let Some(i) = tab_strip(ui, &tabs, sel) {
         app.state.right = [RightTab::Inspector, RightTab::Evidence, RightTab::Unknowns].get(i).copied().unwrap_or_default();
     }
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     match app.state.right {
         RightTab::Inspector => inspector(app, ui),
         RightTab::Evidence => ledger(app, ui),
@@ -758,15 +753,15 @@ fn inspector(app: &mut CraftApp, ui: &mut Ui) {
                 ui.set_width(ui.available_width());
                 widgets::caption(ui, "Selection");
                 ui.label(RichText::new(row_name(&sel).unwrap_or_else(|| "—".into())).font(theme::semibold(theme::BODY)));
-                ui.add_space(4.0);
-                egui::Grid::new("sel-grid").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui.add_space(space::XS);
+                egui::Grid::new("sel-grid").num_columns(2).spacing([space::M, space::XS]).show(ui, |ui| {
                     if let Value::Object(m) = &sel {
                         for (k, v) in m.iter().take(30) {
                             kv(ui, k, &scalar(v).unwrap_or_else(|| truncate(&v.to_string(), 200)), &t);
                         }
                     }
                 });
-                ui.add_space(6.0);
+                ui.add_space(space::S);
                 if widgets::secondary(ui, Some("message-square"), "Ask the agent about this").clicked() {
                     let what = row_name(&sel).or_else(|| row_address(&sel)).unwrap_or_default();
                     app.state.input = crate::i18n::trf("What does {what} do?", &[("what", &what)]);
@@ -774,7 +769,7 @@ fn inspector(app: &mut CraftApp, ui: &mut Ui) {
                     app.state.bottom_open = true;
                 }
             });
-            ui.add_space(8.0);
+            ui.add_space(space::SM);
         }
         match app.view.active_target().cloned() {
             Some(tgt) => {
@@ -786,8 +781,8 @@ fn inspector(app: &mut CraftApp, ui: &mut Ui) {
                         ui.label(RichText::new(&tgt.name).font(theme::semibold(theme::SMALL)));
                     });
                     ui.label(RichText::new(tr(tgt.kind.plain())).color(t.text_dim));
-                    ui.add_space(4.0);
-                    egui::Grid::new("tgt-grid").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                    ui.add_space(space::XS);
+                    egui::Grid::new("tgt-grid").num_columns(2).spacing([space::M, space::XS]).show(ui, |ui| {
                         kv(ui, "Kind", &tgt.kind.id(), &t);
                         kv(ui, "Size", &crate::human_bytes(tgt.bytes.len()), &t);
                         kv(ui, "SHA-256", tgt.sha256.get(..16).unwrap_or(&tgt.sha256), &t);
@@ -806,7 +801,7 @@ fn ledger(app: &mut CraftApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
         panel_title(ui, "Evidence ledger", Some(app.view.ledger_len));
     });
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     if app.view.ledger.is_empty() && app.view.findings.is_empty() {
         widgets::empty_state(ui, "shield-check", "No evidence yet", "Every finding is saved here with how sure we are.");
         return;
@@ -816,7 +811,7 @@ fn ledger(app: &mut CraftApp, ui: &mut Ui) {
         if !app.view.findings.is_empty() {
             panel_title(ui, "findings", Some(app.view.findings.len()));
             for finding in &app.view.findings {
-                ui.add_space(6.0);
+                ui.add_space(space::S);
                 ui.label(RichText::new(&finding.id).font(theme::mono(12.0)).color(t.accent));
                 ui.add(egui::Label::new(&finding.statement).wrap());
                 ui.label(RichText::new(finding.confidence.plain_label()).color(t.text_dim).size(theme::CAPTION));
@@ -833,7 +828,7 @@ fn ledger(app: &mut CraftApp, ui: &mut Ui) {
             if evidence_ui::ledger_row(ui, e, selected) {
                 pick = Some(e.id.clone());
             }
-            ui.add_space(3.0);
+            ui.add_space(space::XXS);
         }
         if app.view.ledger_len > app.view.ledger.len() {
             ui.label(RichText::new(crate::i18n::trf("… {n} older", &[("n", &(app.view.ledger_len - app.view.ledger.len()).to_string())])).color(t.text_faint));
@@ -849,7 +844,7 @@ fn ledger(app: &mut CraftApp, ui: &mut Ui) {
 fn unknowns(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     panel_title(ui, "Open questions", Some(app.view.unknowns.len()));
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     if app.view.unknowns.is_empty() {
         widgets::empty_state(ui, "circle-help", "No open questions", "Things we couldn't establish yet are listed here, with what would settle them.");
         return;
@@ -874,7 +869,7 @@ fn unknowns(app: &mut CraftApp, ui: &mut Ui) {
                     ui.label(RichText::new(r).color(t.success).size(theme::CAPTION));
                 }
             });
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
         }
     });
 }
@@ -910,8 +905,8 @@ fn bottom(app: &mut CraftApp, ui: &mut Ui) {
             status_line(app, ui);
         });
     });
-    ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top(), egui::Stroke::new(1.0, t.separator));
-    ui.add_space(6.0);
+    ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top(), theme::hairline(t.separator));
+    ui.add_space(space::S);
     match app.state.bottom {
         BottomTab::Agent => chat::conversation(app, ui, true),
         BottomTab::Jobs => jobs(app, ui),
@@ -960,7 +955,7 @@ fn jobs(app: &mut CraftApp, ui: &mut Ui) {
                 }
             });
         }
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         if widgets::link(ui, "Clear finished").clicked() {
             clear = true;
         }

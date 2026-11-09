@@ -6,7 +6,7 @@
 use crate::i18n::{tr, trf};
 use crate::make::{self, resolve_target};
 use crate::state::{FeedItem, MakeDraft, Modal, PlanStatus, PlanStep, Screen, UserItem};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, Done, chat, icons, prompt_box, widgets};
 use craft_anything_ai::AgentEvent;
 use craft_anything_ai::rebuild::activity::{Action, ActivityNow, LineKind};
@@ -14,7 +14,7 @@ use craft_anything_ai::rebuild::feed::{self, apply};
 use craft_anything_ai::rebuild::{self, AppKind, KindRegistry, KindWords, Note, RebuildRun, RunEvent, RunOptions, Started, Step, Stopped, TargetKind};
 use craft_anything_engine::inbox::{Answer, Inbox, Request, RequestKind};
 use craft_anything_engine::workspace::{CheckResult, Status, TargetRef, Workspace, suggest_name};
-use egui::{Color32, Margin, RichText, Ui, Vec2};
+use egui::{Color32, RichText, Ui, Vec2};
 use std::path::{Path, PathBuf};
 
 // ---- controller -------------------------------------------------------------------------------
@@ -663,7 +663,7 @@ fn plan_divider(ui: &mut Ui, t: &Tokens, height: &mut Option<f32>, shown: f32) {
 fn checklist(ui: &mut Ui, steps: &[PlanStep], t: &Tokens, began: Option<std::time::Instant>, fold: bool, height: f32, shown_id: egui::Id) -> bool {
     let done = steps.iter().filter(|s| s.status == PlanStatus::Done).count();
     let mut folded = false;
-    widgets::card(t).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
+    widgets::card(t).inner_margin(theme::pad_xy(space::L, space::M)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             widgets::caption(ui, "Plan");
@@ -683,7 +683,7 @@ fn checklist(ui: &mut Ui, steps: &[PlanStep], t: &Tokens, began: Option<std::tim
                 );
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         let list =
             egui::ScrollArea::vertical().id_salt("plan-steps").max_height(height).min_scrolled_height(height).auto_shrink([false, true]).show(ui, |ui| {
                 for s in steps {
@@ -695,15 +695,15 @@ fn checklist(ui: &mut Ui, steps: &[PlanStep], t: &Tokens, began: Option<std::tim
                                 icons::paint(ui, r.shrink(4.0), "check", 10.0, t.canvas);
                             }
                             PlanStatus::Doing => {
-                                ui.painter().circle_stroke(r.center(), 6.5, egui::Stroke::new(1.5, t.accent));
+                                ui.painter().circle_stroke(r.center(), 6.5, theme::line(theme::EMPHASIS, t.accent));
                                 ui.painter().circle_filled(r.center(), 3.0, t.accent);
                             }
                             PlanStatus::Todo => {
-                                ui.painter().circle_stroke(r.center(), 6.5, egui::Stroke::new(1.0, t.field_border));
+                                ui.painter().circle_stroke(r.center(), 6.5, theme::hairline(t.field_border));
                             }
                             // #504: a run ended with this step open.
                             PlanStatus::Stopped => {
-                                ui.painter().circle_stroke(r.center(), 6.5, egui::Stroke::new(1.5, t.warning));
+                                ui.painter().circle_stroke(r.center(), 6.5, theme::line(theme::EMPHASIS, t.warning));
                                 ui.painter().circle_filled(r.center(), 3.0, t.warning);
                             }
                         }
@@ -835,14 +835,14 @@ fn asset_line(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
         return;
     }
     widgets::caption(ui, "Generated assets");
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     crate::engine_ui::assets_toggle(app, ui, ws.manifest.generate_assets);
     let (n, spent) = app.facts.assets;
     if !ws.manifest.generate_assets && n == 0 {
-        ui.add_space(12.0);
+        ui.add_space(space::M);
         return;
     }
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     let budget = ws.manifest.asset_budget_usd;
     let amount = trf("{n} · ${spent} of ${budget}", &[("n", &n.to_string()), ("spent", &format!("{spent:.2}")), ("budget", &format!("{budget:.2}"))]);
     ui.label(RichText::new(amount).font(theme::mono(12.5)).color(if spent >= budget { t.warning } else { t.text_dim }));
@@ -850,7 +850,7 @@ fn asset_line(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     if widgets::link(ui, &trf("Raise the budget by {amount}", &[("amount", &step)])).clicked() {
         app.raise_asset_budget();
     }
-    ui.add_space(12.0);
+    ui.add_space(space::M);
 }
 
 /// Which step is current, from the feed and the project's status, and whether it's being worked
@@ -884,10 +884,10 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         egui::Panel::right("project-side")
             .exact_size(SIDE_W)
             .resizable(false)
-            .frame(egui::Frame::new().fill(t.canvas).inner_margin(Margin::same(20)))
+            .frame(widgets::pane(t.canvas, theme::pad_xy(space::L, space::XL)))
             .show(ui, |ui| egui::ScrollArea::vertical().show(ui, |ui| side(app, ui, &ws)));
     }
-    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.canvas).inner_margin(chat::PANE_MARGIN)).show(ui, |ui| {
+    egui::CentralPanel::default().frame(widgets::pane(t.canvas, chat::pane_margin())).show(ui, |ui| {
         let width = ui.available_width();
         let max_w = width.min(720.0);
         let pad = ((width - max_w) / 2.0).max(0.0);
@@ -926,7 +926,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
 
 fn side(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     let t = Tokens::get(ui.ctx());
-    ui.add_space(10.0);
+    ui.add_space(space::M);
     let m = &ws.manifest;
     widgets::card(&t).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -940,25 +940,25 @@ fn side(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
                 widgets::pill(ui, label, fg, bg);
             });
         });
-        ui.add_space(10.0);
+        ui.add_space(space::M);
         if !matches!(m.target, TargetRef::None) {
             widgets::caption(ui, "From");
             ui.add(egui::Label::new(RichText::new(m.target.label()).color(t.text_dim)).truncate());
-            ui.add_space(6.0);
+            ui.add_space(space::S);
         }
         if !m.stack.is_empty() && !app.beginner() {
             widgets::caption(ui, "Built with");
             ui.label(RichText::new(&m.stack).color(t.text_dim));
         }
     });
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     steps(app, ui, ws);
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     open_questions(app, ui);
     asset_line(app, ui, ws);
     if outcome(app).is_some() {
         outcome_button(app, ui, ws, 32.0, 12.5);
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     // Pictures of the original: the look the builder matches (websites are photographed for it).
     if !matches!(m.target, TargetRef::Website { .. }) {
@@ -971,7 +971,7 @@ fn side(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
         }
         let note = if n == 0 { tr("None yet. Screenshots help it look right.") } else { trf("{n} picture(s) to match.", &[("n", &n.to_string())]) };
         ui.label(RichText::new(note).color(Tokens::get(ui.ctx()).text_dim).size(theme::SMALL));
-        ui.add_space(8.0);
+        ui.add_space(space::SM);
     }
     ui.horizontal_wrapped(|ui| {
         if widgets::secondary(ui, Some("folder-open"), "Open folder").clicked() {
@@ -1036,10 +1036,10 @@ fn open_questions(app: &CraftApp, ui: &mut Ui) {
         return;
     }
     let t = Tokens::get(ui.ctx());
-    widgets::card(&t).inner_margin(Margin::symmetric(16, 14)).show(ui, |ui| {
+    widgets::card(&t).inner_margin(theme::pad_xy(space::L, space::L)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         widgets::caption(ui, "Open questions");
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         const SHOWN: usize = 5;
         for q in app.facts.open_questions.iter().take(SHOWN) {
             ui.horizontal_wrapped(|ui| {
@@ -1051,10 +1051,10 @@ fn open_questions(app: &CraftApp, ui: &mut Ui) {
             let more = trf("and {n} more", &[("n", &(app.facts.open_questions.len() - SHOWN).to_string())]);
             ui.label(RichText::new(more).size(theme::SMALL).color(t.text_dim));
         }
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         ui.label(RichText::new(tr("Answer any of them in a message below.")).size(theme::SMALL).color(t.text_dim));
     });
-    ui.add_space(14.0);
+    ui.add_space(space::L);
 }
 
 fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
@@ -1062,10 +1062,10 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
     let current = current_step(app, ws);
     let live = current.is_some_and(|(_, live)| live);
     let idx = current.and_then(|(c, _)| Step::ALL.iter().position(|s| *s == c));
-    widgets::card(&t).inner_margin(Margin::symmetric(16, 14)).show(ui, |ui| {
+    widgets::card(&t).inner_margin(theme::pad_xy(space::L, space::L)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         widgets::caption(ui, "Progress");
-        ui.add_space(8.0);
+        ui.add_space(space::SM);
         let row_h = 38.0;
         for (i, s) in Step::ALL.iter().enumerate() {
             // `here`: where a paused or interrupted build stopped.
@@ -1080,7 +1080,7 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
             if i + 1 < Step::ALL.len() {
                 let x = marker.center().x;
                 let col = if done { t.text_dim } else { t.separator };
-                ui.painter().vline(x, marker.bottom()..=row.bottom() + 12.0, egui::Stroke::new(1.0, col));
+                ui.painter().vline(x, marker.bottom()..=row.bottom() + 12.0, theme::hairline(col));
             }
             let number = format!("{:02}", i + 1);
             let round = marker.width() / 2.0;
@@ -1095,16 +1095,16 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
                 ui.painter().rect_stroke(
                     marker.expand(2.0 + pulse * 3.0),
                     round + 2.0 + pulse * 3.0,
-                    egui::Stroke::new(1.0, t.accent.gamma_multiply(0.6 - pulse * 0.4)),
+                    theme::hairline(t.accent.gamma_multiply(0.6 - pulse * 0.4)),
                     egui::StrokeKind::Outside,
                 );
                 widgets::animate(ui, widgets::FRAME);
             } else if here {
-                ui.painter().rect(marker, round, t.card, egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
+                ui.painter().rect(marker, round, t.card, theme::line(theme::EMPHASIS, t.accent), egui::StrokeKind::Inside);
                 let g = widgets::label_galley(ui, &number, 11.0, t.accent_ink);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.accent_ink);
             } else {
-                ui.painter().rect(marker, round, t.card, egui::Stroke::new(1.0, t.field_border), egui::StrokeKind::Inside);
+                ui.painter().rect(marker, round, t.card, theme::hairline(t.field_border), egui::StrokeKind::Inside);
                 let g = widgets::label_galley(ui, &number, 11.0, t.text_faint);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.text_faint);
             }
@@ -1139,7 +1139,7 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
         }
         // How long it has worked and what the AI has used, live while it builds.
         if let Some(u) = app.usage.get(&ws.root).filter(|u| u.working() || !u.elapsed().is_zero()) {
-            ui.add_space(14.0);
+            ui.add_space(space::L);
             let tip = || crate::usage::explain(&u.saved, "Every build of this project.");
             stat_row(ui, "Time spent", &crate::usage::duration_words(u.elapsed()));
             if u.saved.priced {
@@ -1158,7 +1158,7 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
             }
         }
         if let Some(sim) = ws.manifest.checks.last().and_then(|c| c.similarity) {
-            ui.add_space(14.0);
+            ui.add_space(space::L);
             stat_row(ui, "Likeness", &format!("{sim:.0}%"));
             let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 4.0), egui::Sense::hover());
             ui.painter().rect_filled(bar, 2.0, t.separator);
@@ -1210,7 +1210,7 @@ fn feed(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     // The finish line: a big, plain prompt to try what was made.
     if !app.running() && matches!(ws.manifest.status, Status::Ready) && outcome(app).is_some() {
         let w = outcome_words(&app.kinds, ws);
-        widgets::card(&t).inner_margin(Margin::same(18)).show(ui, |ui| {
+        widgets::card(&t).inner_margin(theme::pad(space::L)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
                 let (rect, _) = ui.allocate_exact_size(Vec2::splat(44.0), egui::Sense::hover());
@@ -1223,7 +1223,7 @@ fn feed(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| outcome_button(app, ui, ws, 44.0, 13.0));
             });
         });
-        ui.add_space(10.0);
+        ui.add_space(space::M);
     }
     let items = &app.state.feed;
     // With a plan pinned below, it shows the work and the clock; one progress display, not two.
@@ -1317,7 +1317,7 @@ fn run_details(app: &mut CraftApp, ui: &mut Ui, status_row: bool) {
     egui::CollapsingHeader::new(RichText::new(title).color(t.text_dim).size(theme::CAPTION)).id_salt("run_details").icon(widgets::disclosure_icon).show(
         ui,
         |ui| {
-            widgets::card(&t).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
+            widgets::card(&t).inner_margin(theme::pad_xy(space::M, space::SM)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 // The rows are exactly this tall, or the scroll area miscounts them.
                 ui.spacing_mut().item_spacing.y = 0.0;
@@ -1406,43 +1406,38 @@ fn draw_items(
             }
             FeedItem::Check(c) => check_card(app, ui, ctx, ws, c),
             FeedItem::Error { message, remediation, log } => {
-                egui::Frame::new()
-                    .fill(t.card)
-                    .stroke(egui::Stroke::new(1.0, t.danger.gamma_multiply(0.6)))
-                    .corner_radius(t.r_lg())
-                    .inner_margin(Margin::same(14))
-                    .show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.horizontal(|ui| {
-                            icons::show(ui, "triangle-alert", 16.0, t.danger);
-                            ui.add(egui::Label::new(RichText::new(message).color(t.text)).wrap());
-                        });
-                        if let Some(r) = remediation {
-                            ui.add(egui::Label::new(RichText::new(r).color(t.text_dim)).wrap());
-                        }
-                        if let Some(l) = log
-                            && widgets::open_log_button(ui, l)
-                        {
-                            app.open_log(l);
-                        }
-                        let last = i + 1 == items.len();
-                        // A pause or a stop part-way gets the Continue card below instead.
-                        if last && !app.running() && !can_continue(app, ws) {
-                            ui.add_space(6.0);
-                            ui.horizontal(|ui| {
-                                if widgets::primary_icon(ui, Some("refresh-cw"), "Try again", true).clicked() {
-                                    *retry = true;
-                                }
-                                done_button(app, ui, ws);
-                                // A fix that names a command to run (sign in, install…) offers to copy it.
-                                if let Some(cmd) = remediation.as_deref().and_then(command_in)
-                                    && widgets::secondary(ui, Some("copy"), "Copy the command").on_hover_text(cmd).clicked()
-                                {
-                                    ui.ctx().copy_text(cmd.to_string());
-                                }
-                            });
-                        }
+                widgets::card(&t).stroke(theme::hairline(t.danger.gamma_multiply(0.6))).inner_margin(theme::pad(space::L)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        icons::show(ui, "triangle-alert", 16.0, t.danger);
+                        ui.add(egui::Label::new(RichText::new(message).color(t.text)).wrap());
                     });
+                    if let Some(r) = remediation {
+                        ui.add(egui::Label::new(RichText::new(r).color(t.text_dim)).wrap());
+                    }
+                    if let Some(l) = log
+                        && widgets::open_log_button(ui, l)
+                    {
+                        app.open_log(l);
+                    }
+                    let last = i + 1 == items.len();
+                    // A pause or a stop part-way gets the Continue card below instead.
+                    if last && !app.running() && !can_continue(app, ws) {
+                        ui.add_space(space::S);
+                        ui.horizontal(|ui| {
+                            if widgets::primary_icon(ui, Some("refresh-cw"), "Try again", true).clicked() {
+                                *retry = true;
+                            }
+                            done_button(app, ui, ws);
+                            // A fix that names a command to run (sign in, install…) offers to copy it.
+                            if let Some(cmd) = remediation.as_deref().and_then(command_in)
+                                && widgets::secondary(ui, Some("copy"), "Copy the command").on_hover_text(cmd).clicked()
+                            {
+                                ui.ctx().copy_text(cmd.to_string());
+                            }
+                        });
+                    }
+                });
             }
         });
         ui.add_space(chat::MESSAGE_GAP);
@@ -1524,14 +1519,14 @@ fn continue_card(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
         ("Paused", "Everything so far is kept. Continue picks up where it stopped.")
     };
     let mut go = false;
-    egui::Frame::new().fill(t.card).stroke(egui::Stroke::new(1.5, t.accent)).corner_radius(t.r_lg()).inner_margin(Margin::same(14)).show(ui, |ui| {
+    widgets::callout(&t, t.accent).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             icons::show(ui, "history", 18.0, t.accent);
             ui.add(egui::Label::new(RichText::new(tr(title)).font(theme::semibold(theme::BODY))).wrap());
         });
         ui.add(egui::Label::new(RichText::new(tr(body)).color(t.text_dim)).wrap());
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         ui.horizontal(|ui| {
             go = widgets::primary_icon(ui, Some("play"), "Continue", true).clicked();
             done_button(app, ui, ws);
@@ -1556,7 +1551,7 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
     let approval = r.kind == RequestKind::Approval;
     let border = if approval { t.warning } else { t.accent };
     let mut out = None;
-    egui::Frame::new().fill(t.card).stroke(egui::Stroke::new(1.5, border)).corner_radius(t.r_lg()).inner_margin(Margin::same(14)).show(ui, |ui| {
+    widgets::callout(&t, border).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
             icons::show(ui, if approval { "shield" } else { "circle-help" }, 18.0, border);
@@ -1575,7 +1570,7 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
                 ui.add(egui::Label::new(RichText::new(&r.detail).color(t.text_dim)).wrap());
             }
         }
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         if let Some(a) = answered {
             ui.label(RichText::new(trf("You answered: {a}", &[("a", a)])).color(t.text_faint));
             return;
@@ -1586,7 +1581,7 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
                     .color(t.text_faint)
                     .size(theme::CAPTION),
             );
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
             ui.horizontal(|ui| {
                 if widgets::primary(ui, "Allow once").clicked() {
                     out = Some((r.id.clone(), Answer { allow: Some(true), ..Default::default() }, tr("Allowed once")));
@@ -1608,7 +1603,7 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
             }
         });
         if r.allow_text {
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
             ui.horizontal(|ui| {
                 let text = app.state.answers.entry(r.id.clone()).or_default();
                 let resp = ui.add(
@@ -1650,7 +1645,7 @@ fn claims_list(ui: &mut Ui, c: &CheckResult, t: &Tokens) {
     if c.claims.is_empty() && c.unknowns.is_empty() {
         return;
     }
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     if !c.claims.is_empty() {
         let held = c.claims.iter().filter(|x| x.passed).count();
         let line = trf("{held} of {n} requirements met", &[("held", &held.to_string()), ("n", &c.claims.len().to_string())]);
@@ -1700,7 +1695,7 @@ fn check_card(app: &mut CraftApp, ui: &mut Ui, ctx: &egui::Context, ws: &Workspa
         let mut picked: usize = ui.data(|d| d.get_temp(picked_id)).unwrap_or(0);
         if c.pages.len() > 1 {
             picked = picked.min(c.pages.len() - 1);
-            ui.add_space(6.0);
+            ui.add_space(space::S);
             for (i, p) in c.pages.iter().enumerate() {
                 let text = format!("{}  {:.0}%", if p.dir.is_empty() { tr("start page") } else { p.name.clone() }, p.similarity);
                 let colour = if p.similarity >= app.settings.build.good_enough { t.text_dim } else { t.warning };
@@ -1716,7 +1711,7 @@ fn check_card(app: &mut CraftApp, ui: &mut Ui, ctx: &egui::Context, ws: &Workspa
         // Both pictures, read on a worker; nothing when either isn't there.
         let shots = c.similarity.map(|_| [("Original", app.thumb(ctx, &orig)), ("Your version", app.thumb(ctx, &built))]);
         if let Some(shots) = shots.filter(|s| !s.iter().any(|(_, t)| matches!(t, Thumb::Missing))) {
-            ui.add_space(8.0);
+            ui.add_space(space::SM);
             let w = (ui.available_width() - 12.0) / 2.0;
             ui.horizontal(|ui| {
                 for (label, thumb) in shots {
@@ -1757,7 +1752,7 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens) {
         if fold {
             app.fold_plan();
         }
-        ui.add_space(8.0);
+        ui.add_space(space::SM);
     }
     if let Some(n) = app.queue_position() {
         ui.horizontal(|ui| {
@@ -1769,7 +1764,7 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens) {
             };
             ui.label(RichText::new(line).color(t.text_dim).size(theme::SMALL));
         });
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
     }
     // Notes waiting for the builder's next step: each can be taken back, or all sent now.
     let waiting = app.open_run().filter(|r| r.is_running()).map(RebuildRun::waiting).unwrap_or_default();
@@ -1795,7 +1790,7 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens) {
                     ui.label(RichText::new(line).color(t.text_dim).size(theme::SMALL));
                 }
             });
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
         }
     });
     if let Some(id) = take_back {
@@ -1903,7 +1898,7 @@ fn questions_switch(app: &mut CraftApp, ui: &mut Ui) {
     let now = app.settings.questions_in(Some(&ws.manifest));
     let root = ws.root.clone();
     let t = Tokens::get(ui.ctx());
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     let (sending, asking) = (["Change it", "Just ask"], ["Ask me", "Decide yourself"]);
     let title = widgets::label_galley(ui, &tr(QUESTIONS_TITLE), theme::SMALL, t.text_dim).size().x;
     // The approvals menu's link, the space before it and one more item gap.
@@ -1931,7 +1926,7 @@ fn questions_switch(app: &mut CraftApp, ui: &mut Ui) {
         }
     });
     if !fits {
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         ui.horizontal(|ui| ui.with_layout(right, |ui| questions_controls(app, ui, now, &root, &t)));
     }
 }
@@ -1942,7 +1937,7 @@ fn questions_controls(app: &mut CraftApp, ui: &mut Ui, now: craft_anything_engin
     use craft_anything_engine::workspace::Questions;
     // Right to left: the approvals menu at the end of the row.
     crate::approvals::menu(app, ui, root);
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     {
         let sel = usize::from(now == Questions::Decide);
         if let Some(i) = widgets::segmented(ui, &["Ask me", "Decide yourself"], sel, 24.0) {

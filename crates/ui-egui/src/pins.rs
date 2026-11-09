@@ -5,7 +5,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_engine::evidence::ToolError;
 use craft_anything_engine::pins::{Pin, PinMode};
@@ -151,7 +151,7 @@ pub fn section(app: &mut CraftApp, ui: &mut Ui, fold: bool) {
         crate::sidebar::centred_row(ui, 18.0, arrow)
     } else {
         ui.horizontal(|ui| {
-            ui.add_space(12.0);
+            ui.add_space(space::M);
             widgets::caption(ui, "Pinned");
             arrow(ui)
         })
@@ -162,7 +162,7 @@ pub fn section(app: &mut CraftApp, ui: &mut Ui, fold: bool) {
     if r.clicked() {
         app.state.pins_collapsed = !collapsed;
     }
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     if collapsed {
         crate::sidebar::section_gap(ui, fold, 14.0);
         return;
@@ -238,9 +238,9 @@ pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(560.0);
     ui.label(theme::heading(tr("Pin this build"), theme::SECTION));
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     ui.add(egui::Label::new(RichText::new(tr("Keep it in the sidebar to open any time, whatever later builds change.")).color(t.text_dim)).wrap());
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     let size = Vec2::new(268.0, 150.0);
     let mode = app.state.pin_draft.mode;
     ui.horizontal(|ui| {
@@ -267,7 +267,7 @@ pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
             app.state.pin_draft.mode = PinMode::Light;
         }
     });
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     let (note, color) = match &app.state.pin_draft.size {
         None => (tr("Working out how much space a copy takes…"), t.text_faint),
         Some(Err(e)) => (e.clone(), t.danger),
@@ -282,7 +282,7 @@ pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
         }
     };
     ui.add(egui::Label::new(RichText::new(note).color(color).size(theme::SMALL)).wrap());
-    ui.add_space(10.0);
+    ui.add_space(space::M);
     widgets::caption(ui, "Name (optional)");
     let r = ui.add(
         egui::TextEdit::singleline(&mut app.state.pin_draft.name)
@@ -291,7 +291,7 @@ pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
             .frame(widgets::text_field_frame(&t)),
     );
     widgets::named(r, "Pin name");
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     // A build with nothing to start can't be pinned; the estimate says so first.
     let ok = matches!(app.state.pin_draft.size, Some(Ok(_)));
     ui.horizontal(|ui| {
@@ -310,7 +310,7 @@ pub fn pin_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
 pub fn rename_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("Rename the pin"), theme::SECTION));
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     let r = ui.add(egui::TextEdit::singleline(&mut app.state.rename_input).desired_width(f32::INFINITY).frame(widgets::text_field_frame(&t)));
     widgets::named(r.clone(), "Pin name");
     if !r.has_focus() && !r.lost_focus() {
@@ -318,7 +318,7 @@ pub fn rename_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, cl
     }
     let ok = !app.state.rename_input.trim().is_empty();
     let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     ui.horizontal(|ui| {
         if (widgets::primary_icon(ui, None, "Rename", ok).clicked() || enter) && ok {
             let name = app.state.rename_input.trim().to_string();
@@ -338,7 +338,7 @@ pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, cl
         return;
     };
     ui.label(theme::heading(trf("Remove {name}?", &[("name", &row.pin.name)]), theme::SECTION));
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     // A copy may hold what the program saved; say so, since it can't be brought back.
     let what = if row.pin.mode.keeps_copy() {
         tr("Its copy is deleted, with anything it saved there. The project itself stays as it is.")
@@ -347,10 +347,10 @@ pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, project: &Path, id: u32, cl
     };
     ui.add(egui::Label::new(RichText::new(what).color(t.text_dim)).wrap());
     if row.pin.mode.keeps_copy() {
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         ui.label(RichText::new(tr("This can't be undone.")).color(t.danger).size(theme::SMALL));
     }
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     ui.horizontal(|ui| {
         if widgets::secondary(ui, Some("trash-2"), "Remove it").clicked() {
             app.act("project_pin_delete", json!({"project": project, "pin": id, "confirm": true}), tr("Remove a pin"));

@@ -5,7 +5,7 @@
 
 use crate::i18n::tr;
 use crate::state::Screen;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_engine::Mode;
 use egui::viewport::ResizeDirection;
@@ -40,7 +40,7 @@ fn label(size: f32, s: f32) -> f32 {
 pub fn bar(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let height = HEIGHT * scale(ui.ctx());
-    egui::Panel::top("titlebar").exact_size(height).frame(egui::Frame::new().fill(t.chrome)).show(ui, |ui| {
+    egui::Panel::top("titlebar").exact_size(height).frame(widgets::pane(t.chrome, egui::Margin::ZERO)).show(ui, |ui| {
         crate::guard_ui(ui, "title bar", |ui| show(app, ui));
     });
 }
@@ -79,7 +79,7 @@ pub fn window_edge(ctx: &egui::Context) {
     ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("window-edge"))).rect_stroke(
         ctx.content_rect(),
         0.0,
-        egui::Stroke::new(1.0, t.field_border),
+        theme::hairline(t.field_border),
         egui::StrokeKind::Inside,
     );
 }
@@ -107,7 +107,7 @@ fn rule(ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let s = scale(ui.ctx());
     let (r, _) = ui.allocate_exact_size(Vec2::new(s, HEIGHT * s), egui::Sense::hover());
-    ui.painter().vline(r.center().x, r.y_range(), egui::Stroke::new(s, t.separator));
+    ui.painter().vline(r.center().x, r.y_range(), theme::line(theme::HAIRLINE * s, t.separator));
 }
 
 /// One of the window buttons (minimise, maximise, close): a full-height cell.
@@ -118,7 +118,7 @@ fn window_button(ui: &mut Ui, icon: &str, tip: &str, close: bool) -> egui::Respo
     if hot {
         ui.painter().rect_filled(rect, 0.0, if close { t.danger } else { t.hover });
     }
-    let col = if hot && close { egui::Color32::WHITE } else { t.icon };
+    let col = if hot && close { t.on_accent } else { t.icon };
     icons::paint(ui, egui::Rect::from_center_size(rect.center(), Vec2::splat(14.0)), icon, 14.0, col);
     widgets::focus_ring(ui, &resp, rect.shrink(3.0));
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tr(tip)));
@@ -141,18 +141,18 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     if drag.double_clicked() {
         ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized(&ctx)));
     }
-    ui.painter().hline(bar.x_range(), bar.bottom() - 0.5 * s, egui::Stroke::new(s, t.separator));
+    ui.painter().hline(bar.x_range(), bar.bottom() - 0.5 * s, theme::line(theme::HAIRLINE * s, t.separator));
     // A download anywhere in the app fills the bottom edge of the bar, on every screen.
     let download = crate::engine_ui::global_download(app);
     if let Some((_, Some(f), _)) = &download {
         let x = bar.left() + bar.width() * f.clamp(0.0, 1.0);
-        ui.painter().line_segment([egui::pos2(bar.left(), bar.bottom() - s), egui::pos2(x, bar.bottom() - s)], egui::Stroke::new(2.0 * s, t.accent));
+        ui.painter().line_segment([egui::pos2(bar.left(), bar.bottom() - s), egui::pos2(x, bar.bottom() - s)], theme::line(theme::FOCUS * s, t.accent));
     }
     ui.horizontal_centered(|ui| {
-        ui.spacing_mut().item_spacing.x = 10.0 * s;
+        ui.spacing_mut().item_spacing.x = space::M * s;
         // Room for macOS's buttons, kept in full screen too: they slide back in when the pointer
         // reaches the top of the screen, and land there instead of over the app mark.
-        ui.add_space(if NATIVE_FRAME { NATIVE_BUTTONS_WIDTH } else { 12.0 } * s);
+        ui.add_space(if NATIVE_FRAME { NATIVE_BUTTONS_WIDTH } else { space::M } * s);
         if ui.add(crate::app_icon(22.0 * s).sense(egui::Sense::click())).on_hover_text(tr("Home")).clicked() {
             app.state.screen = Screen::Home;
         }
@@ -188,9 +188,9 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
                 }
                 rule(ui);
             }
-            ui.spacing_mut().item_spacing.x = 10.0 * s;
+            ui.spacing_mut().item_spacing.x = space::M * s;
             // Without window buttons on the right, keep the controls off the window's rounded corner.
-            ui.add_space(if NATIVE_FRAME { 12.0 } else { 4.0 } * s);
+            ui.add_space(if NATIVE_FRAME { space::M } else { space::XS } * s);
             if let Some((title, fraction, message)) = download {
                 if download_pill(ui, &title, fraction).on_hover_text(message).clicked() {
                     app.state.modal = Some(match app.engine_flow.job {
@@ -261,7 +261,7 @@ fn download_pill(ui: &mut Ui, title: &str, fraction: Option<f32>) -> egui::Respo
     let size = Vec2::new(g.size().x + (26.0 + 52.0) * s, 26.0 * s);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let h = widgets::hover_t(ui, &resp);
-    ui.painter().rect(rect, t.radius, crate::theme::mix(t.raised, t.hover, h), egui::Stroke::new(s, t.card_border), egui::StrokeKind::Inside);
+    ui.painter().rect(rect, t.radius, crate::theme::mix(t.raised, t.hover, h), theme::line(theme::HAIRLINE * s, t.card_border), egui::StrokeKind::Inside);
     icons::paint(ui, egui::Rect::from_center_size(egui::pos2(rect.left() + 14.0 * s, rect.center().y), Vec2::splat(14.0 * s)), "download", 14.0 * s, t.accent);
     ui.painter().galley_with_override_text_color(egui::pos2(rect.left() + 26.0 * s, rect.center().y - g.size().y / 2.0), g, t.text);
     let track = egui::Rect::from_min_size(egui::pos2(rect.right() - 48.0 * s, rect.center().y - 1.5 * s), Vec2::new(38.0, 3.0) * s);
@@ -285,7 +285,7 @@ fn deep_toggle(app: &mut CraftApp, ui: &mut Ui) {
     let size = Vec2::new(g.size().x + 64.0 * s, CONTROL * s);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let fill = if resp.hovered() { t.hover } else { egui::Color32::TRANSPARENT };
-    ui.painter().rect(rect, t.radius, fill, egui::Stroke::new(s, t.card_border), egui::StrokeKind::Inside);
+    ui.painter().rect(rect, t.radius, fill, theme::line(theme::HAIRLINE * s, t.card_border), egui::StrokeKind::Inside);
     let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 16.0 * s, rect.center().y), Vec2::splat(16.0 * s));
     let (icon, col) = if deep { ("microscope", t.accent) } else { ("shield-check", t.success) };
     icons::paint(ui, icon_rect, icon, 15.0 * s, col);
@@ -295,7 +295,7 @@ fn deep_toggle(app: &mut CraftApp, ui: &mut Ui) {
     let how = ui.ctx().animate_bool(resp.id, deep);
     ui.painter().rect_filled(sw, 6.0 * s, if deep { t.accent } else { t.pressed });
     let knob_x = egui::lerp(sw.left() + 6.0 * s..=sw.right() - 6.0 * s, how);
-    ui.painter().circle_filled(egui::pos2(knob_x, sw.center().y), 4.5 * s, egui::Color32::WHITE);
+    ui.painter().circle_filled(egui::pos2(knob_x, sw.center().y), 4.5 * s, t.on_accent);
     widgets::focus_ring(ui, &resp, rect);
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, !deep, tr("Clean room")));
     let resp = resp.on_hover_ui(|ui| {

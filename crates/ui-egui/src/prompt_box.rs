@@ -7,9 +7,9 @@
 //! typed. Anywhere else they move the cursor as usual.
 
 use crate::i18n::{tr, trf};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{icons, widgets};
-use egui::{Margin, RichText, Ui};
+use egui::{RichText, Ui};
 use std::path::PathBuf;
 
 /// An earlier prompt: what was typed, and the pictures attached to it.
@@ -136,13 +136,13 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
     let mut out = PromptOut::default();
     let id = ui.make_persistent_id(("prompt-box", b.name));
     let focused = ui.memory(|m| m.has_focus(id));
-    let stroke = egui::Stroke::new(1.0, if focused { t.text_faint } else { t.field_border });
-    let frame = egui::Frame::new()
-        .fill(t.card)
-        .stroke(stroke)
-        .corner_radius(t.r_lg())
-        .shadow(egui::Shadow { offset: [0, 2], blur: 12, spread: 0, color: t.shadow })
-        .inner_margin(Margin { left: 16, right: 10, top: 14, bottom: 10 });
+    let stroke = theme::hairline(if focused { t.text_faint } else { t.field_border });
+    let frame = widgets::pane(t.card, theme::pad_sides(space::L, space::M, space::L, space::M)).stroke(stroke).corner_radius(t.r_lg()).shadow(egui::Shadow {
+        offset: [0, 2],
+        blur: 12,
+        spread: 0,
+        color: t.shadow,
+    });
     // Stacked top to bottom whatever the caller's layout (it's often placed in a row).
     frame.show(ui, |ui| {
         ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -158,7 +158,7 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
                             Some(tex) => {
                                 let (rect, resp) = ui.allocate_exact_size(egui::Vec2::splat(TILE), egui::Sense::hover());
                                 egui::Image::new((tex.id(), rect.size())).uv(middle(tex.size_vec2())).corner_radius(t.r_lg()).paint_at(ui, rect);
-                                ui.painter().rect_stroke(rect, t.r_lg(), egui::Stroke::new(1.0, t.card_border), egui::StrokeKind::Inside);
+                                ui.painter().rect_stroke(rect, t.r_lg(), theme::hairline(t.card_border), egui::StrokeKind::Inside);
                                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Image, true, &name));
                                 resp.on_hover_ui(|ui| {
                                     ui.add(egui::Image::new((tex.id(), fit(tex.size_vec2(), PREVIEW_HOVER))));
@@ -173,11 +173,9 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
                             }
                             // Not decoded yet, or not readable: its name.
                             None => {
-                                egui::Frame::new()
-                                    .fill(t.raised)
-                                    .stroke(egui::Stroke::new(1.0, t.card_border))
-                                    .corner_radius(t.r_sm())
-                                    .inner_margin(Margin { left: 8, right: 2, top: 2, bottom: 2 })
+                                widgets::chip(&t)
+                                    .stroke(theme::hairline(t.card_border))
+                                    .inner_margin(theme::pad_sides(space::SM, space::XXS, space::XXS, space::XXS))
                                     .show(ui, |ui| {
                                         ui.horizontal(|ui| {
                                             icons::show(ui, "paperclip", 13.0, t.icon);
@@ -191,7 +189,7 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
                         }
                     }
                 });
-                ui.add_space(6.0);
+                ui.add_space(space::S);
             }
             let line = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(b.font_size)));
             // Up at the very start (or in an empty box) takes back the last waiting message; it's
@@ -255,7 +253,7 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
             if text.trim_start().starts_with('/') && !text.trim().contains(' ') {
                 ui.label(RichText::new(format!("{} {}", tr("Commands:"), crate::slash::names())).size(theme::CAPTION).color(t.text_faint));
             }
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
             ui.horizontal(|ui| {
                 if let Some(tip) = b.attach
                     && icons::button(ui, "paperclip", 30.0, false, tip).clicked()
@@ -358,9 +356,9 @@ fn cursor_to_end(ctx: &egui::Context, id: egui::Id, text: &str) {
 fn send_button(ui: &mut Ui, ready: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
     let (rect, resp) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::click());
-    let fill = if ready { crate::theme::mix(t.accent, egui::Color32::BLACK, 0.12 * widgets::hover_t(ui, &resp)) } else { t.raised };
+    let fill = if ready { theme::mix(t.accent, t.accent_hover, widgets::hover_t(ui, &resp)) } else { t.raised };
     ui.painter().rect_filled(rect, t.radius, fill);
-    icons::paint(ui, rect, "send", 16.0, if ready { egui::Color32::WHITE } else { t.text_faint });
+    icons::paint(ui, rect, "send", 16.0, if ready { t.on_accent } else { t.text_faint });
     widgets::focus_ring(ui, &resp, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tr("Send (Enter)")));
     resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tr("Send (Enter)"))

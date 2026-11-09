@@ -3,7 +3,7 @@
 
 use crate::i18n::tr;
 use crate::state::{ChatItem, ConsentAnswer};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, evidence_ui, glossary, icons, widgets};
 use craft_anything_ai::AgentEvent;
 use craft_anything_engine::TargetKind;
@@ -137,10 +137,10 @@ pub fn ask_screen(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let side_w = 300.0_f32.min(ui.available_width() * 0.3);
     // What's open sits on the right; the app's sidebar is on the left.
-    egui::Panel::right("ask-side").exact_size(side_w).resizable(false).frame(egui::Frame::new().fill(t.canvas).inner_margin(Margin::same(20))).show(ui, |ui| {
+    egui::Panel::right("ask-side").exact_size(side_w).resizable(false).frame(widgets::pane(t.canvas, theme::pad_xy(space::L, space::XL))).show(ui, |ui| {
         target_card(app, ui);
     });
-    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.canvas).inner_margin(PANE_MARGIN)).show(ui, |ui| {
+    egui::CentralPanel::default().frame(widgets::pane(t.canvas, pane_margin())).show(ui, |ui| {
         conversation(app, ui, false);
     });
 }
@@ -160,10 +160,10 @@ fn target_card(app: &mut CraftApp, ui: &mut Ui) {
                         ui.label(RichText::new(crate::human_bytes(target.bytes.len())).color(t.text_faint).size(theme::CAPTION));
                     });
                 });
-                ui.add_space(10.0);
+                ui.add_space(space::M);
                 widgets::caption(ui, "What is it");
                 ui.label(RichText::new(tr(target.kind.plain())).size(theme::BODY));
-                ui.add_space(10.0);
+                ui.add_space(space::M);
                 ui.horizontal_wrapped(|ui| {
                     if app.view.clean_room {
                         widgets::pill(ui, "Clean room", t.success, t.raised).on_hover_text(tr("Nothing inside it is read."));
@@ -183,13 +183,13 @@ fn target_card(app: &mut CraftApp, ui: &mut Ui) {
             }
         }
     });
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     widgets::card(&t).show(ui, |ui| {
         ui.set_width(ui.available_width());
         widgets::caption(ui, "Try asking");
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         let kind = app.view.active_target().map(|t| t.kind);
-        ui.spacing_mut().item_spacing.y = 6.0;
+        ui.spacing_mut().item_spacing.y = space::S;
         ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
             for q in suggestions(kind) {
                 if widgets::suggestion(ui, q).clicked() {
@@ -198,23 +198,25 @@ fn target_card(app: &mut CraftApp, ui: &mut Ui) {
             }
         });
     });
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     ui.horizontal(|ui| {
         widgets::toggle(ui, &mut app.state.explain_new, "Explain like I'm new")
             .on_hover_text(tr("Plain words, short sentences, and every technical word explained."));
     });
-    ui.add_space(10.0);
+    ui.add_space(space::M);
     if widgets::secondary(ui, Some("download"), "Export a report").on_hover_text(tr("Everything found so far, as a Markdown file.")).clicked() {
         app.export_report();
     }
 }
 
 /// The chat panes' margins: a little more air under the prompt box than at the top.
-pub const PANE_MARGIN: Margin = Margin { left: 12, right: 20, top: 12, bottom: 24 };
+pub fn pane_margin() -> Margin {
+    theme::pad_sides(space::M, space::XL, space::M, space::XL)
+}
 /// Between the last message and the prompt box.
-pub const COMPOSER_GAP: f32 = 16.0;
+pub const COMPOSER_GAP: f32 = space::L;
 /// Between messages (on top of the item spacing).
-pub const MESSAGE_GAP: f32 = 6.0;
+pub const MESSAGE_GAP: f32 = space::S;
 
 /// The conversation with its composer. `dense` = Experienced agent console.
 pub fn conversation(app: &mut CraftApp, ui: &mut Ui, dense: bool) {
@@ -269,7 +271,7 @@ fn history(app: &mut CraftApp, ui: &mut Ui, dense: bool, pad: f32, max_w: f32) {
                 for (i, item) in app.state.chat.iter().enumerate() {
                     let open = !dense && Some(i) == last_proof;
                     ui.push_id(i, |ui| item_ui(ui, item, beginner, dense, open, &mut actions));
-                    ui.add_space(if dense { 4.0 } else { MESSAGE_GAP });
+                    ui.add_space(if dense { space::XS } else { MESSAGE_GAP });
                 }
                 // Only for this conversation: a build or a download elsewhere isn't an answer.
                 if app.answering() && !matches!(app.state.chat.last(), Some(ChatItem::Assistant { streaming: true, .. })) {
@@ -301,21 +303,21 @@ fn greeting(app: &CraftApp, ui: &mut Ui, dense: bool) {
         ui.label(RichText::new(tr("Ask the agent about this target. It cites evidence for every claim.")).color(t.text_faint));
         return;
     }
-    ui.add_space(24.0);
+    ui.add_space(space::XL);
     let name = app.view.active_target().map(|t| t.name.clone());
     let title = match &name {
         Some(n) => crate::i18n::trf("What would you like to know about {name}?", &[("name", n)]),
         None => tr("What would you like to find out?"),
     };
     ui.label(theme::heading(title, theme::TITLE));
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     let sub = if app.state.backend.is_some() {
         "Ask in your own words. Every answer shows how sure we are, and the proof."
     } else {
         "No AI brain is set up, so answers come straight from the built-in engines. Add one any time for plain-words explanations."
     };
     ui.label(RichText::new(tr(sub)).color(t.text_dim));
-    ui.add_space(16.0);
+    ui.add_space(space::L);
 }
 
 fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, dense: bool) {
@@ -368,13 +370,13 @@ enum ChatAction {
 const COPY: f32 = 22.0;
 
 fn margin(dense: bool) -> Margin {
-    if dense { Margin::symmetric(10, 6) } else { Margin::symmetric(16, 12) }
+    if dense { theme::pad_xy(space::M, space::S) } else { theme::pad_xy(space::L, space::M) }
 }
 
 pub(crate) fn bubble(t: &Tokens, user: bool, dense: bool) -> egui::Frame {
     let fill = if user { t.accent_soft } else { t.card };
-    let stroke = if user { egui::Stroke::NONE } else { egui::Stroke::new(1.0, t.card_border) };
-    egui::Frame::new().fill(fill).stroke(stroke).corner_radius(t.r_lg()).inner_margin(margin(dense))
+    let stroke = if user { egui::Stroke::NONE } else { theme::hairline(t.card_border) };
+    widgets::pane(fill, margin(dense)).stroke(stroke).corner_radius(t.r_lg())
 }
 
 /// A button at `at` that copies a whole message (#825: selecting text in the feed is
@@ -440,7 +442,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                     widgets::thinking(ui);
                 }
                 if let Some(b) = backend {
-                    ui.add_space(4.0);
+                    ui.add_space(space::XS);
                     ui.label(RichText::new(crate::i18n::trf("Answered by {name}", &[("name", b)])).color(t.text_faint).size(theme::CAPTION));
                 }
             });
@@ -455,7 +457,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                     Some(true) => ("check", t.success),
                     Some(false) => ("triangle-alert", t.danger),
                 };
-                egui::Frame::new().fill(t.raised).corner_radius(t.r_sm()).inner_margin(Margin::symmetric(10, 3)).show(ui, |ui| {
+                widgets::chip(&t).inner_margin(theme::pad_xy(space::M, space::XXS)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         icons::show(ui, icon, 13.0, col);
                         ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(12.5)).color(t.text_dim));
@@ -466,19 +468,19 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                 }
             });
             if let Some(e) = evidence {
-                ui.add_space(4.0);
+                ui.add_space(space::XS);
                 evidence_ui::proof_card(ui, e, dense, false);
             }
         }
         ChatItem::Proof { intro, evidence } => {
             if !intro.is_empty() {
                 ui.label(RichText::new(intro).color(t.text_dim));
-                ui.add_space(4.0);
+                ui.add_space(space::XS);
             }
             evidence_ui::proof_card(ui, evidence, dense, open);
         }
         ChatItem::Consent { call_id, title, explanation, answer, .. } => {
-            egui::Frame::new().fill(t.card).stroke(egui::Stroke::new(1.5, t.warning)).corner_radius(t.r_lg()).inner_margin(Margin::same(14)).show(ui, |ui| {
+            widgets::callout(&t, t.warning).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
                     icons::show(ui, "shield", 18.0, t.warning);
@@ -490,7 +492,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                         .color(t.text_faint)
                         .size(theme::CAPTION),
                 );
-                ui.add_space(6.0);
+                ui.add_space(space::S);
                 match answer {
                     None => {
                         ui.horizontal(|ui| {
@@ -517,29 +519,24 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
             });
         }
         ChatItem::Error { message, remediation, log } => {
-            egui::Frame::new()
-                .fill(t.card)
-                .stroke(egui::Stroke::new(1.0, t.danger.gamma_multiply(0.6)))
-                .corner_radius(t.r_lg())
-                .inner_margin(Margin::same(12))
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        icons::show(ui, "triangle-alert", 16.0, t.danger);
-                        ui.add(egui::Label::new(RichText::new(message).color(t.text)).wrap());
-                    });
-                    if let Some(r) = remediation {
-                        ui.add(egui::Label::new(RichText::new(r).color(t.text_dim)).wrap());
-                    }
-                    if let Some(l) = log
-                        && widgets::open_log_button(ui, l)
-                    {
-                        actions.push(ChatAction::OpenLog(l.clone()));
-                    }
+            widgets::card(&t).stroke(theme::hairline(t.danger.gamma_multiply(0.6))).inner_margin(theme::pad(space::M)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    icons::show(ui, "triangle-alert", 16.0, t.danger);
+                    ui.add(egui::Label::new(RichText::new(message).color(t.text)).wrap());
                 });
+                if let Some(r) = remediation {
+                    ui.add(egui::Label::new(RichText::new(r).color(t.text_dim)).wrap());
+                }
+                if let Some(l) = log
+                    && widgets::open_log_button(ui, l)
+                {
+                    actions.push(ChatAction::OpenLog(l.clone()));
+                }
+            });
         }
         ChatItem::AddBrain => {
-            egui::Frame::new().fill(t.accent_soft).corner_radius(t.r_lg()).inner_margin(Margin::same(14)).show(ui, |ui| {
+            widgets::callout_soft(&t).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
                     icons::show(ui, "sparkles", 20.0, t.accent_ink);
@@ -549,7 +546,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                             RichText::new(tr("Add an AI brain and I'll read this evidence for you, answer follow-up questions and point at the proof."))
                                 .color(t.text_dim),
                         );
-                        ui.add_space(4.0);
+                        ui.add_space(space::XS);
                         if widgets::primary_icon(ui, Some("plus"), "Add a brain", true).clicked() {
                             actions.push(ChatAction::AddBrain);
                         }
@@ -582,7 +579,7 @@ pub fn rich_text(ui: &mut Ui, text: &str, with_glossary: bool) {
         }
         let trimmed = line.trim_start();
         if trimmed.is_empty() {
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
             continue;
         }
         if let Some(h) = trimmed.strip_prefix("### ").or_else(|| trimmed.strip_prefix("## ")).or_else(|| trimmed.strip_prefix("# ")) {
@@ -683,7 +680,7 @@ fn paragraph(ui: &mut Ui, text: &str, bullet: bool, with_glossary: bool, body: &
             let rect = rect.translate(response.rect.min.to_vec2());
             let mut x = rect.left();
             while x < rect.right() {
-                ui.painter().hline(x..=(x + 2.0).min(rect.right()), rect.bottom() - 1.0, egui::Stroke::new(1.0, t.accent));
+                ui.painter().hline(x..=(x + 2.0).min(rect.right()), rect.bottom() - 1.0, theme::hairline(t.accent));
                 x += 4.0;
             }
             if hover.is_some_and(|pos| rect.contains(pos)) {
@@ -700,7 +697,7 @@ fn paragraph(ui: &mut Ui, text: &str, bullet: bool, with_glossary: bool, body: &
 }
 
 fn code_block(ui: &mut Ui, code: &str, t: &Tokens) {
-    egui::Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(Margin::same(10)).show(ui, |ui| {
+    widgets::code_block(t).inner_margin(theme::pad(space::M)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.add(egui::Label::new(RichText::new(code.trim_end()).font(theme::mono(12.5)).color(t.text)).wrap());
     });

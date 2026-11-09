@@ -4,7 +4,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, Pick, widgets};
 use craft_anything_ai::rebuild::stacks;
 use craft_anything_engine::workspace::{self, ExistingFiles, FolderState, Workspace};
@@ -35,7 +35,7 @@ pub fn make_line(app: &mut CraftApp, ui: &mut Ui) {
         ui.add(egui::Label::new(RichText::new(&place).size(theme::SMALL).color(t.text)).truncate()).on_hover_text(&place);
     });
     ui.horizontal_wrapped(|ui| {
-        ui.add_space(22.0);
+        ui.add_space(space::XL);
         if let Some(how) = how {
             ui.label(RichText::new(how).size(theme::SMALL).color(t.text_dim));
             if widgets::link(ui, "Change").clicked() {
@@ -149,13 +149,13 @@ pub fn existing_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     };
     let (names, count) = app.state.make.folder_files.clone().unwrap_or_default();
     ui.label(theme::heading(tr("This folder already has files"), theme::SECTION));
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     let some = names.iter().take(4).cloned().collect::<Vec<_>>().join(", ");
     let more = if count > 4 { trf(" and {n} more", &[("n", &(count - 4).to_string())]) } else { String::new() };
     ui.add(egui::Label::new(RichText::new(format!("{}: {some}{more}.", folder.display())).color(t.text_dim)).wrap());
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     ui.label(RichText::new(tr("How should the builder use them?")).color(t.text));
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     let current = app.state.make.existing;
     let size = Vec2::new(268.0, 168.0);
     let mut chosen = None;
@@ -183,12 +183,12 @@ pub fn existing_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
             chosen = Some(ExistingFiles::StartFrom);
         }
     });
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     let mut remember = app.state.make.remember_existing;
     if widgets::toggle(ui, &mut remember, "Don't ask again (you can change this in Settings)").changed() {
         app.state.make.remember_existing = remember;
     }
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     if widgets::secondary(ui, None, "Cancel: don't use this folder").clicked() {
         clear(app);
         *close = true;

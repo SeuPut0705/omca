@@ -4,7 +4,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_ai::rebuild::replaced_builder_notice;
 use craft_anything_ai::{BackendConfig, BackendKind};
@@ -411,7 +411,7 @@ pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &
             );
         });
     });
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     let found: Vec<BackendConfig> = app.found_agents().cloned().collect();
     if app.detecting {
         ui.horizontal(|ui| {
@@ -459,9 +459,9 @@ pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &
                 });
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
-    ui.add_space(10.0);
+    ui.add_space(space::M);
     ui.horizontal(|ui| {
         if !app.detecting && widgets::secondary(ui, Some("radar"), "Look again").on_hover_text(tr("After installing one, look for it again.")).clicked() {
             app.detect_backends();

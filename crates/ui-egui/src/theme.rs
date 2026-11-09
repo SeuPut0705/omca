@@ -83,9 +83,9 @@ pub struct Tokens {
     pub radius_lg: f32,
 }
 
-/// The app colour: getartcraft.com's deep accent (#1659c4). White on it passes WCAG AA; on its
-/// bright accent (#2d81ff, used for hover) it doesn't.
-pub const BRAND: Color32 = Color32::from_rgb(0x16, 0x59, 0xc4);
+/// The app colour: OMCA's indigo, from the app icon's #272b6e lifted until it reads on screen.
+/// White on it is 6.2:1 (WCAG AA); `accent_hover` is a step lighter.
+pub const BRAND: Color32 = Color32::from_rgb(0x4b, 0x4f, 0xd6);
 
 pub const SEEN_IT: Color32 = Color32::from_rgb(0x3f, 0xb2, 0x7f);
 pub const WORKED_OUT: Color32 = Color32::from_rgb(0x5b, 0x8d, 0xef);
@@ -109,69 +109,68 @@ pub fn confidence_label(c: Option<Confidence>) -> &'static str {
 impl Tokens {
     pub fn for_kind(kind: ThemeKind) -> Self {
         match kind {
-            // getartcraft.com's dark: warm near-black (#121316), its #101014 for the sidebar, cards
-            // and controls its warm ink (#f2f1ee) laid over the background at 4-15%.
+            // Graphite with a trace of the icon's indigo, darkest at the edges; text in the
+            // icon's cream (#f2f1ee).
             ThemeKind::Studio => Tokens {
                 kind,
-                chrome: Color32::from_rgb(0x10, 0x10, 0x14),
-                canvas: Color32::from_rgb(0x12, 0x13, 0x16),
-                card: Color32::from_rgb(0x1b, 0x1c, 0x1f),
-                card_border: Color32::from_rgb(0x34, 0x34, 0x36),
-                raised: Color32::from_rgb(0x22, 0x23, 0x25),
-                field: Color32::from_rgb(0x1b, 0x1c, 0x1f),
-                field_border: Color32::from_rgb(0x6c, 0x6c, 0x6c),
-                hover: Color32::from_rgb(0x22, 0x23, 0x25),
-                pressed: Color32::from_rgb(0x2d, 0x2e, 0x30),
+                chrome: Color32::from_rgb(0x0d, 0x0e, 0x13),
+                canvas: Color32::from_rgb(0x12, 0x13, 0x19),
+                card: Color32::from_rgb(0x19, 0x1a, 0x21),
+                card_border: Color32::from_rgb(0x2b, 0x2d, 0x38),
+                raised: Color32::from_rgb(0x20, 0x21, 0x2a),
+                field: Color32::from_rgb(0x15, 0x16, 0x1c),
+                field_border: Color32::from_rgb(0x62, 0x65, 0x7a),
+                hover: Color32::from_rgb(0x20, 0x21, 0x2a),
+                pressed: Color32::from_rgb(0x2a, 0x2c, 0x37),
                 text: Color32::from_rgb(0xf2, 0xf1, 0xee),
-                text_dim: Color32::from_rgb(0xb3, 0xb3, 0xb2),
-                text_faint: Color32::from_rgb(0x8d, 0x8d, 0x8d),
-                icon: Color32::from_rgb(0xa8, 0xa8, 0xa6),
+                text_dim: Color32::from_rgb(0xb3, 0xb5, 0xc3),
+                text_faint: Color32::from_rgb(0x8f, 0x92, 0xa3),
+                icon: Color32::from_rgb(0xa6, 0xa9, 0xb8),
                 accent: BRAND,
-                accent_hover: Color32::from_rgb(0x2d, 0x81, 0xff),
-                accent_ink: Color32::from_rgb(0x74, 0xaa, 0xff),
-                accent_soft: Color32::from_rgba_unmultiplied(0x2d, 0x81, 0xff, 44),
+                accent_hover: Color32::from_rgb(0x5a, 0x5e, 0xe4),
+                accent_ink: Color32::from_rgb(0xa9, 0xab, 0xff),
+                accent_soft: Color32::from_rgba_unmultiplied(0x63, 0x67, 0xe8, 40),
                 on_accent: Color32::WHITE,
-                separator: Color32::from_rgb(0x24, 0x25, 0x27),
+                separator: Color32::from_rgb(0x22, 0x24, 0x2d),
                 shadow: Color32::from_black_alpha(120),
-                danger: Color32::from_rgb(0xff, 0x62, 0x59),
-                warning: BEST_GUESS,
-                success: Color32::from_rgb(0x5b, 0xbf, 0x8f),
-                code_bg: Color32::from_rgb(0x06, 0x06, 0x07),
+                danger: Color32::from_rgb(0xff, 0x6b, 0x63),
+                warning: Color32::from_rgb(0xf0, 0xb2, 0x52),
+                success: Color32::from_rgb(0x5c, 0xc2, 0x93),
+                code_bg: Color32::from_rgb(0x09, 0x0a, 0x0e),
                 radius_sm: 6.0,
                 radius: 8.0,
-                radius_lg: 12.0,
+                radius_lg: 10.0,
             },
-            // getartcraft.com's light: warm paper (#f2f1ee), its sunken #e9e8e4 for the sidebar,
-            // raised #faf9f7 for cards, ink #101014.
+            // Near-white with the same cool trace; white cards, ink text (#14151c).
             ThemeKind::StudioLight => Tokens {
                 kind,
-                chrome: Color32::from_rgb(0xe9, 0xe8, 0xe4),
-                canvas: Color32::from_rgb(0xf2, 0xf1, 0xee),
-                card: Color32::from_rgb(0xfa, 0xf9, 0xf7),
-                card_border: Color32::from_rgb(0xce, 0xcd, 0xcb),
-                raised: Color32::from_rgb(0xe9, 0xe8, 0xe4),
-                field: Color32::from_rgb(0xfa, 0xf9, 0xf7),
-                field_border: Color32::from_rgb(0x86, 0x85, 0x85),
-                hover: Color32::from_rgb(0xe4, 0xe4, 0xe1),
-                pressed: Color32::from_rgb(0xdb, 0xda, 0xd8),
-                text: Color32::from_rgb(0x10, 0x10, 0x14),
-                text_dim: Color32::from_rgb(0x3d, 0x3d, 0x40),
-                text_faint: Color32::from_rgb(0x5d, 0x5c, 0x5e),
-                icon: Color32::from_rgb(0x4f, 0x4f, 0x52),
+                chrome: Color32::from_rgb(0xec, 0xec, 0xf1),
+                canvas: Color32::from_rgb(0xf5, 0xf5, 0xf8),
+                card: Color32::from_rgb(0xff, 0xff, 0xff),
+                card_border: Color32::from_rgb(0xda, 0xda, 0xe2),
+                raised: Color32::from_rgb(0xee, 0xee, 0xf3),
+                field: Color32::from_rgb(0xff, 0xff, 0xff),
+                field_border: Color32::from_rgb(0x85, 0x87, 0x9a),
+                hover: Color32::from_rgb(0xe8, 0xe8, 0xee),
+                pressed: Color32::from_rgb(0xdd, 0xdd, 0xe5),
+                text: Color32::from_rgb(0x14, 0x15, 0x1c),
+                text_dim: Color32::from_rgb(0x43, 0x45, 0x5a),
+                text_faint: Color32::from_rgb(0x5e, 0x60, 0x74),
+                icon: Color32::from_rgb(0x50, 0x52, 0x66),
                 accent: BRAND,
-                accent_hover: Color32::from_rgb(0x2d, 0x81, 0xff),
+                accent_hover: Color32::from_rgb(0x5a, 0x5e, 0xe4),
                 accent_ink: BRAND,
-                accent_soft: Color32::from_rgba_unmultiplied(0x2d, 0x81, 0xff, 28),
+                accent_soft: Color32::from_rgba_unmultiplied(0x4b, 0x4f, 0xd6, 26),
                 on_accent: Color32::WHITE,
-                separator: Color32::from_rgb(0xdb, 0xda, 0xd8),
-                shadow: Color32::from_black_alpha(20),
+                separator: Color32::from_rgb(0xe3, 0xe3, 0xea),
+                shadow: Color32::from_black_alpha(22),
                 danger: Color32::from_rgb(0xb3, 0x26, 0x1e),
-                warning: Color32::from_rgb(0x9a, 0x67, 0x00),
+                warning: Color32::from_rgb(0x8f, 0x5e, 0x00),
                 success: Color32::from_rgb(0x12, 0x75, 0x36),
-                code_bg: Color32::from_rgb(0xe9, 0xe8, 0xe4),
+                code_bg: Color32::from_rgb(0xee, 0xee, 0xf3),
                 radius_sm: 6.0,
                 radius: 8.0,
-                radius_lg: 12.0,
+                radius_lg: 10.0,
             },
         }
     }
@@ -335,6 +334,51 @@ pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
 /// uppercase-mono size; mixed-case DM Sans needs a point and a half more to read the same.
 pub fn label_text(text: &str, size: f32) -> egui::RichText {
     egui::RichText::new(text).font(medium(size + 1.5))
+}
+
+/// The spacing scale: every gap, padding and inset in the interface is one of these (a 4 pt grid
+/// with the half steps dense rows need). Screens use these names, never a number.
+pub mod space {
+    pub const XXS: f32 = 2.0;
+    pub const XS: f32 = 4.0;
+    pub const S: f32 = 6.0;
+    pub const SM: f32 = 8.0;
+    pub const M: f32 = 12.0;
+    pub const L: f32 = 16.0;
+    pub const XL: f32 = 24.0;
+    pub const XXL: f32 = 32.0;
+    pub const XXXL: f32 = 40.0;
+}
+
+/// Padding of `all` on every side, from the spacing scale.
+pub fn pad(all: f32) -> egui::Margin {
+    egui::Margin::same(all as i8)
+}
+
+/// Padding of `x` left and right and `y` top and bottom, from the spacing scale.
+pub fn pad_xy(x: f32, y: f32) -> egui::Margin {
+    egui::Margin::symmetric(x as i8, y as i8)
+}
+
+/// Padding set per side, from the spacing scale.
+pub fn pad_sides(left: f32, right: f32, top: f32, bottom: f32) -> egui::Margin {
+    egui::Margin { left: left as i8, right: right as i8, top: top as i8, bottom: bottom as i8 }
+}
+
+/// Line widths: hairlines for edges and dividers, an emphasis edge for a card that needs the
+/// eye (a question, a warning), and the focus/selection width.
+pub const HAIRLINE: f32 = 1.0;
+pub const EMPHASIS: f32 = 1.5;
+pub const FOCUS: f32 = 2.0;
+
+/// A line `width` wide (one of [`HAIRLINE`], [`EMPHASIS`], [`FOCUS`]) in `color`.
+pub fn line(width: f32, color: Color32) -> Stroke {
+    Stroke::new(width, color)
+}
+
+/// A hairline in `color`.
+pub fn hairline(color: Color32) -> Stroke {
+    line(HAIRLINE, color)
 }
 
 /// Scroll bars that can always be seen and grabbed. egui's thin preset paints the thumb in the
@@ -501,6 +545,152 @@ mod tests {
             }
         }
         assert!(checked > 40, "the source scan checked only {checked} text sizes");
+    }
+
+    /// The kit (`theme.rs` and `widgets.rs`) is the only place a colour, a line, a corner, a
+    /// padding, a gap or a frame is made. Screens use its tokens ([`space`], [`pad`], [`line`],
+    /// [`Tokens`]) and its frames (`widgets::card`, `pane`, `callout`…), so a redesign happens
+    /// in one place. Tests inside a screen's file are not scanned.
+    #[test]
+    fn no_style_literals_outside_the_kit() {
+        const KIT: [&str; 2] = ["theme.rs", "widgets.rs"];
+        fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    rust_files(&path, out);
+                } else if path.extension().is_some_and(|x| x == "rs") {
+                    out.push(path);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        rust_files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+        assert!(files.len() > 10, "the source scan found only {} files", files.len());
+        let mut found = Vec::new();
+        for path in files {
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if KIT.contains(&name) {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).unwrap();
+            found.extend(style_literals(&text).into_iter().map(|(n, code)| format!("{name}:{n}: {code}")));
+        }
+        assert!(found.is_empty(), "{} style literals outside the kit; use theme/widgets tokens:\n{}", found.len(), found.join("\n"));
+    }
+
+    /// What the kit scan refuses, and what it lets through.
+    #[test]
+    fn the_kit_scan_catches_style_literals_and_spares_their_names() {
+        let refused = [
+            "let c = Color32::from_rgb(1, 2, 3);",
+            "let c = egui::Color32::WHITE;",
+            "ui.painter().line(p, Stroke::new(1.0, c));",
+            "let r = CornerRadius::same(4);",
+            "let m = Margin::same(8);",
+            "let m = egui::Margin::symmetric(8, 4);",
+            "let m = Margin { left: 4, right: 4, top: 0, bottom: 0 };",
+            "let m = egui::Margin { top: 2, ..Default::default() };",
+            "let m = Margin {\n    left: 4,\n    right: 4,\n    top: 0,\n    bottom: 0,\n};",
+            "let m = Margin\n{ left: 4, right: 4, top: 0, bottom: 0 };",
+            "egui::Frame::new().fill(c)",
+            "ui.add_space(12.0);",
+            "ui.add_space(if dense { 4.0 } else { 6.0 });",
+            "ui.spacing_mut().item_spacing.x = 10.0;",
+            "egui::Grid::new(\"g\").spacing([12.0, 6.0])",
+        ];
+        for code in refused {
+            assert!(!style_literals(code).is_empty(), "missed: {code}");
+        }
+        let spared = [
+            "fn margin(dense: bool) -> Margin {\n    theme::pad(space::M)\n}",
+            "pub fn pane_margin() -> egui::Margin {",
+            "fn edges() ->\n    Margin {\n    theme::pad(space::S)\n}",
+            "let m = egui::Margin::ZERO;",
+            "let c = Color32::TRANSPARENT;",
+            "ui.add_space(space::M);",
+            "ui.add_space(((w - 240.0) / 2.0).max(0.0));",
+            "ui.spacing_mut().item_spacing.x = 0.0;",
+            "let gaps = ui.spacing().item_spacing.x * 4.0;",
+            "// let m = Margin::same(8);",
+            "struct PaneMargin { left: f32 }",
+            "#[cfg(test)]\nmod tests { fn t() { let m = Margin::same(8); } }",
+        ];
+        for code in spared {
+            assert!(style_literals(code).is_empty(), "flagged: {code}: {:?}", style_literals(code));
+        }
+        // A multi-line literal is reported at the line it starts on.
+        assert_eq!(style_literals("fn f() {\n    let m = Margin {\n        left: 1,\n    };\n}").first().map(|(n, _)| *n), Some(2));
+    }
+
+    /// Style values made outside the kit in a screen's source, as (line number, code). Lines after
+    /// `#[cfg(test)]` and comment lines are skipped.
+    fn style_literals(text: &str) -> Vec<(usize, String)> {
+        const MADE_HERE_ONLY: [&str; 17] = [
+            "Color32::from_rgb",
+            "Color32::from_gray",
+            "Color32::from_black_alpha",
+            "Color32::from_white_alpha",
+            "Color32::WHITE",
+            "Color32::BLACK",
+            "Color32::RED",
+            "Color32::GREEN",
+            "Color32::BLUE",
+            "Color32::YELLOW",
+            "Color32::GRAY",
+            "Stroke::new(",
+            "CornerRadius::",
+            "Margin::same(",
+            "Margin::symmetric(",
+            "Frame::new(",
+            "Frame::default(",
+        ];
+        // The code lines, with their numbers, and the same lines joined so a literal that spans
+        // lines can be found; `starts` maps a byte offset in `joined` back to its line.
+        let mut lines = Vec::new();
+        for (n, line) in text.lines().enumerate() {
+            let code = line.trim_start();
+            if code.starts_with("#[cfg(test)]") {
+                break;
+            }
+            if !code.starts_with("//") {
+                lines.push((n + 1, code));
+            }
+        }
+        let mut joined = String::new();
+        let mut starts = Vec::new();
+        for (n, code) in &lines {
+            starts.push((joined.len(), *n, *code));
+            joined.push_str(code);
+            joined.push('\n');
+        }
+        let mut found = std::collections::BTreeMap::new();
+        for (n, code) in &lines {
+            let numeric_gap = code.match_indices("add_space(").any(|(at, m)| code[at + m.len()..].starts_with(|c: char| c.is_ascii_digit()));
+            // A gap chosen by a condition or set as item or grid spacing is a gap too; `0.0`
+            // ("no gap") and centring arithmetic (`(width - w) / 2.0`) are not.
+            let sets_item_spacing = ["item_spacing =", "item_spacing.x =", "item_spacing.y ="].iter().any(|m| code.contains(m));
+            let gap_setting = code.contains("add_space(if ") || sets_item_spacing || code.contains(".spacing([");
+            let gap_literal = gap_setting && floats_outside_strings(code).iter().any(|v| *v != 0.0);
+            if numeric_gap || gap_literal || MADE_HERE_ONLY.iter().any(|m| code.contains(m)) {
+                found.insert(*n, (*code).to_string());
+            }
+        }
+        // A `Margin { … }` struct literal, whatever its first field and however it's wrapped;
+        // `-> Margin {` is a function returning one, not a literal.
+        for (at, m) in joined.match_indices("Margin") {
+            let before = &joined[..at];
+            if before.ends_with(|c: char| c.is_alphanumeric() || c == '_') || !joined[at + m.len()..].trim_start().starts_with('{') {
+                continue;
+            }
+            if before.strip_suffix("egui::").unwrap_or(before).trim_end().ends_with("->") {
+                continue;
+            }
+            if let Some((_, n, code)) = starts.iter().rev().find(|(start, _, _)| *start <= at) {
+                found.entry(*n).or_insert_with(|| (*code).to_string());
+            }
+        }
+        found.into_iter().collect()
     }
 
     /// The text between `open`'s parenthesis and its match, or `None` when it isn't closed on
@@ -742,8 +932,8 @@ mod tests {
             }
             assert!(contrast(t.on_accent, t.accent) >= 4.5, "{k:?} text on the app colour: {:.2}", contrast(t.on_accent, t.accent));
             assert!(contrast(t.field_border, t.canvas) >= 3.0, "{k:?} control borders: {:.2}", contrast(t.field_border, t.canvas));
-            // Main buttons are ink-filled with the canvas colour as their label.
-            assert!(contrast(t.canvas, t.text) >= 4.5, "{k:?} main buttons");
+            // Main buttons are filled in the app colour, a step lighter on hover; the label stays readable on both.
+            assert!(contrast(t.on_accent, t.accent_hover) >= 4.5, "{k:?} main buttons on hover: {:.2}", contrast(t.on_accent, t.accent_hover));
             assert_eq!(t.accent, BRAND);
         }
     }

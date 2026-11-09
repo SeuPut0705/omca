@@ -8,7 +8,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::{MakeDraft, Modal, Screen};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, Done, icons, widgets};
 use craft_anything_ai::rebuild::KindRegistry;
 use craft_anything_engine::{CallOptions, Caller};
@@ -192,7 +192,7 @@ pub fn deep_needed(app: &mut CraftApp, ui: &mut Ui) {
 /// [`deep_needed`] as a dialog, for a look inside asked for anywhere else.
 pub fn deep_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     deep_needed(app, ui);
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     ui.vertical_centered(|ui| {
         if widgets::secondary(ui, None, "Not now").clicked() {
             *close = true;
@@ -224,14 +224,14 @@ pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
             );
         });
     });
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     let body = |ui: &mut Ui, text: String| ui.add(egui::Label::new(RichText::new(text).size(theme::BODY)).wrap());
     let then = if app.ghidra.start_after.is_some() { tr("Your project starts as soon as it's done.") } else { String::new() };
     if ready {
         body(ui, tr("Deep mode now decompiles with Ghidra. The first look at a large program can take several minutes."));
     } else if let Some((fraction, message)) = &downloading {
         progress_bar(ui, *fraction, message);
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         body(
             ui,
             format!("{} {then}", tr("This keeps going in the background, and each download is checked against its publisher's checksum before it's used.")),
@@ -253,7 +253,7 @@ pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     if !ready && downloading.is_none() {
         body(ui, tr("Without it, Deep mode uses OMCA's own decompiler, which is rougher."));
     }
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     ui.horizontal(|ui| {
         if ready {
             let start = app.ghidra.start_after.is_some();
@@ -328,7 +328,7 @@ pub fn ghidra_memory_setting(app: &mut CraftApp, ui: &mut Ui) {
             app.settings.engines.ghidra.memory_gb = (i == 1).then(|| ghidra::suggested_heap_gb(500 << 20));
             app.settings_changed();
         }
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         match set {
             None => {
                 let line = trf("Half of this computer's memory, up to {gb} GB.", &[("gb", &ghidra::HEAP_GB.end().to_string())]);
@@ -495,7 +495,7 @@ pub fn assets_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
             ui.label(RichText::new(tr("Generated pictures and 3D models are made with fal.ai.")).color(t.text_dim));
         });
     });
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     ui.add(
         egui::Label::new(
             RichText::new({
@@ -509,15 +509,15 @@ pub fn assets_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
         )
         .wrap(),
     );
-    ui.add_space(10.0);
+    ui.add_space(space::M);
     let fal = fal::Fal::default();
     keys_link(ui, &fal);
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     if let Some(key) = key_field(app, ui, &fal, "Save") {
         *close = true;
         app.save_asset_key(fal.id().into(), key);
     }
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     if widgets::secondary(ui, None, "Not now").clicked() {
         *close = true;
         app.set_generate_assets(false);
@@ -575,7 +575,7 @@ pub fn assets_settings(app: &mut CraftApp, ui: &mut Ui) {
     );
     let all = AssetProviders::built_in();
     for provider in all.ids().into_iter().filter_map(|id| all.get(id)) {
-        ui.add_space(6.0);
+        ui.add_space(space::S);
         ui.label(RichText::new(provider.name()).size(theme::SMALL));
         let stored = app.asset_keys.as_ref().and_then(|k| k.get(provider.id()).copied());
         ui.push_id(provider.id(), |ui| {
@@ -628,7 +628,7 @@ pub fn build_with(app: &mut CraftApp, ui: &mut Ui) {
                     .size(theme::SMALL),
             );
         }
-        ui.add_space(8.0);
+        ui.add_space(space::SM);
     }
     ui.horizontal(|ui| {
         ui.label(RichText::new(tr("Build with")).size(theme::BODY).color(t.text_dim));
@@ -639,7 +639,7 @@ pub fn build_with(app: &mut CraftApp, ui: &mut Ui) {
             app.state.make.builder = Builder::ALL.get(i).copied();
         }
     });
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     match b {
         Some(b) => status_line(app, ui, b, true),
         None => {
@@ -825,7 +825,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
             ui.label(RichText::new(tr(b.needs())).color(t.text_dim));
         });
     });
-    ui.add_space(16.0);
+    ui.add_space(space::L);
 
     let list = steps(app, b, &inv);
     let current = list.iter().position(|s| !s.done);
@@ -838,18 +838,18 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
                 ui.painter().rect_filled(r, r.width() / 2.0, t.success);
                 icons::paint(ui, r, "check", 16.0, t.canvas);
             } else {
-                ui.painter().rect_stroke(r, r.width() / 2.0, egui::Stroke::new(1.0, if now { t.accent } else { t.field_border }), egui::StrokeKind::Inside);
+                ui.painter().rect_stroke(r, r.width() / 2.0, theme::hairline(if now { t.accent } else { t.field_border }), egui::StrokeKind::Inside);
                 let g = widgets::label_galley(ui, &(i + 1).to_string(), 12.0, t.text);
                 ui.painter().galley_with_override_text_color(r.center() - g.size() / 2.0, g, if now { t.text } else { t.text_faint });
             }
-            ui.add_space(4.0);
+            ui.add_space(space::XS);
             ui.vertical(|ui| {
                 ui.label(RichText::new(&s.title).font(theme::semibold(theme::BODY)).color(if s.done || now { t.text } else { t.text_dim }));
                 if now || !s.done {
                     ui.add(egui::Label::new(RichText::new(&s.detail).color(t.text_dim).size(theme::SMALL)).wrap());
                 }
                 if now {
-                    ui.add_space(8.0);
+                    ui.add_space(space::SM);
                     if let Some(a) = &s.action {
                         let downloading = app.engine_download(b);
                         match (a, downloading) {
@@ -871,7 +871,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
                                 }
                             }
                         }
-                        ui.add_space(4.0);
+                        ui.add_space(space::XS);
                     }
                     if !s.done && current.is_some() && i > 0 {
                         ui.label(RichText::new(tr("This updates by itself when it's done.")).color(t.text_faint).size(theme::SMALL));
@@ -879,7 +879,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
                 }
             });
         });
-        ui.add_space(12.0);
+        ui.add_space(space::M);
     }
 
     match act {
@@ -889,7 +889,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
         None => {}
     }
 
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     ui.horizontal(|ui| {
         if ready {
             let label = if app.engine_flow.start_after { "Start building" } else { "Done" };
@@ -933,7 +933,7 @@ pub fn progress_bar(ui: &mut Ui, fraction: Option<f32>, message: &str) {
         }
     };
     ui.painter().rect_filled(egui::Rect::from_x_y_ranges(bar.left() + bar.width() * from..=bar.left() + bar.width() * to, bar.y_range()), 3.0, t.accent);
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     let pct = fraction.map(|f| format!("{:.0}%  ·  ", f * 100.0)).unwrap_or_default();
     ui.label(RichText::new(format!("{pct}{message}")).font(theme::mono(12.5)).color(t.text_dim));
     widgets::animate(ui, Duration::from_millis(100));
@@ -956,11 +956,11 @@ pub fn settings_section(app: &mut CraftApp, ui: &mut Ui) {
         )
         .wrap(),
     );
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     for b in Builder::ALL {
         ui.label(RichText::new(b.name()).font(theme::semibold(theme::SMALL)));
         status_line(app, ui, b, true);
-        ui.add_space(8.0);
+        ui.add_space(space::SM);
     }
 }
 

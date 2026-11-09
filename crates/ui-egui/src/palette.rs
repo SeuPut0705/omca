@@ -3,10 +3,10 @@
 
 use crate::i18n::tr;
 use crate::state::Screen;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, Pick, Route, icons, schema_form, widgets};
 use craft_anything_engine::{Consent, Mode};
-use egui::{Margin, RichText, Vec2};
+use egui::{RichText, Vec2};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AppCommand {
@@ -111,72 +111,66 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
     // Scrim
     ctx.layer_painter(egui::LayerId::new(egui::Order::Middle, egui::Id::new("palette-scrim"))).rect_filled(screen, 0.0, t.shadow.gamma_multiply(0.6));
     let resp = egui::Area::new(egui::Id::new("palette")).order(egui::Order::Foreground).fixed_pos(pos).show(ctx, |ui| {
-        egui::Frame::new()
-            .fill(t.card)
-            .stroke(egui::Stroke::new(1.0, t.card_border))
-            .corner_radius(t.r_lg())
-            .shadow(ui.visuals().window_shadow)
-            .inner_margin(Margin::same(10))
-            .show(ui, |ui| {
-                ui.set_width(width);
-                ui.horizontal(|ui| {
-                    icons::show(ui, "search", 18.0, t.text_faint);
-                    let r = ui.add(
-                        egui::TextEdit::singleline(&mut app.state.palette.query)
-                            .hint_text(tr("Type a command or tool…"))
-                            .frame(egui::Frame::NONE)
-                            .desired_width(f32::INFINITY)
-                            .font(egui::FontId::proportional(theme::BODY)),
-                    );
-                    r.request_focus();
-                    if r.changed() {
-                        app.state.palette.selected = 0;
-                        follow = true;
-                    }
-                });
-                ui.add_space(6.0);
-                ui.separator();
-                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                    if ranked.is_empty() {
-                        ui.label(RichText::new(tr("Nothing matches.")).color(t.text_faint));
-                    }
-                    for (i, (_, e)) in ranked.iter().enumerate() {
-                        let on = i == app.state.palette.selected;
-                        let (rect, r) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 40.0), egui::Sense::click());
-                        if on || r.hovered() {
-                            ui.painter().rect_filled(rect, t.radius_sm, if on { t.accent_soft } else { t.hover });
-                        }
-                        if on && follow {
-                            r.scroll_to_me(None);
-                        }
-                        let (icon, title, sub, tag) = match e {
-                            Entry::App(_, title, icon) => (*icon, tr(title), String::new(), tr("App")),
-                            Entry::Tool { id, title, summary, toolset } => ("wrench", tr(title), format!("{id} · {summary}"), tr(toolset)),
-                        };
-                        r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, &title));
-                        icons::paint(
-                            ui,
-                            egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 12.0), Vec2::splat(16.0)),
-                            icon,
-                            16.0,
-                            if on { t.accent_ink } else { t.icon },
-                        );
-                        ui.painter().text(rect.min + Vec2::new(34.0, 5.0), egui::Align2::LEFT_TOP, title, theme::medium(theme::SMALL), t.text);
-                        let sub_g = ui.painter().layout_no_wrap(crate::evidence_ui::truncate(&sub, 90), egui::FontId::proportional(theme::TINY), t.text_faint);
-                        ui.painter().with_clip_rect(rect.shrink(2.0)).galley(rect.min + Vec2::new(34.0, 23.0), sub_g, t.text_faint);
-                        let tag_g = ui.painter().layout_no_wrap(tag, egui::FontId::proportional(theme::TINY), t.text_dim);
-                        let tr_ =
-                            egui::Rect::from_min_size(egui::pos2(rect.right() - tag_g.size().x - 18.0, rect.top() + 6.0), tag_g.size() + Vec2::new(10.0, 4.0));
-                        ui.painter().rect_filled(tr_, 6.0, t.raised);
-                        ui.painter().galley(tr_.min + Vec2::new(5.0, 2.0), tag_g, t.text_dim);
-                        if r.clicked() {
-                            chosen = Some(i);
-                        }
-                    }
-                });
-                ui.add_space(4.0);
-                ui.label(RichText::new(tr("↑↓ to move · Enter to run · Esc to close")).color(t.text_faint).size(theme::TINY));
+        widgets::panel(&t).corner_radius(t.r_lg()).shadow(ui.visuals().window_shadow).inner_margin(theme::pad(space::M)).show(ui, |ui| {
+            ui.set_width(width);
+            ui.horizontal(|ui| {
+                icons::show(ui, "search", 18.0, t.text_faint);
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut app.state.palette.query)
+                        .hint_text(tr("Type a command or tool…"))
+                        .frame(egui::Frame::NONE)
+                        .desired_width(f32::INFINITY)
+                        .font(egui::FontId::proportional(theme::BODY)),
+                );
+                r.request_focus();
+                if r.changed() {
+                    app.state.palette.selected = 0;
+                    follow = true;
+                }
             });
+            ui.add_space(space::S);
+            ui.separator();
+            egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                if ranked.is_empty() {
+                    ui.label(RichText::new(tr("Nothing matches.")).color(t.text_faint));
+                }
+                for (i, (_, e)) in ranked.iter().enumerate() {
+                    let on = i == app.state.palette.selected;
+                    let (rect, r) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 40.0), egui::Sense::click());
+                    if on || r.hovered() {
+                        ui.painter().rect_filled(rect, t.radius_sm, if on { t.accent_soft } else { t.hover });
+                    }
+                    if on && follow {
+                        r.scroll_to_me(None);
+                    }
+                    let (icon, title, sub, tag) = match e {
+                        Entry::App(_, title, icon) => (*icon, tr(title), String::new(), tr("App")),
+                        Entry::Tool { id, title, summary, toolset } => ("wrench", tr(title), format!("{id} · {summary}"), tr(toolset)),
+                    };
+                    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, &title));
+                    icons::paint(
+                        ui,
+                        egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 12.0), Vec2::splat(16.0)),
+                        icon,
+                        16.0,
+                        if on { t.accent_ink } else { t.icon },
+                    );
+                    ui.painter().text(rect.min + Vec2::new(34.0, 5.0), egui::Align2::LEFT_TOP, title, theme::medium(theme::SMALL), t.text);
+                    let sub_g = ui.painter().layout_no_wrap(crate::evidence_ui::truncate(&sub, 90), egui::FontId::proportional(theme::TINY), t.text_faint);
+                    ui.painter().with_clip_rect(rect.shrink(2.0)).galley(rect.min + Vec2::new(34.0, 23.0), sub_g, t.text_faint);
+                    let tag_g = ui.painter().layout_no_wrap(tag, egui::FontId::proportional(theme::TINY), t.text_dim);
+                    let tr_ =
+                        egui::Rect::from_min_size(egui::pos2(rect.right() - tag_g.size().x - 18.0, rect.top() + 6.0), tag_g.size() + Vec2::new(10.0, 4.0));
+                    ui.painter().rect_filled(tr_, 6.0, t.raised);
+                    ui.painter().galley(tr_.min + Vec2::new(5.0, 2.0), tag_g, t.text_dim);
+                    if r.clicked() {
+                        chosen = Some(i);
+                    }
+                }
+            });
+            ui.add_space(space::XS);
+            ui.label(RichText::new(tr("↑↓ to move · Enter to run · Esc to close")).color(t.text_faint).size(theme::TINY));
+        });
     });
     if enter && n > 0 {
         chosen = Some(app.state.palette.selected);
@@ -270,12 +264,12 @@ fn form(app: &mut CraftApp, ctx: &egui::Context, tool: &str) {
                     ui.label(RichText::new(tr("This runs code from the target or changes a device. Clicking Run is your OK.")).color(t.warning));
                 });
             }
-            ui.add_space(8.0);
+            ui.add_space(space::SM);
             schema_form::show(ui, &fields, &mut app.state.palette.form);
             if let Some(e) = &app.state.palette.form_error {
                 ui.colored_label(t.danger, e);
             }
-            ui.add_space(10.0);
+            ui.add_space(space::M);
             ui.horizontal(|ui| {
                 if widgets::primary_icon(ui, Some("play"), "Run", true).clicked() {
                     run = true;

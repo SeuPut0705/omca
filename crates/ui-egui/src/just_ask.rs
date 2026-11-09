@@ -7,7 +7,7 @@
 use crate::i18n::{tr, trf};
 use crate::slash::{self, Command, Typed};
 use crate::state::FeedItem;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, chat, icons, prompt_box, widgets};
 use craft_anything_engine::evidence::ToolError;
 use craft_anything_engine::questions::{self, AskedQuestion};
@@ -159,12 +159,12 @@ pub fn card(ui: &mut Ui, a: &mut Asked, glossary: bool) {
         if a.collapsed {
             return;
         }
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         match &a.answer {
             None => widgets::thinking(ui),
             Some(Ok(ans)) => {
                 chat::rich_text(ui, &ans.text, glossary);
-                ui.add_space(4.0);
+                ui.add_space(space::XS);
                 let from = if ans.from_session { tr("from the builder's own memory of the build") } else { tr("from the project's files") };
                 let cost = ans.cost_usd.map(|c| format!(" · ${c:.2}")).unwrap_or_default();
                 ui.label(

@@ -1,21 +1,17 @@
 //! Evidence: proof cards ("Show me the proof"), a pretty JSON viewer and compact ledger rows.
 
 use crate::i18n::tr;
-use crate::theme::{self, Tokens, confidence_color};
+use crate::theme::{self, Tokens, confidence_color, space};
 use crate::{icons, widgets};
 use craft_anything_engine::evidence::{CoverageStatus, Evidence};
-use egui::{Margin, RichText, Ui};
+use egui::{RichText, Ui};
 use serde_json::Value;
 
 /// A proof card: summary + confidence up top, the details behind an expander.
 pub fn proof_card(ui: &mut Ui, e: &Evidence, dense: bool, open: bool) {
     let t = Tokens::get(ui.ctx());
     let col = confidence_color(Some(e.confidence));
-    let frame = egui::Frame::new().fill(t.card).stroke(egui::Stroke::new(1.0, t.card_border)).corner_radius(t.r_lg()).inner_margin(Margin::same(if dense {
-        10
-    } else {
-        14
-    }));
+    let frame = widgets::card(&t).inner_margin(theme::pad(if dense { space::M } else { space::L }));
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         // A thin confidence stripe on the left edge.
@@ -32,7 +28,7 @@ pub fn proof_card(ui: &mut Ui, e: &Evidence, dense: bool, open: bool) {
                 }
             });
         });
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         if !e.summary.is_empty() {
             ui.label(RichText::new(&e.summary).size(if dense { 13.0 } else { 15.0 }));
         }
@@ -56,7 +52,7 @@ fn details(ui: &mut Ui, e: &Evidence, t: &Tokens) {
                     Some(lbl) => format!("{lbl}  {}", l.value),
                     None => l.value.clone(),
                 };
-                egui::Frame::new().fill(t.raised).corner_radius(t.r_sm()).inner_margin(Margin::symmetric(8, 3)).show(ui, |ui| {
+                widgets::chip(t).show(ui, |ui| {
                     ui.label(RichText::new(text).font(theme::mono(theme::CAPTION)).color(t.text)).on_hover_text(&l.kind);
                 });
             }
@@ -64,7 +60,7 @@ fn details(ui: &mut Ui, e: &Evidence, t: &Tokens) {
                 ui.label(RichText::new(format!("+{}", e.locations.len() - 40)).color(t.text_faint));
             }
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     if !e.limitations.is_empty() {
         widgets::caption(ui, "What we couldn't check");
@@ -74,7 +70,7 @@ fn details(ui: &mut Ui, e: &Evidence, t: &Tokens) {
                 ui.add(egui::Label::new(RichText::new(&l.message).color(t.text_dim)).wrap());
             });
         }
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     ui.horizontal_wrapped(|ui| {
         let cov = match e.coverage.status {
@@ -96,21 +92,21 @@ fn details(ui: &mut Ui, e: &Evidence, t: &Tokens) {
             ui.ctx().copy_text(e.id.clone());
         }
     });
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     if let Some(code) = crate::workbench::code_text(&e.result) {
         widgets::caption(ui, "The code");
-        egui::Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(Margin::same(10)).show(ui, |ui| {
+        widgets::code_block(t).inner_margin(theme::pad(space::M)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.label(RichText::new(truncate(code, 4000)).font(theme::mono(12.5)).color(t.text));
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     egui::CollapsingHeader::new(RichText::new(tr("The raw result")).color(t.text_dim).size(theme::CAPTION))
         .id_salt(("raw", &e.id))
         .default_open(false)
         .icon(widgets::disclosure_icon)
         .show(ui, |ui| {
-            egui::Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(Margin::same(8)).show(ui, |ui| {
+            widgets::code_block(t).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 json_tree(ui, "result", &e.result, 0);
             });
@@ -169,7 +165,7 @@ pub fn json_tree(ui: &mut Ui, key: &str, v: &Value, depth: usize) {
         }
         leaf => {
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.spacing_mut().item_spacing.x = space::S;
                 ui.label(RichText::new(format!("{key}:")).font(theme::mono(12.0)).color(t.accent_ink));
                 let (text, col) = match leaf {
                     Value::String(s) => (format!("\"{}\"", truncate(s, 400)), t.text),
@@ -204,10 +200,8 @@ pub fn truncate(s: &str, max: usize) -> String {
 pub fn ledger_row(ui: &mut Ui, e: &Evidence, selected: bool) -> bool {
     let t = Tokens::get(ui.ctx());
     let col = confidence_color(Some(e.confidence));
-    let resp = egui::Frame::new()
-        .fill(if selected { t.accent_soft } else { t.card })
+    let resp = widgets::pane(if selected { t.accent_soft } else { t.card }, theme::pad_xy(space::SM, space::S))
         .corner_radius(t.r_sm())
-        .inner_margin(Margin::symmetric(8, 6))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -223,7 +217,7 @@ pub fn ledger_row(ui: &mut Ui, e: &Evidence, selected: bool) -> bool {
         .response;
     let resp = resp.interact(egui::Sense::click());
     if resp.hovered() && !selected {
-        ui.painter().rect_stroke(resp.rect, t.radius_sm, egui::Stroke::new(1.0, t.field_border), egui::StrokeKind::Inside);
+        ui.painter().rect_stroke(resp.rect, t.radius_sm, theme::hairline(t.field_border), egui::StrokeKind::Inside);
     }
     resp.clicked()
 }

@@ -3,7 +3,7 @@
 
 use crate::i18n::{LANGUAGES, tr, trf};
 use crate::state::SettingsTab;
-use crate::theme::{self, ThemeKind, Tokens};
+use crate::theme::{self, ThemeKind, Tokens, space};
 use crate::{CraftApp, Pick, icons, widgets};
 use craft_anything_ai::BackendKind;
 use craft_anything_engine::Mode;
@@ -19,100 +19,98 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
     let mut open = true;
     // A modal (dimmed backdrop, Esc or a click outside closes) with a full-size close button;
     // egui's window close box is 14 px.
-    let resp = egui::Modal::new(egui::Id::new("settings-window"))
-        .frame(egui::Frame::new().fill(t.card).corner_radius(t.r_lg()).inner_margin(egui::Margin::same(20)).stroke(egui::Stroke::new(1.0, t.card_border)))
-        .show(ctx, |ui| {
-            ui.set_width(680.0);
-            ui.horizontal(|ui| {
-                ui.label(theme::heading(tr("Settings"), theme::SECTION));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if icons::button(ui, "x", 32.0, false, "Close").clicked() {
-                        open = false;
-                    }
-                });
+    let resp = egui::Modal::new(egui::Id::new("settings-window")).frame(widgets::dialog(&t)).show(ctx, |ui| {
+        ui.set_width(680.0);
+        ui.horizontal(|ui| {
+            ui.label(theme::heading(tr("Settings"), theme::SECTION));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if icons::button(ui, "x", 32.0, false, "Close").clicked() {
+                    open = false;
+                }
             });
-            // An error (a save that failed) shows here too: the message bar is behind this window.
-            if let Some(i) = app.state.toasts.iter().rposition(|(_, error)| *error) {
-                let text = app.state.toasts[i].0.clone();
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    icons::show(ui, "triangle-alert", 16.0, t.danger);
-                    ui.add(egui::Label::new(RichText::new(text).color(t.danger)).wrap());
-                    if icons::button(ui, "x", 24.0, false, "Dismiss").clicked() {
-                        app.state.toasts.remove(i);
+        });
+        // An error (a save that failed) shows here too: the message bar is behind this window.
+        if let Some(i) = app.state.toasts.iter().rposition(|(_, error)| *error) {
+            let text = app.state.toasts[i].0.clone();
+            ui.add_space(space::SM);
+            ui.horizontal(|ui| {
+                icons::show(ui, "triangle-alert", 16.0, t.danger);
+                ui.add(egui::Label::new(RichText::new(text).color(t.danger)).wrap());
+                if icons::button(ui, "x", 24.0, false, "Dismiss").clicked() {
+                    app.state.toasts.remove(i);
+                }
+            });
+        }
+        ui.add_space(space::M);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(150.0);
+                for (tab, icon, title) in [
+                    (SettingsTab::General, "settings", "General"),
+                    (SettingsTab::Engines, "cpu", "Engines"),
+                    (SettingsTab::Ai, "bot", "AI"),
+                    (SettingsTab::Builds, "hammer", "Builds"),
+                    (SettingsTab::Plugins, "puzzle", "Plugins"),
+                    (SettingsTab::Safety, "shield", "Safety"),
+                ] {
+                    let on = app.state.settings_tab == tab;
+                    let (rect, r) = ui.allocate_exact_size(Vec2::new(150.0, 34.0), egui::Sense::click());
+                    r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, tr(title)));
+                    if on {
+                        ui.painter().rect_filled(rect, t.radius, t.accent_soft);
+                    } else if r.hovered() {
+                        ui.painter().rect_filled(rect, t.radius, t.hover);
                     }
-                });
-            }
-            ui.add_space(12.0);
-            ui.horizontal_top(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(150.0);
-                    for (tab, icon, title) in [
-                        (SettingsTab::General, "settings", "General"),
-                        (SettingsTab::Engines, "cpu", "Engines"),
-                        (SettingsTab::Ai, "bot", "AI"),
-                        (SettingsTab::Builds, "hammer", "Builds"),
-                        (SettingsTab::Plugins, "puzzle", "Plugins"),
-                        (SettingsTab::Safety, "shield", "Safety"),
-                    ] {
-                        let on = app.state.settings_tab == tab;
-                        let (rect, r) = ui.allocate_exact_size(Vec2::new(150.0, 34.0), egui::Sense::click());
-                        r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, tr(title)));
-                        if on {
-                            ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-                        } else if r.hovered() {
-                            ui.painter().rect_filled(rect, t.radius, t.hover);
-                        }
-                        icons::paint(
-                            ui,
-                            egui::Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.center().y - 8.0), Vec2::splat(16.0)),
-                            icon,
-                            16.0,
-                            if on { t.accent_ink } else { t.icon },
-                        );
-                        ui.painter().text(
-                            egui::pos2(rect.left() + 36.0, rect.center().y),
-                            egui::Align2::LEFT_CENTER,
-                            tr(title),
-                            theme::medium(theme::SMALL),
-                            if on { t.text } else { t.text_dim },
-                        );
-                        if r.clicked() {
-                            app.state.settings_tab = tab;
-                            if tab == SettingsTab::Ai && app.detected.is_none() {
-                                app.detect_backends();
-                            }
+                    icons::paint(
+                        ui,
+                        egui::Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.center().y - 8.0), Vec2::splat(16.0)),
+                        icon,
+                        16.0,
+                        if on { t.accent_ink } else { t.icon },
+                    );
+                    ui.painter().text(
+                        egui::pos2(rect.left() + 36.0, rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        tr(title),
+                        theme::medium(theme::SMALL),
+                        if on { t.text } else { t.text_dim },
+                    );
+                    if r.clicked() {
+                        app.state.settings_tab = tab;
+                        if tab == SettingsTab::Ai && app.detected.is_none() {
+                            app.detect_backends();
                         }
                     }
-                });
-                ui.separator();
-                ui.vertical(|ui| {
-                    // Exactly what's left of the window, with room for the scroll bar a long tab
-                    // gets, so no tab can widen the window (#68).
-                    let w = ui.available_width();
-                    ui.set_width(w);
-                    let content_w = w - ui.spacing().scroll.allocated_width();
-                    // As tall as the window allows, so a tab's settings aren't cut off at the fold.
-                    let h = (ctx.content_rect().height() - 220.0).clamp(280.0, 560.0);
-                    // Not shrunk to the tab's content: that gave each tab its own width and put the
-                    // scroll bar in a different place on every page.
-                    let tab = app.state.settings_tab;
-                    egui::ScrollArea::vertical().auto_shrink([false, false]).min_scrolled_height(h).max_height(h).max_width(w).show(ui, |ui| {
-                        // The bar sits at the edge of the area, so the air between it and the
-                        // settings is taken from the settings' side.
-                        ui.set_max_width(content_w - 14.0);
-                        match tab {
-                            SettingsTab::General => general(app, ui),
-                            SettingsTab::Engines => engines(app, ui),
-                            SettingsTab::Ai => ai(app, ui),
-                            SettingsTab::Builds => builds(app, ui),
-                            SettingsTab::Plugins => plugins(app, ui),
-                            SettingsTab::Safety => safety(app, ui),
-                        }
-                    });
+                }
+            });
+            ui.separator();
+            ui.vertical(|ui| {
+                // Exactly what's left of the window, with room for the scroll bar a long tab
+                // gets, so no tab can widen the window (#68).
+                let w = ui.available_width();
+                ui.set_width(w);
+                let content_w = w - ui.spacing().scroll.allocated_width();
+                // As tall as the window allows, so a tab's settings aren't cut off at the fold.
+                let h = (ctx.content_rect().height() - 220.0).clamp(280.0, 560.0);
+                // Not shrunk to the tab's content: that gave each tab its own width and put the
+                // scroll bar in a different place on every page.
+                let tab = app.state.settings_tab;
+                egui::ScrollArea::vertical().auto_shrink([false, false]).min_scrolled_height(h).max_height(h).max_width(w).show(ui, |ui| {
+                    // The bar sits at the edge of the area, so the air between it and the
+                    // settings is taken from the settings' side.
+                    ui.set_max_width(content_w - 14.0);
+                    match tab {
+                        SettingsTab::General => general(app, ui),
+                        SettingsTab::Engines => engines(app, ui),
+                        SettingsTab::Ai => ai(app, ui),
+                        SettingsTab::Builds => builds(app, ui),
+                        SettingsTab::Plugins => plugins(app, ui),
+                        SettingsTab::Safety => safety(app, ui),
+                    }
                 });
             });
         });
+    });
     if !open || resp.should_close() {
         app.state.settings_open = false;
     }
@@ -130,7 +128,7 @@ fn row(ui: &mut Ui, title: &str, sub: &str, add: impl FnOnce(&mut Ui)) {
         });
         add(ui);
     });
-    ui.add_space(10.0);
+    ui.add_space(space::M);
 }
 
 fn general(app: &mut CraftApp, ui: &mut Ui) {
@@ -154,7 +152,7 @@ fn general(app: &mut CraftApp, ui: &mut Ui) {
     let mut remove = None;
     for f in &app.settings.project_folders {
         ui.horizontal(|ui| {
-            ui.add_space(12.0);
+            ui.add_space(space::M);
             crate::icons::show(ui, "folder", 14.0, Tokens::get(ui.ctx()).text_faint);
             ui.add(egui::Label::new(RichText::new(f.display().to_string()).font(theme::mono(12.0))).truncate());
             if crate::icons::button(ui, "x", 22.0, false, &trf("Stop listing {folder}", &[("folder", &f.display().to_string())])).clicked() {
@@ -259,7 +257,7 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
             }
         },
     );
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     row(ui, "Ghidra", "Adds its decompiler to Deep mode. OMCA can download and set it up for you.", |ui| {
         crate::engine_ui::ghidra_status(app, ui);
     });
@@ -270,7 +268,7 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
         |ui| crate::engine_ui::ghidra_memory_setting(app, ui),
     );
     ui.label(RichText::new(crate::engine_ui::ghidra_memory_guide()).color(t.text_faint).size(theme::CAPTION));
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     row(ui, "Ghidra folder", "Leave empty to use the one OMCA sets up.", |ui| {
         if path_field(ui, &mut app.settings.engines.ghidra.install_dir, "Ghidra folder", "managed") {
             app.settings_changed();
@@ -284,14 +282,14 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
             app.settings_changed();
         }
     });
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     crate::engine_ui::settings_section(app, ui);
-    ui.add_space(12.0);
+    ui.add_space(space::M);
     widgets::caption(ui, "Your own tool installs (optional)");
     ui.label(RichText::new(tr("Leave a path empty to use the managed install. We never need environment variables.")).color(t.text_faint).size(theme::CAPTION));
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     let mut changed = false;
-    egui::Grid::new("tool-paths").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+    egui::Grid::new("tool-paths").num_columns(2).spacing([space::M, space::S]).show(ui, |ui| {
         // Names and purposes come from the engine table; the override list matches it (tested).
         for (id, v) in app.settings.engines.tools.entries_mut() {
             let (name, needed_for) = craft_anything_engines::engine(id).map(|e| (e.name, e.needed_for)).unwrap_or((id, ""));
@@ -323,9 +321,9 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
     }
     let t = Tokens::get(ui.ctx());
     crate::engine_ui::assets_settings(app, ui);
-    ui.add_space(16.0);
+    ui.add_space(space::L);
     widgets::caption(ui, "Your brains");
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     if app.backends.is_empty() {
         ui.label(RichText::new(tr("No AI is set up yet. The built-in engines still work; an AI adds plain-words answers.")).color(t.text_dim));
     }
@@ -384,7 +382,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                             folder_drafts.remove(&b.name);
                         }
                         let mut text = folder_drafts.get(&b.name).cloned().unwrap_or_else(|| saved.clone());
-                        ui.add_space(4.0);
+                        ui.add_space(space::XS);
                         let label = ui.label(RichText::new(tr("Claude Code folder (CLAUDE_CONFIG_DIR)")).size(theme::CAPTION).color(t.text_dim));
                         ui.label(
                             RichText::new(tr("Its own sign-in, settings and conversations: another folder is another account. Empty: its usual folder."))
@@ -406,7 +404,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                         if r.lost_focus() && text.trim() != saved {
                             save_folder = Some((b.name.clone(), text.trim().to_string()));
                         }
-                        ui.add_space(4.0);
+                        ui.add_space(space::XS);
                     }
                     // How hard it thinks: the Claude API and Claude Code take every Claude level.
                     let effort = craft_anything_ai::effort_in_use(b, app.backend_options.get(&b.name));
@@ -551,9 +549,9 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                     }
                 });
             });
-            ui.add_space(6.0);
+            ui.add_space(space::S);
             ui.horizontal_wrapped(|ui| {
-                ui.add_space(26.0);
+                ui.add_space(space::XL);
                 if app.state.backend.as_ref() == Some(&b.name) {
                     widgets::pill(ui, "In use", t.on_accent, t.accent);
                 } else if widgets::secondary(ui, None, "Use").clicked() {
@@ -605,7 +603,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                 ui.label(RichText::new(tr("Off")).color(t.text_faint).size(theme::CAPTION));
             }
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     if let Some((name, on)) = toggle {
         app.set_backend_enabled(&name, on);
@@ -662,7 +660,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
     if let Some(e) = extracts {
         app.set_role(craft_anything_ai::Role::Extractor, e);
     }
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     let detected = app.detected.clone().unwrap_or_default();
     let mut tab = {
         let (providers, harnesses) = crate::detect_tabs::counts(&detected);
@@ -670,7 +668,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
     };
     ui.horizontal(|ui| {
         widgets::caption(ui, "Found on this computer");
-        ui.add_space(12.0);
+        ui.add_space(space::M);
         tab = crate::detect_tabs::bar(ui, &mut app.state.detect_tab, &detected);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if app.detecting {
@@ -680,7 +678,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
             }
         });
     });
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     if detected.is_empty() && !app.detecting {
         ui.label(
             RichText::new(tr("Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below."))
@@ -745,7 +743,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                 });
             }
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     server_form(app, ui);
 }
@@ -755,10 +753,10 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
 /// The first run's AI step shows it too.
 pub(crate) fn server_form(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     widgets::caption(ui, "Add an AI by its address");
     ui.label(RichText::new(tr("Ollama or LM Studio on another computer, or any service that speaks the OpenAI API.")).color(t.text_faint).size(theme::CAPTION));
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     let form = &mut app.server_form;
     // `width` is the text's; the compact frame adds 8 points a side and its border.
     const FRAME: f32 = 18.0;
@@ -815,7 +813,7 @@ fn builds(app: &mut CraftApp, ui: &mut Ui) {
     row(ui, "Builds at once", "How many projects may build at the same time. More wait their turn.", |ui| {
         changed |= number(ui, &mut b.parallel, 1..=8, "", "");
     });
-    ui.add_space(8.0);
+    ui.add_space(space::SM);
     widgets::caption(ui, "Generated art (games)");
     let a = &mut app.settings.assets;
     row(
@@ -860,7 +858,7 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
         )
         .wrap(),
     );
-    ui.add_space(10.0);
+    ui.add_space(space::M);
     let plugins = app.settings.plugins.mcp.clone();
     let wasm = app.settings.plugins.wasm.clone();
     if plugins.is_empty() && wasm.is_empty() {
@@ -892,7 +890,7 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
                 }
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     for (i, p) in wasm.iter().enumerate() {
         widgets::panel(&t).show(ui, |ui| {
@@ -913,7 +911,7 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
                 }
             });
         });
-        ui.add_space(6.0);
+        ui.add_space(space::S);
     }
     if changed {
         app.settings_changed();
@@ -921,9 +919,9 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
     if !plugins.is_empty() || !wasm.is_empty() {
         ui.label(RichText::new(tr("Turning a plugin on or off takes effect from the next start.")).color(t.text_faint).size(theme::CAPTION));
     }
-    ui.add_space(14.0);
+    ui.add_space(space::L);
     widgets::caption(ui, "Add a plugin");
-    ui.add_space(4.0);
+    ui.add_space(space::XS);
     let form = &mut app.state.plugin_form;
     ui.horizontal(|ui| {
         let id =
@@ -941,7 +939,7 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
         );
         widgets::named(args, "Plugin arguments");
     });
-    ui.add_space(6.0);
+    ui.add_space(space::S);
     let params = app.state.plugin_form.params();
     if widgets::primary_icon(ui, Some("plus"), "Add", params.is_some()).clicked()
         && let Some(params) = params
@@ -1004,7 +1002,7 @@ fn safety(app: &mut CraftApp, ui: &mut Ui) {
         },
     );
     if let Some(p) = app.view.project.clone() {
-        ui.add_space(8.0);
+        ui.add_space(space::SM);
         widgets::caption(ui, &format!("{} {}", tr("Allowed in"), p));
         if app.view.project_allows.is_empty() {
             ui.label(RichText::new(tr("Nothing allowed yet.")).color(t.text_faint));

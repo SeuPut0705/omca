@@ -5,7 +5,7 @@
 use crate::i18n::tr;
 use crate::make::{ago, status_shown};
 use crate::state::Screen;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, icons, widgets};
 use egui::{RichText, Sense, Ui, Vec2};
 
@@ -70,7 +70,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
             centred_row(ui, 22.0, refresh)
         } else {
             ui.horizontal(|ui| {
-                ui.add_space(12.0);
+                ui.add_space(space::M);
                 widgets::caption(ui, "Projects");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), refresh).inner
             })
@@ -79,10 +79,10 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         if again {
             app.refresh_projects();
         }
-        ui.add_space(4.0);
+        ui.add_space(space::XS);
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             if app.projects.is_empty() && !fold {
-                egui::Frame::new().inner_margin(egui::Margin { left: 12, right: 8, top: 2, bottom: 2 }).show(ui, |ui| {
+                widgets::inset(theme::pad_sides(space::M, space::SM, space::XXS, space::XXS)).show(ui, |ui| {
                     ui.label(RichText::new(tr("Nothing made yet. What you make shows up here.")).color(t.text_faint).size(theme::SMALL));
                 });
                 return;
@@ -110,8 +110,8 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
             }
         });
     });
-    ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top() + 1.0, egui::Stroke::new(1.0, t.separator));
-    ui.add_space(10.0);
+    ui.painter().hline(ui.max_rect().x_range(), ui.cursor().top() + 1.0, theme::hairline(t.separator));
+    ui.add_space(space::M);
     if row(ui, "settings", "Settings", None, app.state.settings_open).clicked() {
         app.state.settings_open = !app.state.settings_open;
     }
@@ -132,7 +132,7 @@ pub(crate) fn section_gap(ui: &mut Ui, fold: bool, height: f32) {
     ui.add_space(height);
     if fold {
         let t = Tokens::get(ui.ctx());
-        ui.painter().hline(ui.max_rect().shrink2(Vec2::new(12.0, 0.0)).x_range(), y, egui::Stroke::new(1.0, t.separator));
+        ui.painter().hline(ui.max_rect().shrink2(Vec2::new(12.0, 0.0)).x_range(), y, theme::hairline(t.separator));
     }
 }
 

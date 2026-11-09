@@ -2,7 +2,7 @@
 //! and converted by the schema's types when the tool runs.
 
 use crate::i18n::tr;
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::widgets;
 use egui::{RichText, Ui};
 use serde_json::{Map, Value};
@@ -130,7 +130,7 @@ pub fn show(ui: &mut Ui, fields: &[Field], values: &mut BTreeMap<String, String>
         ui.label(RichText::new(tr("This tool takes no settings.")).color(t.text_dim));
         return;
     }
-    egui::Grid::new("schema-form").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
+    egui::Grid::new("schema-form").num_columns(2).spacing([space::M, space::SM]).show(ui, |ui| {
         for f in fields {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {

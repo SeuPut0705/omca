@@ -53,7 +53,10 @@ Layering is enforced by `cargo xtask layers`. Register new crates in `xtask/src/
    which only adds. Evidence records the engine and the flag.
 5. **Effects are honest.** Declare every side effect. `EXECUTES_FOREIGN_CODE` and `MUTATES_DEVICE` trigger consent.
 6. **Never break wasm** for L0–L2 (`cargo xtask wasm`).
-7. **Thin UI.** UI state is serde data; colours/radii come from theme tokens.
+7. **Thin UI.** UI state is serde data. `ui-egui/src/theme.rs` (colour tokens, type scale, `space::*` gaps,
+   `pad*` paddings, `line`/`hairline` widths) and `widgets.rs` (`card`, `pane`, `callout`, `chip`, `code_block`…)
+   are the UI kit and the only place a colour, line, corner, padding, gap or frame is made; screens use their
+   names. `theme::tests::no_style_literals_outside_the_kit` refuses anything else.
 8. **No secrets, no personal data** in requests, logs, tests or the repo (it is public): no API keys, tokens,
    private keys, `.env` files or local paths, only obvious fakes like `sk-test`. `cargo xtask secrets` checks what
    git would commit (`--history` checks every commit); enable the hook once per clone with

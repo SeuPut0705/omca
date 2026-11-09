@@ -3,10 +3,10 @@
 
 use crate::i18n::tr;
 use crate::state::{Modal, Screen};
-use crate::theme::{self, Tokens};
+use crate::theme::{self, Tokens, space};
 use crate::{CraftApp, Pick, Route, icons, widgets};
 use craft_anything_engine::Consent;
-use egui::{Margin, RichText, Ui, Vec2};
+use egui::{RichText, Ui, Vec2};
 use serde_json::json;
 
 /// Tools that open a website, best first.
@@ -54,13 +54,13 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         let w = full_w.min(1000.0) - 48.0;
         let pad = ((full_w - w) / 2.0).max(24.0);
         // Tight enough that Start is in view at 900 px with every choice showing (tested).
-        ui.add_space(24.0);
+        ui.add_space(space::XL);
         ui.horizontal(|ui| {
             ui.add_space(pad);
             ui.vertical(|ui| {
                 ui.set_width(w);
                 crate::make::hero(app, ui, w);
-                ui.add_space(36.0);
+                ui.add_space(space::XXXL);
             });
         });
     });
@@ -75,118 +75,110 @@ pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
     };
     let t = Tokens::get(ctx);
     let mut close = false;
-    let resp = egui::Modal::new(egui::Id::new("craft-modal"))
-        .frame(egui::Frame::new().fill(t.card).corner_radius(t.r_lg()).inner_margin(Margin::same(24)).stroke(egui::Stroke::new(1.0, t.card_border)))
-        .show(ctx, |ui| {
-            ui.set_width(440.0);
-            match &modal {
-                Modal::ComingSoon { title, body, icon } => {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(52.0), egui::Sense::hover());
-                    ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-                    icons::paint(ui, rect, icon, 26.0, t.accent_ink);
-                    ui.add_space(10.0);
-                    ui.label(theme::heading(tr(title), theme::SECTION));
-                    ui.add_space(4.0);
-                    ui.label(RichText::new(tr(body)).color(t.text_dim));
-                    ui.add_space(16.0);
-                    if widgets::primary(ui, "Got it").clicked() {
+    let resp = egui::Modal::new(egui::Id::new("craft-modal")).frame(widgets::dialog(&t)).show(ctx, |ui| {
+        ui.set_width(440.0);
+        match &modal {
+            Modal::ComingSoon { title, body, icon } => {
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(52.0), egui::Sense::hover());
+                ui.painter().rect_filled(rect, t.radius, t.accent_soft);
+                icons::paint(ui, rect, icon, 26.0, t.accent_ink);
+                ui.add_space(space::M);
+                ui.label(theme::heading(tr(title), theme::SECTION));
+                ui.add_space(space::XS);
+                ui.label(RichText::new(tr(body)).color(t.text_dim));
+                ui.add_space(space::L);
+                if widgets::primary(ui, "Got it").clicked() {
+                    close = true;
+                }
+            }
+            Modal::Website => {
+                ui.label(theme::heading(tr("Look at a website"), theme::SECTION));
+                ui.add_space(space::SM);
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut app.state.url_input)
+                        .hint_text("https://example.com")
+                        .desired_width(f32::INFINITY)
+                        .frame(widgets::text_field_frame(&t)),
+                );
+                widgets::named(r.clone(), "Website address");
+                // Ready to type into as the dialog opens.
+                let opened = egui::Id::new("website-dialog-focused");
+                if !ui.data(|d| d.get_temp::<bool>(opened).unwrap_or(false)) {
+                    r.request_focus();
+                    ui.data_mut(|d| d.insert_temp(opened, true));
+                }
+                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                ui.add_space(space::M);
+                ui.horizontal(|ui| {
+                    let ok = !app.state.url_input.trim().is_empty();
+                    if (widgets::primary_icon(ui, Some("globe"), "Open it", ok).clicked() || enter)
+                        && ok
+                        && let Some(tool) = app.first_tool(WEBSITE_TOOLS)
+                    {
+                        let url = app.state.url_input.trim().to_string();
+                        let params = app.params_for(tool, &[("url", json!(url))]);
+                        app.state.screen = Screen::Ask;
+                        app.run_tool(
+                            tool,
+                            params,
+                            Route::Chat { intro: tr("Here's what I found on that page:"), cta: app.state.backend.is_none() },
+                            Consent::NotAsked,
+                        );
                         close = true;
                     }
-                }
-                Modal::Website => {
-                    ui.label(theme::heading(tr("Look at a website"), theme::SECTION));
-                    ui.add_space(8.0);
-                    let r = ui.add(
-                        egui::TextEdit::singleline(&mut app.state.url_input)
-                            .hint_text("https://example.com")
-                            .desired_width(f32::INFINITY)
-                            .frame(widgets::text_field_frame(&t)),
-                    );
-                    widgets::named(r.clone(), "Website address");
-                    // Ready to type into as the dialog opens.
-                    let opened = egui::Id::new("website-dialog-focused");
-                    if !ui.data(|d| d.get_temp::<bool>(opened).unwrap_or(false)) {
-                        r.request_focus();
-                        ui.data_mut(|d| d.insert_temp(opened, true));
+                    if widgets::secondary(ui, None, "Cancel").clicked() {
+                        close = true;
                     }
-                    let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    ui.add_space(12.0);
+                });
+            }
+            Modal::Tutorial(i) => {
+                if let Some((_, title, blurb, steps)) = TUTORIALS.get(*i) {
+                    ui.label(theme::heading(tr(title), theme::SECTION));
+                    ui.label(RichText::new(tr(blurb)).color(t.text_dim));
+                    ui.add_space(space::M);
+                    for (n, s) in steps.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.0), egui::Sense::hover());
+                            ui.painter().circle_filled(rect.center(), 12.0, t.accent_soft);
+                            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, (n + 1).to_string(), theme::semibold(theme::CAPTION), t.accent_ink);
+                            ui.add(egui::Label::new(tr(s)).wrap());
+                        });
+                        ui.add_space(space::XS);
+                    }
+                    ui.add_space(space::M);
                     ui.horizontal(|ui| {
-                        let ok = !app.state.url_input.trim().is_empty();
-                        if (widgets::primary_icon(ui, Some("globe"), "Open it", ok).clicked() || enter)
-                            && ok
-                            && let Some(tool) = app.first_tool(WEBSITE_TOOLS)
-                        {
-                            let url = app.state.url_input.trim().to_string();
-                            let params = app.params_for(tool, &[("url", json!(url))]);
-                            app.state.screen = Screen::Ask;
-                            app.run_tool(
-                                tool,
-                                params,
-                                Route::Chat { intro: tr("Here's what I found on that page:"), cta: app.state.backend.is_none() },
-                                Consent::NotAsked,
-                            );
+                        if widgets::primary_icon(ui, Some("folder-open"), "Open something", true).clicked() {
+                            app.pick(Pick::OpenFile);
                             close = true;
                         }
-                        if widgets::secondary(ui, None, "Cancel").clicked() {
+                        if widgets::secondary(ui, None, "Close").clicked() {
                             close = true;
                         }
                     });
                 }
-                Modal::Tutorial(i) => {
-                    if let Some((_, title, blurb, steps)) = TUTORIALS.get(*i) {
-                        ui.label(theme::heading(tr(title), theme::SECTION));
-                        ui.label(RichText::new(tr(blurb)).color(t.text_dim));
-                        ui.add_space(12.0);
-                        for (n, s) in steps.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.0), egui::Sense::hover());
-                                ui.painter().circle_filled(rect.center(), 12.0, t.accent_soft);
-                                ui.painter().text(
-                                    rect.center(),
-                                    egui::Align2::CENTER_CENTER,
-                                    (n + 1).to_string(),
-                                    theme::semibold(theme::CAPTION),
-                                    t.accent_ink,
-                                );
-                                ui.add(egui::Label::new(tr(s)).wrap());
-                            });
-                            ui.add_space(4.0);
-                        }
-                        ui.add_space(12.0);
-                        ui.horizontal(|ui| {
-                            if widgets::primary_icon(ui, Some("folder-open"), "Open something", true).clicked() {
-                                app.pick(Pick::OpenFile);
-                                close = true;
-                            }
-                            if widgets::secondary(ui, None, "Close").clicked() {
-                                close = true;
-                            }
-                        });
-                    }
-                }
-                Modal::Engine(b) => crate::engine_ui::modal(app, ui, *b, &mut close),
-                Modal::Assets => crate::engine_ui::assets_modal(app, ui, &mut close),
-                Modal::Ghidra => crate::engine_ui::ghidra_modal(app, ui, &mut close),
-                Modal::GamePermission => crate::game_files::permission_modal(app, ui, &mut close),
-                Modal::DeepMode => crate::engine_ui::deep_modal(app, ui, &mut close),
-                Modal::ExistingFiles => crate::folders::existing_modal(app, ui, &mut close),
-                Modal::NeedBuilder { start } => crate::builders::need_builder_modal(app, ui, *start, &mut close),
-                Modal::Rename(root) => crate::manage::rename_modal(app, ui, root, &mut close),
-                Modal::Delete(root) => crate::manage::delete_modal(app, ui, root, &mut close),
-                Modal::Pin => crate::pins::pin_modal(app, ui, &mut close),
-                Modal::PinRename(root, id) => crate::pins::rename_modal(app, ui, root, *id, &mut close),
-                Modal::PinDelete(root, id) => crate::pins::delete_modal(app, ui, root, *id, &mut close),
-                Modal::About => {
-                    ui.label(theme::heading("OMCA", theme::SECTION));
-                    ui.label(RichText::new(format!("{} {}", tr("Version"), env!("CARGO_PKG_VERSION"))).color(t.text_dim));
-                    ui.add_space(12.0);
-                    if widgets::primary(ui, "Close").clicked() {
-                        close = true;
-                    }
+            }
+            Modal::Engine(b) => crate::engine_ui::modal(app, ui, *b, &mut close),
+            Modal::Assets => crate::engine_ui::assets_modal(app, ui, &mut close),
+            Modal::Ghidra => crate::engine_ui::ghidra_modal(app, ui, &mut close),
+            Modal::GamePermission => crate::game_files::permission_modal(app, ui, &mut close),
+            Modal::DeepMode => crate::engine_ui::deep_modal(app, ui, &mut close),
+            Modal::ExistingFiles => crate::folders::existing_modal(app, ui, &mut close),
+            Modal::NeedBuilder { start } => crate::builders::need_builder_modal(app, ui, *start, &mut close),
+            Modal::Rename(root) => crate::manage::rename_modal(app, ui, root, &mut close),
+            Modal::Delete(root) => crate::manage::delete_modal(app, ui, root, &mut close),
+            Modal::Pin => crate::pins::pin_modal(app, ui, &mut close),
+            Modal::PinRename(root, id) => crate::pins::rename_modal(app, ui, root, *id, &mut close),
+            Modal::PinDelete(root, id) => crate::pins::delete_modal(app, ui, root, *id, &mut close),
+            Modal::About => {
+                ui.label(theme::heading("OMCA", theme::SECTION));
+                ui.label(RichText::new(format!("{} {}", tr("Version"), env!("CARGO_PKG_VERSION"))).color(t.text_dim));
+                ui.add_space(space::M);
+                if widgets::primary(ui, "Close").clicked() {
+                    close = true;
                 }
             }
-        });
+        }
+    });
     if resp.should_close() {
         dismiss(app);
     } else if close {

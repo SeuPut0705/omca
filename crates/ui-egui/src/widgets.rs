@@ -2,7 +2,7 @@
 
 use crate::i18n::tr;
 use crate::icons;
-use crate::theme::{self, Tokens, confidence_color, confidence_label};
+use crate::theme::{self, Tokens, confidence_color, confidence_label, space};
 use craft_anything_engine::evidence::Confidence;
 use egui::{Color32, Frame, Margin, Response, RichText, Sense, Stroke, Ui, Vec2};
 
@@ -112,9 +112,9 @@ pub fn choice_tile(ui: &mut Ui, size: Vec2, icon: &str, label: &str, blurb: &str
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(size.x, size.y.max(text_h + 24.0)), Sense::click());
     let h = hover_t(ui, &resp);
     let (fill, stroke) = if on {
-        (t.accent_soft, Stroke::new(2.0, t.accent))
+        (t.accent_soft.gamma_multiply(0.6), theme::line(theme::EMPHASIS, t.accent))
     } else {
-        (theme::mix(Color32::TRANSPARENT, t.hover, h), Stroke::new(1.0, theme::mix(t.field_border, t.text_faint, h)))
+        (theme::mix(Color32::TRANSPARENT, t.hover, h), theme::hairline(theme::mix(t.field_border, t.text_faint, h)))
     };
     ui.painter().rect(rect, t.radius, fill, stroke, egui::StrokeKind::Inside);
     let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 28.0, rect.center().y), Vec2::splat(24.0));
@@ -151,7 +151,44 @@ pub fn panel(t: &Tokens) -> Frame {
     Frame::new().fill(t.card).stroke(Stroke::new(1.0, t.card_border)).corner_radius(t.r()).inner_margin(Margin::same(10))
 }
 
-/// The main action: an ink-filled button (light on dark in the dark theme).
+/// A panel's background: `fill` (a surface token) with `margin` (from the spacing scale) inside.
+/// For side panels, bars and the central pane.
+pub fn pane(fill: Color32, margin: Margin) -> Frame {
+    Frame::new().fill(fill).inner_margin(margin)
+}
+
+/// Room around content with no background of its own.
+pub fn inset(margin: Margin) -> Frame {
+    Frame::new().inner_margin(margin)
+}
+
+/// A dialog or a floating sheet: a card with roomier padding.
+pub fn dialog(t: &Tokens) -> Frame {
+    card(t).inner_margin(theme::pad(space::XL))
+}
+
+/// A card that needs the eye (a question, a warning, the step being worked on): an emphasis
+/// edge in `edge`.
+pub fn callout(t: &Tokens, edge: Color32) -> Frame {
+    Frame::new().fill(t.card).stroke(theme::line(theme::EMPHASIS, edge)).corner_radius(t.r_lg()).inner_margin(theme::pad(space::L))
+}
+
+/// A soft, edgeless note on the accent wash.
+pub fn callout_soft(t: &Tokens) -> Frame {
+    Frame::new().fill(t.accent_soft).corner_radius(t.r_lg()).inner_margin(theme::pad(space::L))
+}
+
+/// A tag or a small chip: the raised surface, tight padding.
+pub fn chip(t: &Tokens) -> Frame {
+    Frame::new().fill(t.raised).corner_radius(t.r_sm()).inner_margin(theme::pad_xy(space::SM, space::XXS))
+}
+
+/// A block of code or raw text.
+pub fn code_block(t: &Tokens) -> Frame {
+    Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(theme::pad(space::SM))
+}
+
+/// The main action: a button filled in the app colour.
 pub fn primary(ui: &mut Ui, label: &str) -> Response {
     primary_icon(ui, None, label, true)
 }
@@ -160,10 +197,11 @@ pub fn primary_icon(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool)
     primary_sized(ui, icon, label, enabled, 32.0, 12.5)
 }
 
-/// The main button at a given height and label size (Simple mode's Start is a big one).
+/// The main button at a given height and label size (Simple mode's Start is a big one): filled
+/// in the app colour, the one place on a screen it is used as a fill.
 pub fn primary_sized(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool, height: f32, text: f32) -> Response {
     let t = Tokens::get(ui.ctx());
-    let galley = label_galley(ui, &tr(label), text, t.canvas);
+    let galley = label_galley(ui, &tr(label), text, t.on_accent);
     let icon_w = if icon.is_some() { BUTTON_ICON_W } else { 0.0 };
     let pad = ui.spacing().button_padding;
     let size = Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 8.0 + (height - 32.0).max(0.0), (galley.size().y + pad.y * 2.0 + 8.0).max(height));
@@ -172,12 +210,12 @@ pub fn primary_sized(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool
     let fill = if !enabled {
         t.pressed
     } else if resp.is_pointer_button_down_on() {
-        theme::mix(t.text, t.canvas, 0.25)
+        t.accent_hover
     } else {
-        theme::mix(t.text, t.canvas, 0.14 * hover_t(ui, &resp))
+        theme::mix(t.accent, t.accent_hover, hover_t(ui, &resp))
     };
     ui.painter().rect_filled(rect, t.radius, fill);
-    let fg = if enabled { t.canvas } else { t.text_faint };
+    let fg = if enabled { t.on_accent } else { t.text_faint };
     button_content(ui, rect, icon, galley, fg, fg);
     focus_ring(ui, &resp, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, tr(label)));
