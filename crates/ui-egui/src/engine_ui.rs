@@ -578,7 +578,7 @@ pub fn assets_settings(app: &mut CraftApp, ui: &mut Ui) {
             if stored == Some(true) {
                 ui.horizontal(|ui| {
                     widgets::pill(ui, "Key saved", t.success, t.raised);
-                    if widgets::secondary(ui, None, "Remove").clicked() {
+                    if widgets::action(ui, "Remove").clicked() {
                         app.remove_asset_key(provider.id().into());
                     }
                 });
@@ -684,7 +684,7 @@ fn status_line(app: &mut CraftApp, ui: &mut Ui, b: Builder, offer: bool) {
     let inv = app.game_engines.clone();
     ui.horizontal_wrapped(|ui| match &inv {
         None => {
-            ui.add(crate::widgets::Spinner::new().size(14.0).color(t.accent));
+            ui.add(crate::widgets::Spinner::new().size(size::ICON_SM).color(t.accent));
             ui.label(RichText::new(tr("Looking for game engines on this computer…")).color(t.text_dim).size(theme::SMALL));
         }
         Some(inv) if inv.ready(b) => {
@@ -798,7 +798,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
     ui.set_width(520.0);
     let Some(inv) = app.game_engines.clone() else {
         ui.horizontal(|ui| {
-            ui.add(crate::widgets::Spinner::new().size(16.0).color(t.accent));
+            ui.add(crate::widgets::Spinner::new().size(size::ICON).color(t.accent));
             ui.label(tr("Looking for game engines on this computer…"));
         });
         app.refresh_game_engines();
@@ -833,7 +833,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
                 icons::paint(ui, r, "check", size::ICON, t.canvas);
             } else {
                 ui.painter().rect_stroke(r, r.width() / 2.0, theme::hairline(if now { t.accent } else { t.field_border }), egui::StrokeKind::Inside);
-                let g = widgets::label_galley(ui, &(i + 1).to_string(), 12.0, t.text);
+                let g = widgets::label_galley(ui, &(i + 1).to_string(), theme::SMALL, t.text);
                 ui.painter().galley_with_override_text_color(r.center() - g.size() / 2.0, g, if now { t.text } else { t.text_faint });
             }
             ui.add_space(space::XS);
@@ -929,7 +929,7 @@ pub fn progress_bar(ui: &mut Ui, fraction: Option<f32>, message: &str) {
     ui.painter().rect_filled(egui::Rect::from_x_y_ranges(bar.left() + bar.width() * from..=bar.left() + bar.width() * to, bar.y_range()), 3.0, t.accent);
     ui.add_space(space::XS);
     let pct = fraction.map(|f| format!("{:.0}%  ·  ", f * 100.0)).unwrap_or_default();
-    ui.label(RichText::new(format!("{pct}{message}")).font(theme::mono(12.5)).color(t.text_dim));
+    ui.label(RichText::new(format!("{pct}{message}")).font(theme::mono(theme::CAPTION)).color(t.text_dim));
     widgets::animate(ui, Duration::from_millis(100));
 }
 

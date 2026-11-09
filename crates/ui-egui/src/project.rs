@@ -672,13 +672,13 @@ fn checklist(ui: &mut Ui, steps: &[PlanStep], t: &Tokens, began: Option<std::tim
                     folded = true;
                 }
                 if let Some(b) = began {
-                    ui.label(RichText::new(crate::usage::duration_words(b.elapsed())).font(theme::mono(12.0)).color(t.text_faint));
-                    ui.add(crate::widgets::Spinner::new().size(12.0).color(t.accent));
+                    ui.label(RichText::new(crate::usage::duration_words(b.elapsed())).font(theme::mono(theme::CAPTION)).color(t.text_faint));
+                    ui.add(crate::widgets::Spinner::new().size(size::ICON_SM).color(t.accent));
                     ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
                 }
                 ui.label(
                     RichText::new(trf("{done} of {all} done", &[("done", &done.to_string()), ("all", &steps.len().to_string())]))
-                        .font(theme::mono(12.0))
+                        .font(theme::mono(theme::CAPTION))
                         .color(t.text_faint),
                 );
             });
@@ -845,7 +845,7 @@ fn asset_line(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     ui.add_space(space::S);
     let budget = ws.manifest.asset_budget_usd;
     let amount = trf("{n} · ${spent} of ${budget}", &[("n", &n.to_string()), ("spent", &format!("{spent:.2}")), ("budget", &format!("{budget:.2}"))]);
-    ui.label(RichText::new(amount).font(theme::mono(12.5)).color(if spent >= budget { t.warning } else { t.text_dim }));
+    ui.label(RichText::new(amount).font(theme::mono(theme::SMALL)).color(if spent >= budget { t.warning } else { t.text_dim }));
     let step = craft_anything_engines::assets::usd(app.asset_budget_step());
     if widgets::link(ui, &trf("Raise the budget by {amount}", &[("amount", &step)])).clicked() {
         app.raise_asset_budget();
@@ -979,18 +979,17 @@ fn actions(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
         {
             app.pick(crate::Pick::Pictures);
         }
-        if widgets::secondary(ui, Some("folder-open"), "Open folder").clicked() {
+        // A dense row of well-known actions: icons, with their words as tooltips.
+        if widgets::icon_action(ui, "Open folder").clicked() {
             open_folder(app, ws);
         }
         if matches!(outcome(app), Some(Outcome::Program))
-            && widgets::secondary(ui, Some("pin"), "Pin this build").on_hover_text(tr("Keep this version in the sidebar to open any time.")).clicked()
+            && widgets::icon_action(ui, "Pin this build").on_hover_text(tr("Keep this version in the sidebar to open any time.")).clicked()
         {
             app.ask_pin(&ws.root);
         }
         crate::manage::buttons(app, ui, ws);
-        if !app.beginner()
-            && widgets::secondary(ui, Some("microscope"), "Open in the workbench").on_hover_text(tr("The full toolset, evidence and logs.")).clicked()
-        {
+        if !app.beginner() && widgets::icon_action(ui, "Open in the workbench").on_hover_text(tr("The full toolset, evidence and logs.")).clicked() {
             app.state.screen = Screen::Workbench;
         }
     });
@@ -1085,7 +1084,7 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
                 icons::paint(ui, marker, "check", size::ICON_XS, t.canvas);
             } else if now {
                 ui.painter().rect_filled(marker, round, t.accent);
-                let g = widgets::label_galley(ui, &number, theme::TINY - 1.5, t.on_accent);
+                let g = widgets::label_galley(ui, &number, theme::TINY, t.on_accent);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.on_accent);
                 let pulse = (ui.input(|i| i.time) as f32 * 2.5).sin().abs();
                 ui.painter().rect_stroke(
@@ -1097,11 +1096,11 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
                 widgets::animate(ui, widgets::FRAME);
             } else if here {
                 ui.painter().rect(marker, round, t.card, theme::line(theme::EMPHASIS, t.accent), egui::StrokeKind::Inside);
-                let g = widgets::label_galley(ui, &number, theme::TINY - 1.5, t.accent_ink);
+                let g = widgets::label_galley(ui, &number, theme::TINY, t.accent_ink);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.accent_ink);
             } else {
                 ui.painter().rect(marker, round, t.card, theme::hairline(t.field_border), egui::StrokeKind::Inside);
-                let g = widgets::label_galley(ui, &number, theme::TINY - 1.5, t.text_faint);
+                let g = widgets::label_galley(ui, &number, theme::TINY, t.text_faint);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.text_faint);
             }
             let x = marker.right() + space::SM;
@@ -1458,7 +1457,7 @@ fn work(ui: &mut Ui, tools: &[(String, Option<bool>)], notes: &[String], advance
                         Some(false) => ("triangle-alert", t.warning),
                     };
                     icons::show(ui, icon, size::ICON_XS, col);
-                    ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(12.5)).color(t.text_dim));
+                    ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(theme::SMALL)).color(t.text_dim));
                 });
             }
             for n in notes {
@@ -1554,7 +1553,7 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
                     .id_salt(("detail", &r.id))
                     .icon(widgets::disclosure_icon)
                     .show(ui, |ui| {
-                        ui.label(RichText::new(&r.detail).font(theme::mono(12.5)).color(t.text_dim));
+                        ui.label(RichText::new(&r.detail).font(theme::mono(theme::SMALL)).color(t.text_dim));
                     });
             } else {
                 ui.add(egui::Label::new(RichText::new(&r.detail).color(t.text_dim)).wrap());
@@ -1576,10 +1575,10 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
                 if widgets::primary(ui, "Allow once").clicked() {
                     out = Some((r.id.clone(), Answer { allow: Some(true), ..Default::default() }, tr("Allowed once")));
                 }
-                if widgets::secondary(ui, None, "Always for this project").clicked() {
+                if widgets::action(ui, "Always for this project").clicked() {
                     out = Some((r.id.clone(), Answer { allow: Some(true), always: true, ..Default::default() }, tr("Allowed for this project")));
                 }
-                if widgets::secondary(ui, None, "Don't allow").clicked() {
+                if widgets::action(ui, "Don't allow").clicked() {
                     out = Some((r.id.clone(), Answer { allow: Some(false), ..Default::default() }, tr("Not allowed")));
                 }
             });
@@ -1689,7 +1688,7 @@ fn check_card(app: &mut CraftApp, ui: &mut Ui, ctx: &egui::Context, ws: &Workspa
             for (i, p) in c.pages.iter().enumerate() {
                 let text = format!("{}  {:.0}%", if p.dir.is_empty() { tr("start page") } else { p.name.clone() }, p.similarity);
                 let colour = if p.similarity >= app.settings.build.good_enough { t.text_dim } else { t.warning };
-                if ui.selectable_label(i == picked, RichText::new(text).font(theme::mono(12.5)).color(colour)).clicked() {
+                if ui.selectable_label(i == picked, RichText::new(text).font(theme::mono(theme::SMALL)).color(colour)).clicked() {
                     picked = i;
                     ui.data_mut(|d| d.insert_temp(picked_id, i));
                 }
@@ -1892,7 +1891,7 @@ fn questions_switch(app: &mut CraftApp, ui: &mut Ui) {
     let (sending, asking) = (["Change it", "Just ask"], ["Ask me", "Decide yourself"]);
     let title = widgets::label_galley(ui, &tr(QUESTIONS_TITLE), theme::SMALL, t.text_dim).size().x;
     // The approvals menu's link, the space before it and one more item gap.
-    let approvals = widgets::label_galley(ui, &tr("Approvals"), theme::BODY, t.text).size().x + 8.0;
+    let approvals = widgets::label_galley(ui, &tr("Approvals"), theme::SMALL, t.text).size().x + 8.0;
     let gaps = ui.spacing().item_spacing.x * 4.0;
     let title = title + approvals;
     // Side by side when both switches fit, else one under the other (a longer language, a narrow window).

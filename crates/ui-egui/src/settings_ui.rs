@@ -172,7 +172,7 @@ fn general(app: &mut CraftApp, ui: &mut Ui) {
         ui.horizontal(|ui| {
             ui.add_space(space::M);
             crate::icons::show(ui, "folder", size::ICON_SM, Tokens::get(ui.ctx()).text_faint);
-            ui.add(egui::Label::new(RichText::new(f.display().to_string()).font(theme::mono(12.0))).truncate());
+            ui.add(egui::Label::new(RichText::new(f.display().to_string()).font(theme::mono(theme::CAPTION))).truncate());
             if crate::icons::button(ui, "x", size::CONTROL_SM, false, &trf("Stop listing {folder}", &[("folder", &f.display().to_string())])).clicked() {
                 remove = Some(f.clone());
             }
@@ -246,7 +246,7 @@ fn path_field(ui: &mut Ui, value: &mut Option<PathBuf>, name: &str, hint: &str) 
             .hint_text(tr(hint))
             // Up to 240, leaving room for a Choose… button after it, so a row never widens the window (#68).
             .desired_width((ui.available_width() - 34.0).clamp(120.0, 240.0))
-            .font(theme::mono(12.0))
+            .font(theme::mono(theme::CAPTION))
             .frame(widgets::text_field_frame_compact(&Tokens::get(ui.ctx()))),
     );
     widgets::named(r.clone(), &tr(name));
@@ -572,7 +572,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                 ui.add_space(space::XL);
                 if app.state.backend.as_ref() == Some(&b.name) {
                     widgets::pill(ui, "In use", t.on_accent, t.accent);
-                } else if widgets::secondary(ui, None, "Use").clicked() {
+                } else if widgets::action(ui, "Use").clicked() {
                     pick = Some(b.name.clone());
                 }
                 // Who builds: the chosen one says so (click to go back to automatic).
@@ -581,7 +581,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                     {
                         builds = Some(None);
                     }
-                } else if b.enabled && widgets::secondary(ui, None, "Build with this").clicked() {
+                } else if b.enabled && widgets::action(ui, "Build with this").clicked() {
                     builds = Some(Some(b.name.clone()));
                 }
                 // Who takes a game's files out in Deep mode (an API backend, e.g. Kimi K3).
@@ -593,7 +593,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                         {
                             extracts = Some(None);
                         }
-                    } else if b.enabled && widgets::secondary(ui, None, "Extract with this").clicked() {
+                    } else if b.enabled && widgets::action(ui, "Extract with this").clicked() {
                         extracts = Some(Some(b.name.clone()));
                     }
                 }
@@ -1026,7 +1026,7 @@ fn safety(app: &mut CraftApp, ui: &mut Ui) {
             ui.label(RichText::new(tr("Nothing allowed yet.")).color(t.text_faint));
         }
         for tool in app.view.project_allows.clone() {
-            ui.label(RichText::new(tool).font(theme::mono(12.0)));
+            ui.label(RichText::new(tool).font(theme::mono(theme::CAPTION)));
         }
     }
 }

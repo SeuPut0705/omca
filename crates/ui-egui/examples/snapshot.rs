@@ -527,7 +527,7 @@ fn kit_tokens(ui: &mut egui::Ui, t: &Tokens) {
     for (name, s) in [("TITLE", theme::TITLE), ("SECTION", theme::SECTION), ("CARD", theme::CARD)] {
         ui.label(theme::heading(format!("{name} {s}"), s));
     }
-    for (name, s) in [("LEAD", theme::LEAD), ("BODY", theme::BODY), ("SMALL", theme::SMALL), ("CAPTION", theme::CAPTION), ("TINY", theme::TINY)] {
+    for (name, s) in [("BODY", theme::BODY), ("SMALL", theme::SMALL), ("CAPTION", theme::CAPTION), ("TINY", theme::TINY)] {
         ui.label(egui::RichText::new(format!("{name} {s} · 빠른 갈색 여우")).size(s).color(t.text));
     }
     kit_heading(ui, "Space");

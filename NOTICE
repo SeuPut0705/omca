@@ -14,7 +14,8 @@ Third-party material
 This product bundles third-party material under its own licenses, listed below. The per-file
 list (author, source, license) is in ATTRIBUTION.md.
 
-- DM Sans (assets/fonts/) — SIL Open Font License 1.1. See assets/fonts/OFL-DMSans.txt.
+- Pretendard (assets/fonts/) — SIL Open Font License 1.1. See assets/fonts/OFL-Pretendard.txt.
+- DM Sans (assets/fonts/; used only for the macOS installer's background art) — SIL Open Font License 1.1. See assets/fonts/OFL-DMSans.txt.
 - JetBrains Mono (assets/fonts/) — SIL Open Font License 1.1. See assets/fonts/OFL-JetBrainsMono.txt.
 - Geist Mono (assets/fonts/) — SIL Open Font License 1.1. See assets/fonts/OFL-GeistMono.txt.
 - Lucide icons (assets/icons/) — ISC License. See assets/icons/LICENSE-lucide.txt.

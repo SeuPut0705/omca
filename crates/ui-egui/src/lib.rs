@@ -1044,11 +1044,11 @@ impl CraftApp {
                 icons::show(ui, "triangle-alert", theme::size::ICON, t.danger);
                 ui.label(egui::RichText::new(i18n::tr(text)).color(t.text)).on_hover_text(problem.summary.clone());
                 if let Some(path) = &problem.log
-                    && widgets::secondary(ui, None, "Open log").on_hover_text(path.display().to_string()).clicked()
+                    && widgets::action(ui, "Open log").on_hover_text(path.display().to_string()).clicked()
                 {
                     self.open_log(path);
                 }
-                if widgets::secondary(ui, None, "Restart").clicked() {
+                if widgets::action(ui, "Restart").clicked() {
                     match craft_anything_platform::process::start_another_copy() {
                         Ok(_) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
                         Err(e) => self.toast(e.message, true),

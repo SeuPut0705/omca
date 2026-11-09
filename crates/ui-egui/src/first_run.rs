@@ -32,7 +32,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     let y = full.bottom() - 34.0;
     let names = ["Welcome", "AI", "Purpose", "Ready"];
     let label = format!("{:02} / 04   {}", step + 1, tr(names.get(step).copied().unwrap_or_default()));
-    let g = widgets::label_galley(ui, &label, 12.0, t.text_dim);
+    let g = widgets::label_galley(ui, &label, theme::SMALL, t.text_dim);
     ui.painter().galley_with_override_text_color(egui::pos2(full.center().x - g.size().x / 2.0, y - g.size().y / 2.0), g, t.text_dim);
     let track = egui::Rect::from_min_size(egui::pos2(full.left(), full.bottom() - 2.0), Vec2::new(full.width(), 2.0));
     ui.painter().rect_filled(track, 0.0, t.separator);
@@ -40,7 +40,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     if step > 0 && step < 3 {
         let r = egui::Rect::from_min_size(egui::pos2(full.left() + 24.0, y - 14.0), Vec2::new(120.0, 28.0));
         let resp = ui.interact(r, ui.id().with("fr-back"), egui::Sense::click());
-        let g = widgets::label_galley(ui, &tr("← Back"), 12.0, t.text);
+        let g = widgets::label_galley(ui, &tr("← Back"), theme::SMALL, t.text);
         let col = if resp.hovered() { t.text } else { t.text_dim };
         ui.painter().galley_with_override_text_color(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, col);
         widgets::focus_ring(ui, &resp, r);
@@ -60,7 +60,7 @@ fn welcome(app: &mut CraftApp, ui: &mut Ui) {
     ui.add_space(space::XL);
     ui.label(theme::heading(tr("OMCA"), theme::TITLE));
     ui.add_space(space::S);
-    ui.label(RichText::new(tr("Find out how any software works, then craft your own.")).size(theme::LEAD).color(t.text_dim));
+    ui.label(RichText::new(tr("Find out how any software works, then craft your own.")).size(theme::BODY).color(t.text_dim));
     ui.add_space(space::XXXL);
     let w = 270.0;
     ui.horizontal(|ui| {
@@ -206,7 +206,7 @@ fn brain_card(app: &mut CraftApp, ui: &mut Ui, d: &Detected) {
                 if on {
                     widgets::pill(ui, "Selected", t.on_accent, t.accent);
                 } else if configured {
-                    if widgets::secondary(ui, None, "Use this").clicked() {
+                    if widgets::action(ui, "Use this").clicked() {
                         app.choose_backend(Some(name.clone()));
                     }
                 } else if !d.needs_key && widgets::primary(ui, "Use this").clicked() {

@@ -11,7 +11,8 @@ not used for modified versions.
 
 | File | Font | Copyright | Source | Licence |
 |---|---|---|---|---|
-| `DMSans-Regular.ttf`, `DMSans-Medium.ttf`, `DMSans-Bold.ttf` | DM Sans 1.200 (body text, labels, headlines) | © 2014-2017 Indian Type Foundry, © 2019 Google LLC | https://github.com/googlefonts/dm-fonts (`Sans/Exports/`, commit 23aafb3) | `OFL-DMSans.txt` |
+| `Pretendard-Regular.ttf`, `Pretendard-Medium.ttf`, `Pretendard-SemiBold.ttf` | Pretendard 1.3.9 (the interface: body text, labels and buttons, headings; Hangul and Latin) | © 2021 Kil Hyung-jin, with Reserved Font Name Pretendard | https://github.com/orioncactus/pretendard (release v1.3.9, `public/static/alternative/`) | `OFL-Pretendard.txt` |
+| `DMSans-Regular.ttf`, `DMSans-Medium.ttf`, `DMSans-Bold.ttf` | DM Sans 1.200 (the macOS installer's background art only) | © 2014-2017 Indian Type Foundry, © 2019 Google LLC | https://github.com/googlefonts/dm-fonts (`Sans/Exports/`, commit 23aafb3) | `OFL-DMSans.txt` |
 | `JetBrainsMono-Regular.ttf` | JetBrains Mono (code views) | © 2020 The JetBrains Mono Project Authors | https://github.com/JetBrains/JetBrainsMono | `OFL-JetBrainsMono.txt` |
 | `GeistMono-Regular.ttf`, `GeistMono-Medium.ttf` | Geist Mono (labels and buttons) | © 2024 The Geist Project Authors | https://github.com/vercel/geist-font (`fonts/GeistMono/ttf/`) | `OFL-GeistMono.txt` |
 

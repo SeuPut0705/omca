@@ -1,7 +1,7 @@
 //! Design system: two themes (Studio dark, Studio Light), colour tokens, radii and type.
 //!
 //! A calm desktop look: neutral graphite (or near-white) surfaces, a slightly darker sidebar,
-//! soft rounded cards and controls, sentence-case DM Sans throughout, and ink-filled main buttons.
+//! soft rounded cards and controls, sentence-case Pretendard throughout, and app-colour main buttons.
 //! Indigo is the app colour for highlights, progress, links and selection.
 //! Widgets read [`Tokens::get`] instead of hard-coding colours, so a theme switch applies everywhere.
 //! Confidence has its own fixed palette so "how sure are we" reads the same in both themes.
@@ -201,9 +201,11 @@ fn tokens_id() -> egui::Id {
 
 // ---- fonts -------------------------------------------------------------------------------------
 
-pub static DM_SANS_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/DMSans-Regular.ttf");
-pub static DM_SANS_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/DMSans-Medium.ttf");
-pub static DM_SANS_BOLD: &[u8] = include_bytes!("../../../assets/fonts/DMSans-Bold.ttf");
+/// Pretendard: one design for Hangul and Latin (its Latin is Inter's), made for screens, so a
+/// sentence mixing Korean and English has one height, weight and rhythm. The TrueType builds.
+pub static PRETENDARD_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/Pretendard-Regular.ttf");
+pub static PRETENDARD_MEDIUM: &[u8] = include_bytes!("../../../assets/fonts/Pretendard-Medium.ttf");
+pub static PRETENDARD_SEMIBOLD: &[u8] = include_bytes!("../../../assets/fonts/Pretendard-SemiBold.ttf");
 pub static JETBRAINS_MONO: &[u8] = include_bytes!("../../../assets/fonts/JetBrainsMono-Regular.ttf");
 
 /// A font from the optional craft-fonts build input (empty unless built with `CRAFT_FONTS_DIR`).
@@ -217,16 +219,17 @@ pub struct CraftFont {
 
 include!(concat!(env!("OUT_DIR"), "/craft_fonts.rs"));
 
-/// Install DM Sans (three weights: body, labels and bold for headings; it has no static
-/// SemiBold), JetBrains Mono (code), plus any craft-fonts as fallbacks.
+/// Install Pretendard (three weights: body, labels and buttons, headings), JetBrains Mono (code,
+/// with Pretendard behind it so Hangul in code reads in the same face as the rest), plus any
+/// craft-fonts as further fallbacks.
 pub fn install_fonts(ctx: &egui::Context) {
     let mut fonts = FontDefinitions::default();
     let mut add = |name: &str, bytes: &'static [u8]| {
         fonts.font_data.insert(name.to_owned(), Arc::new(FontData::from_static(bytes)));
     };
-    add("DMSans", DM_SANS_REGULAR);
-    add("DMSans-Medium", DM_SANS_MEDIUM);
-    add("DMSans-Bold", DM_SANS_BOLD);
+    add("Pretendard", PRETENDARD_REGULAR);
+    add("Pretendard-Medium", PRETENDARD_MEDIUM);
+    add("Pretendard-SemiBold", PRETENDARD_SEMIBOLD);
     add("JetBrainsMono", JETBRAINS_MONO);
     let mut fallbacks = Vec::new();
     for f in CRAFT_FONTS {
@@ -238,13 +241,15 @@ pub fn install_fonts(ctx: &egui::Context) {
     }
     // Sans first: a mincho/serif fallback makes Japanese and Chinese UI text look like prose.
     let fallbacks = sans_first(fallbacks);
-    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "DMSans".to_owned());
-    fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "JetBrainsMono".to_owned());
+    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "Pretendard".to_owned());
+    let mono = fonts.families.entry(FontFamily::Monospace).or_default();
+    mono.insert(0, "JetBrainsMono".to_owned());
+    mono.insert(1, "Pretendard".to_owned());
     for fam in [FontFamily::Proportional, FontFamily::Monospace] {
         fonts.families.entry(fam).or_default().extend(fallbacks.iter().cloned());
     }
     let base: Vec<String> = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
-    for (fam, primary) in [("medium", "DMSans-Medium"), ("semibold", "DMSans-Bold")] {
+    for (fam, primary) in [("medium", "Pretendard-Medium"), ("semibold", "Pretendard-SemiBold")] {
         let mut stack = vec![primary.to_owned()];
         stack.extend(base.iter().cloned());
         fonts.families.insert(FontFamily::Name(fam.into()), stack);
@@ -296,21 +301,26 @@ pub fn medium(size: f32) -> FontId {
 pub fn semibold(size: f32) -> FontId {
     FontId::new(size, FontFamily::Name("semibold".into()))
 }
-/// The type scale: every text size in the interface is one of these.
-/// Headings (`heading`, DM Sans bold), largest first: a screen's title, a step or a dialog's
-/// title, a card's or a list item's title.
-pub const TITLE: f32 = 26.0;
+/// The type scale: every text size in the interface is one of these, chosen by role.
+///
+/// Below the headings the steps are 1 pt apart, because at Korean UI sizes a point is already a
+/// visible change; the headings grow by about 1.2 each, so a level reads as a level. BODY is the
+/// smallest size Hangul stays comfortable for a paragraph in Pretendard; CAPTION is the smallest
+/// at which its strokes stay apart; TINY is only for the workbench's dense lists.
+///
+/// Headings (`heading`, Pretendard SemiBold): the one title on a screen, a dialog's or a
+/// section's title, a card's or a list item's title.
+pub const TITLE: f32 = 24.0;
 pub const SECTION: f32 = 18.0;
-pub const CARD: f32 = 16.0;
-/// Text: the line under a title (and Simple mode's main field), reading text, secondary text
-/// and list rows, fine print (paths, counts, notes), and tags painted in tight spots.
-pub const LEAD: f32 = 17.0;
-pub const BODY: f32 = 15.0;
-pub const SMALL: f32 = 14.0;
+pub const CARD: f32 = 15.0;
+/// Text: reading text (Simple mode's body), secondary text, list rows, buttons and the
+/// Advanced body, fine print (paths, counts, captions), and the workbench's dense rows.
+pub const BODY: f32 = 14.0;
+pub const SMALL: f32 = 13.0;
 pub const CAPTION: f32 = 12.0;
 pub const TINY: f32 = 11.0;
 
-/// A heading: DM Sans bold, at one of the heading sizes above.
+/// A heading: Pretendard SemiBold, at one of the heading sizes above.
 pub fn heading(text: impl Into<String>, size: f32) -> egui::RichText {
     egui::RichText::new(text).font(semibold(size))
 }
@@ -330,10 +340,10 @@ pub fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgba_premultiplied(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()), m(a.a(), b.a()))
 }
 
-/// A short label (captions, buttons, the title bar) in sentence case. `size` is the old
-/// uppercase-mono size; mixed-case DM Sans needs a point and a half more to read the same.
+/// A short label (captions, buttons, the title bar) in sentence case, in the medium weight, at
+/// one of the sizes above.
 pub fn label_text(text: &str, size: f32) -> egui::RichText {
-    egui::RichText::new(text).font(medium(size + 1.5))
+    egui::RichText::new(text).font(medium(size))
 }
 
 /// The spacing scale: every gap, padding and inset in the interface is one of these (a 4 pt grid
@@ -480,20 +490,21 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind, roomy: bool) {
         wv.expansion = 0.0;
     }
     ctx.set_visuals(v);
-    // Simple mode is for anyone, including people who find small text hard to read.
-    let body = if roomy { 16.0 } else { 13.0 };
+    // One body size per mode, from the scale: Simple mode reads at BODY, Advanced (a dense tool)
+    // at SMALL; everything else steps from there, so `ui.label` and `theme::BODY` never disagree.
+    let (body, small, mono_size, heading_size) = if roomy { (BODY, CAPTION, SMALL, SECTION) } else { (SMALL, TINY, CAPTION, CARD) };
     ctx.global_style_mut(|s| {
         s.text_styles = [
-            (TextStyle::Small, FontId::proportional(if roomy { 13.5 } else { 11.0 })),
+            (TextStyle::Small, FontId::proportional(small)),
             (TextStyle::Body, FontId::proportional(body)),
             (TextStyle::Button, FontId::proportional(body)),
-            (TextStyle::Heading, semibold(if roomy { SECTION } else { CARD })),
-            (TextStyle::Monospace, FontId::monospace(if roomy { 13.5 } else { 12.5 })),
+            (TextStyle::Heading, semibold(heading_size)),
+            (TextStyle::Monospace, FontId::monospace(mono_size)),
         ]
         .into();
-        s.spacing.item_spacing = if roomy { egui::vec2(10.0, 8.0) } else { egui::vec2(8.0, 5.0) };
-        s.spacing.button_padding = if roomy { egui::vec2(12.0, 6.0) } else { egui::vec2(9.0, 4.0) };
-        s.spacing.interact_size = egui::vec2(24.0, if roomy { 28.0 } else { 24.0 });
+        s.spacing.item_spacing = if roomy { egui::vec2(space::SM, space::S) } else { egui::vec2(space::SM, space::XS) };
+        s.spacing.button_padding = if roomy { egui::vec2(space::M, space::XS) } else { egui::vec2(space::SM, space::XS) };
+        s.spacing.interact_size = egui::vec2(size::CONTROL_SM, if roomy { size::CONTROL } else { size::CONTROL_SM });
         s.spacing.menu_margin = egui::Margin::same(6);
         s.spacing.window_margin = egui::Margin::same(18);
         s.spacing.icon_width = 14.0;
@@ -506,73 +517,6 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind, roomy: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The type scale is the only place a size is written down. Screens outside the workbench
-    /// use its names (`CAPTION`, `BODY`, …) or a literal of 12 pt or more; the workbench's dense
-    /// lists may use `TINY`. This walks the source so a new screen can't quietly go smaller.
-    #[test]
-    fn no_literal_text_size_under_12_outside_the_workbench() {
-        fn rust_files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-            for entry in std::fs::read_dir(dir).unwrap().flatten() {
-                let path = entry.path();
-                if path.is_dir() {
-                    rust_files(&path, out);
-                } else if path.extension().is_some_and(|x| x == "rs") {
-                    out.push(path);
-                }
-            }
-        }
-
-        // Markers whose next argument is a text size. `.size` on a `RichText` counts; the
-        // `.size` of a spinner or a galley does not.
-        let texts = ["label_text(", "heading(", "medium(", "semibold(", "mono(", "FontId::proportional(", "FontId::monospace("];
-
-        let mut files = Vec::new();
-        rust_files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
-        assert!(files.len() > 10, "the source scan found only {} files", files.len());
-
-        let mut checked = 0;
-        for path in files {
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-            // `theme.rs` is the scale itself, and `workbench.rs` is the dense workbench.
-            if name == "theme.rs" || name == "workbench.rs" {
-                continue;
-            }
-            let text = std::fs::read_to_string(&path).unwrap();
-            for (n, line) in text.lines().enumerate() {
-                let code = line.trim_start();
-                if code.starts_with("//") {
-                    continue;
-                }
-                let mut markers: Vec<&str> = texts.iter().copied().filter(|m| code.contains(m)).collect();
-                if code.contains("RichText") && code.contains(".size(") && !code.contains("Spinner") {
-                    markers.push(".size(");
-                }
-                for marker in markers {
-                    let mut from = 0;
-                    while let Some(rel) = code[from..].find(marker) {
-                        let at = from + rel;
-                        let open = at + marker.len() - 1;
-                        if let Some(call) = call_text(code, open) {
-                            let arg = if marker == "label_text(" || marker == "heading(" { top_level_parts(call).last().copied().unwrap_or("") } else { call };
-                            for size in size_literals(arg) {
-                                assert!(
-                                    size >= 12.0,
-                                    "{}:{}: a literal text size of {size} pt is below 12; use the theme scale: {}",
-                                    path.display(),
-                                    n + 1,
-                                    code
-                                );
-                            }
-                            checked += 1;
-                        }
-                        from = at + marker.len();
-                    }
-                }
-            }
-        }
-        assert!(checked > 40, "the source scan checked only {checked} text sizes");
-    }
 
     /// The kit (`theme.rs` and `widgets.rs`) is the only place a colour, a line, a corner, a
     /// padding, a gap or a frame is made. Screens use its tokens ([`space`], [`pad`], [`line`],
@@ -631,6 +575,12 @@ mod tests {
             "icons::paint(\n    ui,\n    rect,\n    icon,\n    16.0,\n    t.icon,\n);",
             "icons::show(ui, \"cpu\", 14.0 * s, t.icon);",
             "let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());",
+            "ui.label(RichText::new(t).size(12.5));",
+            "RichText::new(n).font(theme::mono(12.0))",
+            "ui.label(theme::label_text(\"OMCA\", 11.0));",
+            "let g = widgets::label_galley(ui, &n, theme::TINY - 1.5, t.text);",
+            "theme::heading(\n    title,\n    20.0,\n)",
+            "widgets::primary_sized(ui, None, \"Start\", true, size::CONTROL_XL, 14.0)",
         ];
         for code in refused {
             assert!(!style_literals(code).is_empty(), "missed: {code}");
@@ -652,6 +602,10 @@ mod tests {
             "icons::paint(ui, rect, \"check\", size::ICON * s, t.accent);",
             "icons::button(ui, \"x\", size::CONTROL_SM, false, \"Close (24 px)\")",
             "let (r, _) = ui.allocate_exact_size(Vec2::splat(size::TILE), Sense::hover());",
+            "ui.label(RichText::new(t).size(theme::CAPTION));",
+            "RichText::new(n).font(theme::mono(theme::SMALL * s))",
+            "ui.label(theme::label_text(\"v1.2.0\", theme::TINY));",
+            "widgets::primary_sized(ui, None, \"Start\", true, size::CONTROL_XL, theme::BODY)",
         ];
         for code in spared {
             assert!(style_literals(code).is_empty(), "flagged: {code}: {:?}", style_literals(code));
@@ -740,6 +694,34 @@ mod tests {
                 }
             }
         }
+        // Text sizes: every size argument of a text function is a name from the type scale (a
+        // number in it, even `CAPTION - 1.5`, is a size the scale doesn't have).
+        const TEXT_SIZED: [(&str, usize); 14] = [
+            (".size(", 0),
+            ("mono(", 0),
+            ("medium(", 0),
+            ("semibold(", 0),
+            ("FontId::proportional(", 0),
+            ("FontId::monospace(", 0),
+            ("label_text(", 1),
+            ("label_galley(", 2),
+            ("heading(", 1),
+            ("heading_galley(", 2),
+            ("primary_sized(", 5),
+            ("segmented_sized(", 4),
+            ("segmented_scaled(", 4),
+            ("pill_sized(", 4),
+        ];
+        for (marker, arg) in TEXT_SIZED {
+            for (at, _) in joined.match_indices(marker) {
+                let open = at + marker.len() - 1;
+                let Some(call) = call_text(&joined, open) else { continue };
+                let numeric = top_level_parts(call).get(arg).is_some_and(|a| !floats_outside_strings(a).is_empty());
+                if numeric && let Some((_, n, code)) = starts.iter().rev().find(|(start, _, _)| *start <= at) {
+                    found.entry(*n).or_insert_with(|| (*code).to_string());
+                }
+            }
+        }
         found.into_iter().collect()
     }
 
@@ -806,18 +788,6 @@ mod tests {
         }
         out.push(&s[start..]);
         out
-    }
-
-    /// The literals a size argument is written as: one bare number, or every number in an
-    /// `if`/`else`. An expression such as `body.size + 2.0` isn't a size of its own and is left
-    /// to the reviewer.
-    fn size_literals(arg: &str) -> Vec<f64> {
-        let arg = arg.trim();
-        if arg.starts_with("if ") {
-            return floats_outside_strings(arg);
-        }
-        let bare = arg.strip_suffix("f32").unwrap_or(arg).trim();
-        bare.parse::<f64>().ok().into_iter().collect()
     }
 
     /// Float literals on a line, ignoring digits inside string literals (a version or a count).

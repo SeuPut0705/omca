@@ -70,7 +70,15 @@ pub fn button(ui: &mut egui::Ui, name: &str, box_size: f32, selected: bool, tool
     } else {
         t.icon
     };
-    paint(ui, rect, name, (box_size * 0.55).round(), tint);
+    // The glyph steps with the box, on the icon scale.
+    let glyph = if box_size <= crate::theme::size::CONTROL_SM {
+        crate::theme::size::ICON_SM
+    } else if box_size <= crate::theme::size::CONTROL {
+        crate::theme::size::ICON
+    } else {
+        crate::theme::size::ICON_LG
+    };
+    paint(ui, rect, name, glyph, tint);
     crate::widgets::focus_ring(ui, &resp, rect);
     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::i18n::tr(if tooltip.is_empty() { name } else { tooltip })));

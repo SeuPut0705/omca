@@ -81,15 +81,15 @@ pub fn menu(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     }
 }
 
-/// The same, as quiet links on the project's page.
+/// The same, as icon actions in the project page's dense row (their words are their tooltips).
 pub fn buttons(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
-    if widgets::secondary(ui, None, "Rename").clicked() {
+    if widgets::icon_action(ui, "Rename").clicked() {
         ask_rename(app, ws);
     }
-    if widgets::secondary(ui, Some("copy"), "Duplicate").on_hover_text(tr("A copy to try something else from here.")).clicked() {
+    if widgets::icon_action(ui, "Duplicate").on_hover_text(tr("A copy to try something else from here.")).clicked() {
         app.duplicate_project(&ws.root);
     }
-    if !app.runs.is_busy(&ws.root) && icons::button(ui, "trash-2", size::CONTROL_LG, false, "Delete the project").clicked() {
+    if !app.runs.is_busy(&ws.root) && icons::button(ui, widgets::action_icon("Delete"), size::CONTROL, false, "Delete the project").clicked() {
         app.state.modal = Some(Modal::Delete(ws.root.clone()));
     }
 }
@@ -149,7 +149,7 @@ pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, root: &Path, close: &mut bo
         tr("Its folder is deleted with everything in it: what was built, the checks and the conversation.")
     };
     ui.add(egui::Label::new(RichText::new(what).color(t.text_dim)).wrap());
-    ui.add(egui::Label::new(RichText::new(crate::short_path(&ws.root)).font(theme::mono(12.0)).color(t.text_faint)).truncate());
+    ui.add(egui::Label::new(RichText::new(crate::short_path(&ws.root)).font(theme::mono(theme::CAPTION)).color(t.text_faint)).truncate());
     ui.add_space(space::XS);
     ui.label(RichText::new(tr("This can't be undone.")).color(t.danger).size(theme::SMALL));
     ui.add_space(space::M);

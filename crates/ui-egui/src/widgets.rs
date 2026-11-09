@@ -1,4 +1,50 @@
 //! Small shared widgets drawn from theme tokens: cards, buttons, pills, badges, empty states.
+//!
+//! Icons on actions follow three rules, so a person learns an icon once:
+//! - Icon and words: an action whose meaning needs words (Use this, Build with this, Always for
+//!   this project, Add pictures of the original) and every main button. The icon comes from
+//!   [`ACTION_ICONS`], so the same action always has the same icon.
+//! - Icon only ([`icons::button`]): a well-known action repeated in a dense row (close, copy,
+//!   rename, delete, open the folder, pin). Its words are its tooltip and its accessible name,
+//!   so it is never a mystery and a screen reader still says it.
+//! - Words only: a dialog's answer pair (Cancel, Back, Close, Not now, Dismiss), where an icon
+//!   would compete with the main action beside it.
+
+/// The icon for each action that appears on more than one screen, so it never changes meaning.
+pub const ACTION_ICONS: &[(&str, &str)] = &[
+    ("Open folder", "folder-open"),
+    ("Rename", "pencil"),
+    ("Duplicate", "copy"),
+    ("Delete", "trash-2"),
+    ("Remove", "trash-2"),
+    ("Pin this build", "pin"),
+    ("Open in the workbench", "microscope"),
+    ("Open log", "file-text"),
+    ("Restart", "rotate-ccw"),
+    ("Use", "check"),
+    ("Use this", "check"),
+    ("Build with this", "hammer"),
+    ("Extract with this", "package"),
+    ("Always for this project", "shield-check"),
+    ("Don't allow", "ban"),
+];
+
+/// The icon [`ACTION_ICONS`] gives `action` (the square when it isn't listed, so a missing row
+/// shows in review rather than silently).
+pub fn action_icon(action: &str) -> &'static str {
+    ACTION_ICONS.iter().find(|(a, _)| *a == action).map_or("square", |(_, i)| i)
+}
+
+/// [`secondary`] with the icon [`ACTION_ICONS`] gives its words.
+pub fn action(ui: &mut Ui, label: &str) -> Response {
+    secondary(ui, Some(action_icon(label)), label)
+}
+
+/// An icon-only action for a dense row: the icon [`ACTION_ICONS`] gives `label`, and `label` as its
+/// tooltip and accessible name.
+pub fn icon_action(ui: &mut Ui, label: &str) -> Response {
+    icons::button(ui, action_icon(label), size::CONTROL, false, label)
+}
 
 use crate::i18n::tr;
 use crate::icons;
@@ -246,7 +292,7 @@ pub fn icon_tile(ui: &mut Ui, icon: &str, side: f32) -> Response {
 /// chip keeps so choosing one never moves the others or changes how the row wraps.
 pub fn choice_chip(ui: &mut Ui, icon: &str, label: &str, on: bool) -> Response {
     let t = Tokens::get(ui.ctx());
-    let g = label_galley(ui, &tr(label), theme::SMALL - 1.5, t.text);
+    let g = label_galley(ui, &tr(label), theme::SMALL, t.text);
     let tick = size::ICON_SM + space::S;
     let w = space::M + size::ICON + space::S + g.size().x + tick + space::M;
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, size::CONTROL_LG), Sense::click());
@@ -283,7 +329,7 @@ pub fn primary(ui: &mut Ui, label: &str) -> Response {
 }
 
 pub fn primary_icon(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool) -> Response {
-    primary_sized(ui, icon, label, enabled, size::CONTROL, 12.5)
+    primary_sized(ui, icon, label, enabled, size::CONTROL, theme::SMALL)
 }
 
 /// The main button at a given height and label size (Simple mode's Start is a big one): filled
@@ -315,7 +361,7 @@ pub fn primary_sized(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool
 /// Secondary button: a card-coloured box with a soft edge and an optional icon.
 pub fn secondary(ui: &mut Ui, icon: Option<&str>, label: &str) -> Response {
     let t = Tokens::get(ui.ctx());
-    let galley = label_galley(ui, &tr(label), 12.0, t.text);
+    let galley = label_galley(ui, &tr(label), theme::SMALL, t.text);
     let icon_w = if icon.is_some() { BUTTON_ICON_W } else { 0.0 };
     let pad = ui.spacing().button_padding;
     let size = Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 6.0, (galley.size().y + pad.y * 2.0 + 4.0).max(size::CONTROL));
@@ -359,10 +405,10 @@ pub fn link(ui: &mut Ui, label: &str) -> Response {
 /// A segmented switch; the selected segment is a raised card on a sunken track. Returns the newly
 /// picked index when it changes.
 pub fn segmented(ui: &mut Ui, options: &[&str], selected: usize, height: f32) -> Option<usize> {
-    segmented_sized(ui, options, selected, height, 12.0)
+    segmented_sized(ui, options, selected, height, theme::SMALL)
 }
 
-/// [`segmented`] with a given label size (in the [`label_galley`] style), for a bigger switch.
+/// [`segmented`] with a given label size (one of the type scale's), for a bigger switch.
 pub fn segmented_sized(ui: &mut Ui, options: &[&str], selected: usize, height: f32, text: f32) -> Option<usize> {
     segmented_scaled(ui, options, selected, height, text, 1.0)
 }
@@ -371,11 +417,10 @@ pub fn segmented_sized(ui: &mut Ui, options: &[&str], selected: usize, height: f
 /// title bar's, which keeps its size when the app zooms).
 pub fn segmented_scaled(ui: &mut Ui, options: &[&str], selected: usize, height: f32, text: f32, scale: f32) -> Option<usize> {
     let t = Tokens::get(ui.ctx());
-    // label_text adds a fixed 1.5 pt to the size it's given; scale that too.
-    let label = (text + 1.5) * scale - 1.5;
-    let (height, pad) = (height * scale, 2.0 * scale);
+    let label = text * scale;
+    let (height, pad) = (height * scale, space::XXS * scale);
     let galleys: Vec<_> = options.iter().map(|o| label_galley(ui, &tr(o), label, t.text)).collect();
-    let widths: Vec<f32> = galleys.iter().map(|g| g.size().x + (text * 2.0 + 2.0) * scale).collect();
+    let widths: Vec<f32> = galleys.iter().map(|g| segment_width(g.size().x, scale)).collect();
     let total: f32 = widths.iter().sum::<f32>() + 2.0 * pad;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(total, height), Sense::hover());
     ui.painter().rect(rect, t.radius, t.raised, Stroke::new(scale, t.card_border), egui::StrokeKind::Inside);
@@ -403,19 +448,20 @@ pub fn segmented_scaled(ui: &mut Ui, options: &[&str], selected: usize, height: 
     picked
 }
 
-fn segment_width(label: f32, text: f32) -> f32 {
-    label + text * 2.0 + 2.0
+/// A segment's width: its label and a fixed padding either side (scaled with the title bar).
+fn segment_width(label: f32, scale: f32) -> f32 {
+    label + (space::M * 2.0 + space::XXS) * scale
 }
 
 /// How wide [`segmented`] draws `options`, for a row that needs to know before drawing them.
 pub fn segmented_width(ui: &Ui, options: &[&str]) -> f32 {
     let t = Tokens::get(ui.ctx());
-    options.iter().map(|o| segment_width(label_galley(ui, &tr(o), 12.0, t.text).size().x, 12.0)).sum::<f32>() + 4.0
+    options.iter().map(|o| segment_width(label_galley(ui, &tr(o), theme::SMALL, t.text).size().x, 1.0)).sum::<f32>() + 2.0 * space::XXS
 }
 
 /// A small status label on a tint.
 pub fn pill(ui: &mut Ui, text: &str, fg: Color32, bg: Color32) -> Response {
-    pill_sized(ui, text, fg, bg, 11.0)
+    pill_sized(ui, text, fg, bg, theme::CAPTION)
 }
 
 /// [`pill`] with a given label size, its padding scaled to match.
@@ -456,7 +502,7 @@ pub fn confidence_badge(ui: &mut Ui, c: Option<Confidence>) -> Response {
 /// A section caption in the label style, faint.
 pub fn caption(ui: &mut Ui, text: &str) {
     let t = Tokens::get(ui.ctx());
-    ui.label(theme::label_text(&tr(text), 12.0).color(t.text_faint));
+    ui.label(theme::label_text(&tr(text), theme::CAPTION).color(t.text_faint));
 }
 
 /// A centred, calm empty state.
@@ -683,14 +729,22 @@ pub fn working_since(ui: &mut Ui, title: &str, detail: Option<&str>, began: Opti
 
 /// The button that opens a failure's log; hovering shows where the log is. True when clicked.
 pub fn open_log_button(ui: &mut Ui, path: &std::path::Path) -> bool {
-    ui.add_space(6.0);
-    secondary(ui, None, "Open log").on_hover_text(path.display().to_string()).clicked()
+    ui.add_space(space::S);
+    action(ui, "Open log").on_hover_text(path.display().to_string()).clicked()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    /// Every action's icon is bundled: a missing one would quietly draw as a square.
+    #[test]
+    fn every_action_icon_is_bundled() {
+        for (action, icon) in ACTION_ICONS {
+            assert!(icons::exists(icon), "{action}: no icon {icon}");
+        }
+    }
 
     /// Choosing another chip leaves every chip where it was: the tick's slot is kept on all of them.
     #[test]

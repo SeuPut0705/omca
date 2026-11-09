@@ -82,7 +82,7 @@ pub fn hero(app: &mut CraftApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     let d = &mut app.state.make;
     let door = if d.look { 2 } else { usize::from(d.mine) };
-    if let Some(i) = widgets::segmented_sized(ui, &["Make my own version", "Work on my project", "Just look inside"], door, size::CONTROL_LG, 12.5) {
+    if let Some(i) = widgets::segmented_sized(ui, &["Make my own version", "Work on my project", "Just look inside"], door, size::CONTROL_LG, theme::SMALL) {
         let left = d.mine && i != 1;
         (d.mine, d.look) = (i == 1, i == 2);
         if d.mine {
@@ -145,7 +145,7 @@ pub fn hero(app: &mut CraftApp, ui: &mut Ui, w: f32) {
             crate::builders::built_by(app, ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let ready = !app.state.make.request.trim().is_empty() && url_problem(&app.state.make.url).is_none() && app.creating.is_none();
-                let start = widgets::primary_sized(ui, Some("sparkles"), "Start", ready, size::CONTROL_XL, 14.0);
+                let start = widgets::primary_sized(ui, Some("sparkles"), "Start", ready, size::CONTROL_XL, theme::BODY);
                 let start = if ready { start } else { start.on_disabled_hover_text(tr("Say what you want first.")) };
                 if (start.clicked() || submit) && ready {
                     app.start_make();
@@ -164,7 +164,7 @@ fn mine(app: &mut CraftApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("Work on a project you already have"), theme::TITLE));
     ui.add_space(space::S);
-    ui.label(RichText::new(tr("Pick its folder, say what you want, then press Start.")).size(theme::LEAD).color(t.text_dim));
+    ui.label(RichText::new(tr("Pick its folder, say what you want, then press Start.")).size(theme::BODY).color(t.text_dim));
     ui.add_space(space::L);
     widgets::card(&t).inner_margin(theme::pad_xy(space::XL, space::L)).show(ui, |ui| {
         ui.set_width(w - 2.0 * space::XL - 10.0);
@@ -207,7 +207,7 @@ fn mine(app: &mut CraftApp, ui: &mut Ui, w: f32) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let said = !app.state.make.request.trim().is_empty();
                 let ready = folder.is_some() && said && app.creating.is_none();
-                let start = widgets::primary_sized(ui, Some("sparkles"), "Start", ready, 50.0, 14.0);
+                let start = widgets::primary_sized(ui, Some("sparkles"), "Start", ready, 50.0, theme::BODY);
                 let start = if ready {
                     start
                 } else {
@@ -240,7 +240,7 @@ fn request_box(app: &mut CraftApp, ui: &mut Ui, hint: &str, attach: Option<&str>
             send: false,
             recall: false,
             history: None,
-            font_size: theme::LEAD,
+            font_size: theme::BODY,
         },
     );
     if let Some(i) = out.remove {
@@ -271,7 +271,7 @@ fn look(app: &mut CraftApp, ui: &mut Ui, w: f32) {
     let t = Tokens::get(ui.ctx());
     ui.label(theme::heading(tr("What do you want to look inside?"), theme::TITLE));
     ui.add_space(space::S);
-    ui.label(RichText::new(tr("We only read it; nothing runs. Every answer shows how sure we are.")).size(theme::LEAD).color(t.text_dim));
+    ui.label(RichText::new(tr("We only read it; nothing runs. Every answer shows how sure we are.")).size(theme::BODY).color(t.text_dim));
     ui.add_space(space::XL);
     widgets::card(&t).inner_margin(theme::pad(space::XL)).show(ui, |ui| {
         ui.set_width(w - 50.0);
@@ -304,7 +304,7 @@ fn step_title(ui: &mut Ui, n: u32, text: &str) {
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(Vec2::splat(size::CONTROL_XS), Sense::hover());
         ui.painter().rect(r, r.width() / 2.0, t.raised, theme::hairline(t.card_border), egui::StrokeKind::Inside);
-        let g = widgets::label_galley(ui, &n.to_string(), theme::TINY - 1.5, t.text);
+        let g = widgets::label_galley(ui, &n.to_string(), theme::TINY, t.text);
         ui.painter().galley_with_override_text_color(r.center() - g.size() / 2.0, g, t.text);
         ui.add_space(space::XXS);
         ui.label(theme::heading(tr(text), theme::CARD));

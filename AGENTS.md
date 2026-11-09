@@ -56,9 +56,11 @@ Layering is enforced by `cargo xtask layers`. Register new crates in `xtask/src/
 7. **Thin UI.** UI state is serde data. `ui-egui/src/theme.rs` (colour tokens, type scale, `space::*` gaps,
    `pad*` paddings, `size::*` icon, control and row sizes, `line`/`hairline` widths) and `widgets.rs` (`card`,
    `pane`, `callout`, `section`, `property`, `choice_chip`, `icon_tile`…) are the UI kit and the only place a
-   colour, line, corner, padding, gap, size or frame is made; screens use their names.
-   `theme::tests::no_style_literals_outside_the_kit` refuses anything else. A new or changed widget shows in the
-   kit catalog: `cargo run -p craft-anything-ui-egui --example snapshot -- --only kit`.
+   colour, line, corner, padding, gap, size, text size or frame is made; screens use their names. Text sizes
+   are roles (`TITLE`, `SECTION`, `CARD`, `BODY`, `SMALL`, `CAPTION`, `TINY`; why each exists is written above
+   them), set in Pretendard. Actions follow the icon rules at the top of `widgets.rs` (`action`, `icon_action`,
+   `ACTION_ICONS`). `theme::tests::no_style_literals_outside_the_kit` refuses anything else. A new or changed
+   widget shows in the kit catalog: `cargo run -p craft-anything-ui-egui --example snapshot -- --only kit`.
 8. **No secrets, no personal data** in requests, logs, tests or the repo (it is public): no API keys, tokens,
    private keys, `.env` files or local paths, only obvious fakes like `sk-test`. `cargo xtask secrets` checks what
    git would commit (`--history` checks every commit); enable the hook once per clone with

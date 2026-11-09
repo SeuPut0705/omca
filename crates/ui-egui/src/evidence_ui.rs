@@ -30,7 +30,7 @@ pub fn proof_card(ui: &mut Ui, e: &Evidence, dense: bool, open: bool) {
         });
         ui.add_space(space::XS);
         if !e.summary.is_empty() {
-            ui.label(RichText::new(&e.summary).size(if dense { 13.0 } else { 15.0 }));
+            ui.label(RichText::new(&e.summary).size(if dense { theme::SMALL } else { theme::CARD }));
         }
         let id = ui.id().with(("proof", &e.id));
         egui::CollapsingHeader::new(RichText::new(tr("Show me the proof")).color(t.accent_ink).font(theme::medium(theme::SMALL)))
@@ -97,7 +97,7 @@ fn details(ui: &mut Ui, e: &Evidence, t: &Tokens) {
         widgets::caption(ui, "The code");
         widgets::code_block(t).inner_margin(theme::pad(space::M)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.label(RichText::new(truncate(code, 4000)).font(theme::mono(12.5)).color(t.text));
+            ui.label(RichText::new(truncate(code, 4000)).font(theme::mono(theme::CAPTION)).color(t.text));
         });
         ui.add_space(space::S);
     }
@@ -129,7 +129,7 @@ const MAX_DEPTH: usize = 24;
 /// A collapsible, capped JSON tree in monospace.
 pub fn json_tree(ui: &mut Ui, key: &str, v: &Value, depth: usize) {
     let t = Tokens::get(ui.ctx());
-    let key_text = RichText::new(key).font(theme::mono(12.0)).color(t.accent_ink);
+    let key_text = RichText::new(key).font(theme::mono(theme::CAPTION)).color(t.accent_ink);
     if depth > MAX_DEPTH {
         ui.label(RichText::new("…").color(t.text_faint));
         return;
@@ -166,14 +166,14 @@ pub fn json_tree(ui: &mut Ui, key: &str, v: &Value, depth: usize) {
         leaf => {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = space::S;
-                ui.label(RichText::new(format!("{key}:")).font(theme::mono(12.0)).color(t.accent_ink));
+                ui.label(RichText::new(format!("{key}:")).font(theme::mono(theme::CAPTION)).color(t.accent_ink));
                 let (text, col) = match leaf {
                     Value::String(s) => (format!("\"{}\"", truncate(s, 400)), t.text),
                     Value::Null => ("null".into(), t.text_faint),
                     Value::Bool(b) => (b.to_string(), theme::WORKED_OUT),
                     other => (other.to_string(), theme::SEEN_IT),
                 };
-                ui.add(egui::Label::new(RichText::new(text).font(theme::mono(12.0)).color(col)).wrap());
+                ui.add(egui::Label::new(RichText::new(text).font(theme::mono(theme::CAPTION)).color(col)).wrap());
             });
         }
     }
@@ -186,8 +186,8 @@ trait AppendText {
 impl AppendText for RichText {
     fn append_text(self, s: String, t: &Tokens) -> egui::WidgetText {
         let mut job = egui::text::LayoutJob::default();
-        job.append(self.text(), 0.0, egui::TextFormat { font_id: theme::mono(12.0), color: t.accent_ink, ..Default::default() });
-        job.append(&s, 0.0, egui::TextFormat { font_id: theme::mono(12.0), color: t.text_faint, ..Default::default() });
+        job.append(self.text(), 0.0, egui::TextFormat { font_id: theme::mono(theme::CAPTION), color: t.accent_ink, ..Default::default() });
+        job.append(&s, 0.0, egui::TextFormat { font_id: theme::mono(theme::CAPTION), color: t.text_faint, ..Default::default() });
         job.into()
     }
 }

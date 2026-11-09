@@ -163,7 +163,7 @@ fn rail_icons(app: &mut CraftApp, ui: &mut Ui) {
 fn panel_title(ui: &mut Ui, title: &str, count: Option<usize>) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal(|ui| {
-        ui.label(theme::label_text(&tr(title), 11.5).color(t.text));
+        ui.label(theme::label_text(&tr(title), theme::SMALL).color(t.text));
         if let Some(n) = count {
             widgets::pill(ui, &n.to_string(), t.text_dim, t.raised);
         }
@@ -277,11 +277,11 @@ fn list_row(ui: &mut Ui, r: &Value, selected: bool, h: f32) -> bool {
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &name));
     let x = rect.left() + 8.0;
     if let Some(a) = &addr {
-        let g = ui.painter().layout_no_wrap(a.clone(), theme::mono(11.0), if selected { t.accent_ink } else { t.text_faint });
+        let g = ui.painter().layout_no_wrap(a.clone(), theme::mono(theme::TINY), if selected { t.accent_ink } else { t.text_faint });
         ui.painter().galley(egui::pos2(x, rect.top() + 3.0), g, t.text_faint);
     }
     let name_y = if addr.is_some() { rect.top() + 17.0 } else { rect.center().y - 8.0 };
-    let name_g = ui.painter().layout_no_wrap(truncate(&name, 120), theme::mono(12.5), t.text);
+    let name_g = ui.painter().layout_no_wrap(truncate(&name, 120), theme::mono(theme::CAPTION), t.text);
     let clip = rect.shrink2(Vec2::new(6.0, 0.0));
     ui.painter().with_clip_rect(clip).galley(egui::pos2(x, name_y), name_g, t.text);
     if let Some(d) = row_detail(r) {
@@ -357,7 +357,7 @@ fn tab_strip(ui: &mut Ui, tabs: &[(&str, &str)], selected: usize) -> Option<usiz
         ui.spacing_mut().item_spacing.x = space::XXS;
         for (i, (icon, title)) in tabs.iter().enumerate() {
             let on = i == selected;
-            let g = widgets::label_galley(ui, &tr(title), 11.0, t.text);
+            let g = widgets::label_galley(ui, &tr(title), theme::TINY, t.text);
             let w = g.size().x + if icon.is_empty() { 22.0 } else { 42.0 };
             let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, 32.0), egui::Sense::click());
             resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, tr(title)));
@@ -519,7 +519,10 @@ fn code_view(ui: &mut Ui, code: &str, t: &Tokens) {
                 let Some(line) = lines.get(i) else { continue };
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = space::M;
-                    ui.add_sized(Vec2::new(38.0, row_h), egui::Label::new(RichText::new(format!("{:>4}", i + 1)).font(theme::mono(12.0)).color(t.text_faint)));
+                    ui.add_sized(
+                        Vec2::new(38.0, row_h),
+                        egui::Label::new(RichText::new(format!("{:>4}", i + 1)).font(theme::mono(theme::CAPTION)).color(t.text_faint)),
+                    );
                     ui.label(highlight(line, t));
                 });
             }
@@ -534,7 +537,7 @@ const KEYWORDS: &[&str] = &[
 
 fn highlight(line: &str, t: &Tokens) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
-    let font = theme::mono(12.5);
+    let font = theme::mono(theme::CAPTION);
     let comment = line.find("//").or_else(|| line.find(';').filter(|_| !line.trim_end().ends_with(';')));
     let (code, rest) = match comment {
         Some(i) => (line.get(..i).unwrap_or(line), line.get(i..).unwrap_or("")),
@@ -594,7 +597,7 @@ fn table(ui: &mut Ui, rows: &[Value], t: &Tokens) {
     let row_h = 20.0;
     ui.horizontal(|ui| {
         for c in &cols {
-            ui.add_sized(Vec2::new(150.0, 18.0), egui::Label::new(theme::label_text(c, 11.0).color(t.text_faint)));
+            ui.add_sized(Vec2::new(150.0, 18.0), egui::Label::new(theme::label_text(c, theme::TINY).color(t.text_faint)));
         }
     });
     egui::ScrollArea::both().auto_shrink([false, false]).show_rows(ui, row_h, rows.len().min(MAX_ROWS), |ui, range| {
@@ -606,7 +609,7 @@ fn table(ui: &mut Ui, rows: &[Value], t: &Tokens) {
                         Value::Object(m) => m.get(c).map(|v| scalar(v).unwrap_or_else(|| v.to_string())).unwrap_or_default(),
                         other => scalar(other).unwrap_or_default(),
                     };
-                    ui.add_sized(Vec2::new(150.0, row_h), egui::Label::new(RichText::new(truncate(&v, 40)).font(theme::mono(12.0))).truncate());
+                    ui.add_sized(Vec2::new(150.0, row_h), egui::Label::new(RichText::new(truncate(&v, 40)).font(theme::mono(theme::CAPTION))).truncate());
                 }
             });
         }
@@ -632,7 +635,7 @@ fn hex_view(app: &mut CraftApp, ui: &mut Ui) {
                 egui::TextEdit::singleline(&mut goto)
                     .hint_text(tr("Go to offset (0x…)"))
                     .desired_width(150.0)
-                    .font(theme::mono(12.0))
+                    .font(theme::mono(theme::CAPTION))
                     .frame(widgets::text_field_frame_compact(&t)),
             );
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
@@ -657,7 +660,7 @@ fn hex_view(app: &mut CraftApp, ui: &mut Ui) {
                 let start = row * 16;
                 let Some(chunk) = bytes.get(start..(start + 16).min(bytes.len())) else { continue };
                 let mut job = egui::text::LayoutJob::default();
-                let f = theme::mono(12.5);
+                let f = theme::mono(theme::CAPTION);
                 job.append(&format!("{start:08x}  "), 0.0, egui::TextFormat { font_id: f.clone(), color: t.text_faint, ..Default::default() });
                 for (i, b) in chunk.iter().enumerate() {
                     let col = if *b == 0 {
@@ -741,7 +744,7 @@ fn right(app: &mut CraftApp, ui: &mut Ui) {
 
 fn kv(ui: &mut Ui, k: &str, v: &str, t: &Tokens) {
     ui.label(RichText::new(tr(k)).color(t.text_faint).size(theme::CAPTION));
-    ui.add(egui::Label::new(RichText::new(v).font(theme::mono(12.0))).wrap());
+    ui.add(egui::Label::new(RichText::new(v).font(theme::mono(theme::CAPTION))).wrap());
     ui.end_row();
 }
 
@@ -812,7 +815,7 @@ fn ledger(app: &mut CraftApp, ui: &mut Ui) {
             panel_title(ui, "findings", Some(app.view.findings.len()));
             for finding in &app.view.findings {
                 ui.add_space(space::S);
-                ui.label(RichText::new(&finding.id).font(theme::mono(12.0)).color(t.accent));
+                ui.label(RichText::new(&finding.id).font(theme::mono(theme::CAPTION)).color(t.accent));
                 ui.add(egui::Label::new(&finding.statement).wrap());
                 ui.label(RichText::new(finding.confidence.plain_label()).color(t.text_dim).size(theme::CAPTION));
                 for id in &finding.evidence_ids {
@@ -934,7 +937,7 @@ fn jobs(app: &mut CraftApp, ui: &mut Ui) {
                 icons::show(ui, icon, size::ICON_SM, col);
                 ui.add_sized(Vec2::new(220.0, 18.0), egui::Label::new(RichText::new(tr(&j.title)).font(theme::medium(theme::CAPTION))).truncate());
                 let secs = j.finished_at.unwrap_or_else(std::time::Instant::now).duration_since(j.started).as_secs_f32();
-                ui.label(RichText::new(format!("{secs:.1}s")).font(theme::mono(11.5)).color(t.text_faint));
+                ui.label(RichText::new(format!("{secs:.1}s")).font(theme::mono(theme::TINY)).color(t.text_faint));
                 match &j.outcome {
                     None => {
                         let p = j.progress();
@@ -975,8 +978,8 @@ fn log_view(app: &CraftApp, ui: &mut Ui) {
         for l in &app.log {
             let secs = start.map(|s| l.at.duration_since(s).as_secs_f32()).unwrap_or(0.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("{secs:>8.2}")).font(theme::mono(11.5)).color(t.text_faint));
-                ui.label(RichText::new(&l.text).font(theme::mono(11.5)).color(if l.error { t.danger } else { t.text_dim }));
+                ui.label(RichText::new(format!("{secs:>8.2}")).font(theme::mono(theme::TINY)).color(t.text_faint));
+                ui.label(RichText::new(&l.text).font(theme::mono(theme::TINY)).color(if l.error { t.danger } else { t.text_dim }));
             });
         }
     });

@@ -458,7 +458,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                 widgets::chip(&t).inner_margin(theme::pad_xy(space::M, space::XXS)).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         icons::show(ui, icon, size::ICON_XS, col);
-                        ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(12.5)).color(t.text_dim));
+                        ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(theme::SMALL)).color(t.text_dim));
                     });
                 });
                 if !summary.is_empty() {
@@ -497,10 +497,10 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                             if widgets::primary(ui, "Allow once").clicked() {
                                 actions.push(ChatAction::Consent(call_id.clone(), ConsentAnswer::Once));
                             }
-                            if widgets::secondary(ui, None, "Always for this project").clicked() {
+                            if widgets::action(ui, "Always for this project").clicked() {
                                 actions.push(ChatAction::Consent(call_id.clone(), ConsentAnswer::AlwaysForProject));
                             }
-                            if widgets::secondary(ui, None, "Don't allow").clicked() {
+                            if widgets::action(ui, "Don't allow").clicked() {
                                 actions.push(ChatAction::Consent(call_id.clone(), ConsentAnswer::Deny));
                             }
                         });
@@ -581,7 +581,7 @@ pub fn rich_text(ui: &mut Ui, text: &str, with_glossary: bool) {
             continue;
         }
         if let Some(h) = trimmed.strip_prefix("### ").or_else(|| trimmed.strip_prefix("## ")).or_else(|| trimmed.strip_prefix("# ")) {
-            ui.add(egui::Label::new(RichText::new(h).font(theme::semibold(body.size + 2.0))).wrap());
+            ui.add(egui::Label::new(RichText::new(h).font(theme::semibold(theme::CARD))).wrap());
             continue;
         }
         let (bullet, rest) = match trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
@@ -627,11 +627,9 @@ fn paragraph(ui: &mut Ui, text: &str, bullet: bool, with_glossary: bool, body: &
                 continue;
             }
             if code {
-                job.append(
-                    piece,
-                    0.0,
-                    egui::TextFormat { font_id: theme::mono(body.size - 1.0), color: t.accent_ink, background: t.code_bg, ..Default::default() },
-                );
+                // The mode's monospace style: one step below its body (theme::apply).
+                let mono = ui.style().text_styles.get(&egui::TextStyle::Monospace).cloned().unwrap_or_else(|| theme::mono(theme::CAPTION));
+                job.append(piece, 0.0, egui::TextFormat { font_id: mono, color: t.accent_ink, background: t.code_bg, ..Default::default() });
                 at += piece.chars().count();
                 continue;
             }
@@ -697,7 +695,7 @@ fn paragraph(ui: &mut Ui, text: &str, bullet: bool, with_glossary: bool, body: &
 fn code_block(ui: &mut Ui, code: &str, t: &Tokens) {
     widgets::code_block(t).inner_margin(theme::pad(space::M)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.add(egui::Label::new(RichText::new(code.trim_end()).font(theme::mono(12.5)).color(t.text)).wrap());
+        ui.add(egui::Label::new(RichText::new(code.trim_end()).font(theme::mono(theme::SMALL)).color(t.text)).wrap());
     });
 }
 

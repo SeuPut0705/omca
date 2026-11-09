@@ -44,7 +44,7 @@ impl<'ast> Visit<'ast> for Lookups {
                 (
                     "widgets",
                     "primary" | "link" | "suggestion" | "caption" | "pill" | "working" | "working_since" | "segmented" | "segmented_sized" | "section"
-                    | "property" | "property_text",
+                    | "property" | "property_text" | "action" | "icon_action",
                 ) => &[1],
                 ("widgets", "named") => &[1],
                 ("widgets", "primary_icon" | "primary_sized" | "secondary") => &[2],
