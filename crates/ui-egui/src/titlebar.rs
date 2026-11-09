@@ -5,7 +5,7 @@
 
 use crate::i18n::tr;
 use crate::state::Screen;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_engine::Mode;
 use egui::viewport::ResizeDirection;
@@ -119,7 +119,7 @@ fn window_button(ui: &mut Ui, icon: &str, tip: &str, close: bool) -> egui::Respo
         ui.painter().rect_filled(rect, 0.0, if close { t.danger } else { t.hover });
     }
     let col = if hot && close { t.on_accent } else { t.icon };
-    icons::paint(ui, egui::Rect::from_center_size(rect.center(), Vec2::splat(14.0)), icon, 14.0, col);
+    icons::paint(ui, egui::Rect::from_center_size(rect.center(), Vec2::splat(size::ICON_SM)), icon, size::ICON_SM, col);
     widgets::focus_ring(ui, &resp, rect.shrink(3.0));
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tr(tip)));
     resp.on_hover_text(tr(tip))
@@ -170,7 +170,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
             }
         }
         if let Some((name, kind)) = target {
-            icons::show(ui, crate::kind_icon(kind), 14.0 * s, t.icon);
+            icons::show(ui, crate::kind_icon(kind), size::ICON_SM * s, t.icon);
             ui.add(egui::Label::new(RichText::new(name).font(theme::mono(theme::CAPTION * s)).color(t.text)).truncate()).on_hover_text(tr(kind.plain()));
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -262,7 +262,13 @@ fn download_pill(ui: &mut Ui, title: &str, fraction: Option<f32>) -> egui::Respo
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let h = widgets::hover_t(ui, &resp);
     ui.painter().rect(rect, t.radius, crate::theme::mix(t.raised, t.hover, h), theme::line(theme::HAIRLINE * s, t.card_border), egui::StrokeKind::Inside);
-    icons::paint(ui, egui::Rect::from_center_size(egui::pos2(rect.left() + 14.0 * s, rect.center().y), Vec2::splat(14.0 * s)), "download", 14.0 * s, t.accent);
+    icons::paint(
+        ui,
+        egui::Rect::from_center_size(egui::pos2(rect.left() + 14.0 * s, rect.center().y), Vec2::splat(size::ICON_SM * s)),
+        "download",
+        size::ICON_SM * s,
+        t.accent,
+    );
     ui.painter().galley_with_override_text_color(egui::pos2(rect.left() + 26.0 * s, rect.center().y - g.size().y / 2.0), g, t.text);
     let track = egui::Rect::from_min_size(egui::pos2(rect.right() - 48.0 * s, rect.center().y - 1.5 * s), Vec2::new(38.0, 3.0) * s);
     ui.painter().rect_filled(track, 1.5 * s, t.separator);
@@ -286,9 +292,9 @@ fn deep_toggle(app: &mut CraftApp, ui: &mut Ui) {
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let fill = if resp.hovered() { t.hover } else { egui::Color32::TRANSPARENT };
     ui.painter().rect(rect, t.radius, fill, theme::line(theme::HAIRLINE * s, t.card_border), egui::StrokeKind::Inside);
-    let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 16.0 * s, rect.center().y), Vec2::splat(16.0 * s));
+    let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 16.0 * s, rect.center().y), Vec2::splat(size::ICON * s));
     let (icon, col) = if deep { ("microscope", t.accent) } else { ("shield-check", t.success) };
-    icons::paint(ui, icon_rect, icon, 15.0 * s, col);
+    icons::paint(ui, icon_rect, icon, size::ICON * s, col);
     ui.painter().galley_with_override_text_color(egui::pos2(rect.left() + 30.0 * s, rect.center().y - g.size().y / 2.0), g, t.text);
     // The little switch.
     let sw = egui::Rect::from_center_size(egui::pos2(rect.right() - 18.0 * s, rect.center().y), Vec2::new(22.0, 12.0) * s);
@@ -329,7 +335,7 @@ fn backend_picker(app: &mut CraftApp, ui: &mut Ui) {
         spacing.icon_spacing *= s;
         egui::ComboBox::from_id_salt("backend-picker")
             .selected_text(theme::label_text(&current, label(12.0, s)).color(if app.state.backend.is_some() { t.text } else { t.text_dim }))
-            .icon(move |ui, rect, _, _| icons::paint(ui, rect.expand(2.0 * s), "chevron-down", 14.0 * s, Tokens::get(ui.ctx()).icon))
+            .icon(move |ui, rect, _, _| icons::paint(ui, rect.expand(2.0 * s), "chevron-down", size::ICON_SM * s, Tokens::get(ui.ctx()).icon))
             .width(190.0 * s)
             .show_ui(ui, |ui| {
                 for b in &app.backends {

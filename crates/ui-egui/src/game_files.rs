@@ -4,7 +4,7 @@
 
 use crate::i18n::tr;
 use crate::state::{GameFiles, Modal, PendingPicture};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, Pick, icons, widgets};
 use craft_anything_engine::evidence::ToolError;
 use egui::{RichText, Sense, Ui, Vec2};
@@ -82,7 +82,7 @@ fn about(app: &mut CraftApp, ui: &mut Ui, w: f32) {
     widgets::card(&t).show(ui, |ui| {
         ui.set_width(w - 34.0);
         ui.horizontal(|ui| {
-            icons::show(ui, "puzzle", 20.0, t.accent_ink);
+            icons::show(ui, "puzzle", size::ICON_LG, t.accent_ink);
             ui.label(theme::heading(g["engine"].as_str().unwrap_or_default(), theme::CARD));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ask = widgets::primary_icon(ui, Some("message-square"), "Ask about this game", true).clicked();
@@ -153,8 +153,8 @@ fn archives(app: &mut CraftApp, ui: &mut Ui, w: f32) {
             t.card
         };
         ui.painter().rect_filled(rect, t.radius, fill);
-        let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 24.0, rect.center().y), Vec2::splat(20.0));
-        icons::paint(ui, icon_rect, icon, 18.0, if selected { t.accent_ink } else { t.text_dim });
+        let icon_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 24.0, rect.center().y), Vec2::splat(size::ICON_LG));
+        icons::paint(ui, icon_rect, icon, size::ICON_LG, if selected { t.accent_ink } else { t.text_dim });
         let name = a["name"].as_str().unwrap_or(path);
         ui.painter().text(egui::pos2(rect.left() + 46.0, rect.center().y), egui::Align2::LEFT_CENTER, name, theme::medium(theme::SMALL), t.text);
         let detail = format!("{} · {}", tr(label), crate::human_bytes(a["size"].as_u64().unwrap_or(0) as usize));
@@ -279,9 +279,7 @@ fn ask_to_save(app: &mut CraftApp, archive: String, item: Value) {
 /// The question asked before a game's files are unpacked.
 pub fn permission_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
-    let (rect, _) = ui.allocate_exact_size(Vec2::splat(52.0), Sense::hover());
-    ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-    icons::paint(ui, rect, "shield-check", 26.0, t.accent_ink);
+    widgets::icon_tile(ui, "shield-check", size::TILE_LG);
     ui.add_space(space::M);
     ui.label(theme::heading(tr("Do you have permission?"), theme::SECTION));
     ui.add_space(space::XS);

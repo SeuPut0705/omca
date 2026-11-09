@@ -7,7 +7,7 @@
 //! typed. Anywhere else they move the cursor as usual.
 
 use crate::i18n::{tr, trf};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{icons, widgets};
 use egui::{RichText, Ui};
 use std::path::PathBuf;
@@ -164,10 +164,10 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
                                     ui.add(egui::Image::new((tex.id(), fit(tex.size_vec2(), PREVIEW_HOVER))));
                                     ui.label(RichText::new(p.display().to_string()).size(theme::CAPTION));
                                 });
-                                let x = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-26.0, 4.0), egui::Vec2::splat(22.0));
+                                let x = egui::Rect::from_min_size(rect.right_top() + egui::vec2(-26.0, 4.0), egui::Vec2::splat(size::CONTROL_SM));
                                 ui.painter().circle_filled(x.center(), 10.0, t.card);
                                 // A child of its own, so the row's next tile isn't placed after it.
-                                if icons::button(&mut ui.new_child(egui::UiBuilder::new().max_rect(x)), "x", 22.0, false, &remove).clicked() {
+                                if icons::button(&mut ui.new_child(egui::UiBuilder::new().max_rect(x)), "x", size::CONTROL_SM, false, &remove).clicked() {
                                     out.remove = Some(i);
                                 }
                             }
@@ -178,9 +178,9 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
                                     .inner_margin(theme::pad_sides(space::SM, space::XXS, space::XXS, space::XXS))
                                     .show(ui, |ui| {
                                         ui.horizontal(|ui| {
-                                            icons::show(ui, "paperclip", 13.0, t.icon);
+                                            icons::show(ui, "paperclip", size::ICON_XS, t.icon);
                                             ui.add(egui::Label::new(RichText::new(&name).size(theme::SMALL)).truncate()).on_hover_text(p.display().to_string());
-                                            if icons::button(ui, "x", 24.0, false, &remove).clicked() {
+                                            if icons::button(ui, "x", size::CONTROL_SM, false, &remove).clicked() {
                                                 out.remove = Some(i);
                                             }
                                         });
@@ -256,7 +256,7 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
             ui.add_space(space::XS);
             ui.horizontal(|ui| {
                 if let Some(tip) = b.attach
-                    && icons::button(ui, "paperclip", 30.0, false, tip).clicked()
+                    && icons::button(ui, "paperclip", size::CONTROL_LG, false, tip).clicked()
                 {
                     out.attach = true;
                 }
@@ -355,10 +355,10 @@ fn cursor_to_end(ctx: &egui::Context, id: egui::Id, text: &str) {
 /// Send: an app-colour square once there's something to send, a quiet one before.
 fn send_button(ui: &mut Ui, ready: bool) -> egui::Response {
     let t = Tokens::get(ui.ctx());
-    let (rect, resp) = ui.allocate_exact_size(egui::Vec2::splat(32.0), egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(egui::Vec2::splat(size::CONTROL_LG), egui::Sense::click());
     let fill = if ready { theme::mix(t.accent, t.accent_hover, widgets::hover_t(ui, &resp)) } else { t.raised };
     ui.painter().rect_filled(rect, t.radius, fill);
-    icons::paint(ui, rect, "send", 16.0, if ready { t.on_accent } else { t.text_faint });
+    icons::paint(ui, rect, "send", size::ICON, if ready { t.on_accent } else { t.text_faint });
     widgets::focus_ring(ui, &resp, rect);
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tr("Send (Enter)")));
     resp.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(tr("Send (Enter)"))

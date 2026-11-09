@@ -4,7 +4,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::{Modal, Screen};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_engine::evidence::ToolError;
 use craft_anything_engine::workspace::Workspace;
@@ -89,7 +89,7 @@ pub fn buttons(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     if widgets::secondary(ui, Some("copy"), "Duplicate").on_hover_text(tr("A copy to try something else from here.")).clicked() {
         app.duplicate_project(&ws.root);
     }
-    if !app.runs.is_busy(&ws.root) && icons::button(ui, "trash-2", 30.0, false, "Delete the project").clicked() {
+    if !app.runs.is_busy(&ws.root) && icons::button(ui, "trash-2", size::CONTROL_LG, false, "Delete the project").clicked() {
         app.state.modal = Some(Modal::Delete(ws.root.clone()));
     }
 }
@@ -135,9 +135,9 @@ pub fn delete_modal(app: &mut CraftApp, ui: &mut Ui, root: &Path, close: &mut bo
         return;
     };
     ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(40.0), egui::Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(size::CONTROL_XL), egui::Sense::hover());
         ui.painter().rect_filled(rect, t.radius, t.raised);
-        icons::paint(ui, rect, "trash-2", 20.0, t.danger);
+        icons::paint(ui, rect, "trash-2", size::ICON_LG, t.danger);
         ui.label(theme::heading(trf("Delete {name}?", &[("name", &ws.manifest.name)]), theme::SECTION));
     });
     ui.add_space(space::SM);

@@ -3,7 +3,7 @@
 
 use crate::i18n::{LANGUAGES, tr, trf};
 use crate::state::SettingsTab;
-use crate::theme::{self, ThemeKind, Tokens, space};
+use crate::theme::{self, ThemeKind, Tokens, size, space};
 use crate::{CraftApp, Pick, icons, widgets};
 use craft_anything_ai::BackendKind;
 use craft_anything_engine::Mode;
@@ -24,7 +24,7 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
         ui.horizontal(|ui| {
             ui.label(theme::heading(tr("Settings"), theme::SECTION));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if icons::button(ui, "x", 32.0, false, "Close").clicked() {
+                if icons::button(ui, "x", size::CONTROL_LG, false, "Close").clicked() {
                     open = false;
                 }
             });
@@ -34,9 +34,9 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
             let text = app.state.toasts[i].0.clone();
             ui.add_space(space::SM);
             ui.horizontal(|ui| {
-                icons::show(ui, "triangle-alert", 16.0, t.danger);
+                icons::show(ui, "triangle-alert", size::ICON, t.danger);
                 ui.add(egui::Label::new(RichText::new(text).color(t.danger)).wrap());
-                if icons::button(ui, "x", 24.0, false, "Dismiss").clicked() {
+                if icons::button(ui, "x", size::CONTROL_SM, false, "Dismiss").clicked() {
                     app.state.toasts.remove(i);
                 }
             });
@@ -63,9 +63,9 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
                     }
                     icons::paint(
                         ui,
-                        egui::Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.center().y - 8.0), Vec2::splat(16.0)),
+                        egui::Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.center().y - 8.0), Vec2::splat(size::ICON)),
                         icon,
-                        16.0,
+                        size::ICON,
                         if on { t.accent_ink } else { t.icon },
                     );
                     ui.painter().text(
@@ -116,19 +116,37 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
     }
 }
 
+/// One setting: its name and what it does on the left, taking all the room the control leaves,
+/// and the control on the right edge; a hairline between settings (Attio's and Replit's settings).
+/// The control's width is measured each frame and kept for the next, so the words wrap only when
+/// they must; a change lays the frame out again.
 fn row(ui: &mut Ui, title: &str, sub: &str, add: impl FnOnce(&mut Ui)) {
     let t = Tokens::get(ui.ctx());
+    let id = ui.id().with(("setting-control-w", title));
+    let control_w = ui.data(|d| d.get_temp::<f32>(id)).unwrap_or(size::TILE_LG * 5.0);
+    let full = ui.available_width();
+    // egui rounds widget rects to whole points: keep that much in hand so the control never
+    // ends past the row.
+    let text_w = ((full - control_w - space::L).floor() - space::XXS).max(full * 0.4);
     ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width(220.0);
+        ui.allocate_ui_with_layout(Vec2::new(text_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_width(text_w);
             ui.label(RichText::new(tr(title)).font(theme::medium(theme::SMALL)));
             if !sub.is_empty() {
                 ui.add(egui::Label::new(RichText::new(tr(sub)).color(t.text_faint).size(theme::CAPTION)).wrap());
             }
         });
-        add(ui);
+        ui.add_space(space::L - ui.spacing().item_spacing.x);
+        let measured = ui.scope(add).response.rect.width();
+        if (measured - control_w).abs() > 0.5 {
+            ui.data_mut(|d| d.insert_temp(id, measured));
+            ui.ctx().request_discard("a setting's control changed width");
+        }
     });
-    ui.add_space(space::M);
+    ui.add_space(space::SM);
+    let y = ui.cursor().top();
+    ui.painter().hline(ui.max_rect().x_range(), y, theme::hairline(t.separator));
+    ui.add_space(space::SM);
 }
 
 fn general(app: &mut CraftApp, ui: &mut Ui) {
@@ -153,9 +171,9 @@ fn general(app: &mut CraftApp, ui: &mut Ui) {
     for f in &app.settings.project_folders {
         ui.horizontal(|ui| {
             ui.add_space(space::M);
-            crate::icons::show(ui, "folder", 14.0, Tokens::get(ui.ctx()).text_faint);
+            crate::icons::show(ui, "folder", size::ICON_SM, Tokens::get(ui.ctx()).text_faint);
             ui.add(egui::Label::new(RichText::new(f.display().to_string()).font(theme::mono(12.0))).truncate());
-            if crate::icons::button(ui, "x", 22.0, false, &trf("Stop listing {folder}", &[("folder", &f.display().to_string())])).clicked() {
+            if crate::icons::button(ui, "x", size::CONTROL_SM, false, &trf("Stop listing {folder}", &[("folder", &f.display().to_string())])).clicked() {
                 remove = Some(f.clone());
             }
         });
@@ -273,7 +291,7 @@ fn engines(app: &mut CraftApp, ui: &mut Ui) {
         if path_field(ui, &mut app.settings.engines.ghidra.install_dir, "Ghidra folder", "managed") {
             app.settings_changed();
         }
-        if icons::button(ui, "folder-open", 26.0, false, "Choose…").clicked() {
+        if icons::button(ui, "folder-open", size::CONTROL, false, "Choose…").clicked() {
             app.pick(Pick::GhidraDir);
         }
     });
@@ -345,7 +363,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
             // The name and model on their own row (shortened, full text on hover), the buttons on a
             // row below that wraps: nothing overlaps however long the name or narrow the window.
             ui.horizontal(|ui| {
-                icons::show(ui, "bot", 18.0, if b.enabled { t.accent } else { t.text_faint });
+                icons::show(ui, "bot", size::ICON_LG, if b.enabled { t.accent } else { t.text_faint });
                 ui.vertical(|ui| {
                     ui.add(egui::Label::new(RichText::new(&b.name).font(theme::semibold(theme::SMALL))).truncate());
                     let model_in_use = craft_anything_ai::model_in_use(b, app.backend_options.get(&b.name));
@@ -535,7 +553,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                                 model_options_loading(ui, &b.name);
                                 if let Some(error) = &draft.error {
                                     ui.add(egui::Label::new(RichText::new(error).color(t.danger)).wrap());
-                                    if icons::button(ui, "refresh-cw", 24.0, false, "Load model options").clicked() {
+                                    if icons::button(ui, "refresh-cw", size::CONTROL_SM, false, "Load model options").clicked() {
                                         tune_models.push(b.name.clone());
                                     }
                                 } else {
@@ -595,7 +613,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                     if widgets::link(ui, "Keep it").clicked() {
                         ui.data_mut(|d| d.remove::<String>(confirm_id));
                     }
-                } else if icons::button(ui, "trash-2", 26.0, false, &trf("Remove {name}", &[("name", &b.name)])).clicked() {
+                } else if icons::button(ui, "trash-2", size::CONTROL, false, &trf("Remove {name}", &[("name", &b.name)])).clicked() {
                     ui.data_mut(|d| d.insert_temp(confirm_id, b.name.clone()));
                 }
             });
@@ -882,10 +900,10 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
                 if widgets::toggle(ui, &mut app.settings.plugins.mcp[i].enabled, "On").changed() {
                     changed = true;
                 }
-                if icons::button(ui, "refresh-cw", 26.0, false, "Read its tools").clicked() {
+                if icons::button(ui, "refresh-cw", size::CONTROL, false, "Read its tools").clicked() {
                     app.act("plugins_refresh", serde_json::json!({"id": p.id}), tr("Read the plugin's tools"));
                 }
-                if icons::button(ui, "trash-2", 26.0, false, "Remove").clicked() {
+                if icons::button(ui, "trash-2", size::CONTROL, false, "Remove").clicked() {
                     app.act("plugins_remove", serde_json::json!({"id": p.id}), tr("Remove a plugin"));
                 }
             });
@@ -906,7 +924,7 @@ fn plugins(app: &mut CraftApp, ui: &mut Ui) {
                 if widgets::toggle(ui, &mut app.settings.plugins.wasm[i].enabled, "On").changed() {
                     changed = true;
                 }
-                if icons::button(ui, "trash-2", 26.0, false, "Remove").clicked() {
+                if icons::button(ui, "trash-2", size::CONTROL, false, "Remove").clicked() {
                     app.act("plugins_remove", serde_json::json!({"id": p.id}), tr("Remove a plugin"));
                 }
             });
@@ -964,7 +982,7 @@ fn safety(app: &mut CraftApp, ui: &mut Ui) {
     );
     if !app.settings.ask_before_running {
         ui.horizontal(|ui| {
-            icons::show(ui, "triangle-alert", 15.0, t.warning);
+            icons::show(ui, "triangle-alert", size::ICON, t.warning);
             ui.label(RichText::new(tr("Tools may now run code from what you open without asking. Turn this back on unless you're sure.")).color(t.warning));
         });
     }

@@ -2,7 +2,7 @@
 
 use crate::i18n::tr;
 use crate::icons;
-use crate::theme::{self, Tokens, confidence_color, confidence_label, space};
+use crate::theme::{self, Tokens, confidence_color, confidence_label, size, space};
 use craft_anything_engine::evidence::Confidence;
 use egui::{Color32, Frame, Margin, Response, RichText, Sense, Stroke, Ui, Vec2};
 
@@ -188,13 +188,101 @@ pub fn code_block(t: &Tokens) -> Frame {
     Frame::new().fill(t.code_bg).corner_radius(t.r()).inner_margin(theme::pad(space::SM))
 }
 
+/// A section of a side panel or a sheet: a hairline above (except the first), then its title
+/// in the caption style. Sections replace a stack of separate cards, so a panel reads as one list.
+pub fn section(ui: &mut Ui, title: &str, first: bool) {
+    let t = Tokens::get(ui.ctx());
+    if !first {
+        ui.add_space(space::M);
+        let y = ui.cursor().top();
+        ui.painter().hline(ui.max_rect().x_range(), y, theme::hairline(t.separator));
+        ui.add_space(space::M);
+    }
+    caption(ui, title);
+    ui.add_space(space::XS);
+}
+
+/// How wide a property's label column is, so values line up down a panel.
+pub const PROPERTY_LABEL_W: f32 = 88.0;
+
+/// One property: a faint label in a fixed column and its value beside it, one [`size::ROW`]
+/// high (taller when the value wraps). `value` draws the value; it gets the rest of the row.
+pub fn property<R>(ui: &mut Ui, label: &str, value: impl FnOnce(&mut Ui) -> R) -> R {
+    let t = Tokens::get(ui.ctx());
+    ui.horizontal_top(|ui| {
+        ui.set_min_height(size::ROW);
+        // A real label (screen readers read it), in its own column so values line up.
+        ui.allocate_ui_with_layout(Vec2::new(PROPERTY_LABEL_W, size::ROW), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.set_width(PROPERTY_LABEL_W);
+            ui.add(egui::Label::new(RichText::new(tr(label)).size(theme::SMALL).color(t.text_faint)).wrap());
+        });
+        ui.vertical(|ui| {
+            ui.add_space(((size::ROW - ui.text_style_height(&egui::TextStyle::Body)) / 2.0).max(0.0));
+            value(ui)
+        })
+        .inner
+    })
+    .inner
+}
+
+/// A property whose value is plain text, cut to one line with the full text on hover.
+pub fn property_text(ui: &mut Ui, label: &str, value: &str) -> Response {
+    let t = Tokens::get(ui.ctx());
+    property(ui, label, |ui| ui.add(egui::Label::new(RichText::new(value).size(theme::SMALL).color(t.text)).truncate()))
+}
+
+/// A feature icon on its tinted square (a project's kind, a target's kind).
+pub fn icon_tile(ui: &mut Ui, icon: &str, side: f32) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(side), Sense::hover());
+    ui.painter().rect_filled(rect, t.radius, t.accent_soft);
+    let glyph = if side >= size::TILE_LG { size::ICON_XL } else { size::ICON_LG };
+    icons::paint(ui, rect, icon, glyph, t.accent_ink);
+    resp
+}
+
+/// A compact radio-like chip with an icon: the chosen one has the app-colour edge, a wash and a
+/// tick. One [`size::CONTROL_LG`] high, as wide as its words; for pickers with few options.
+pub fn choice_chip(ui: &mut Ui, icon: &str, label: &str, on: bool) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let g = label_galley(ui, &tr(label), theme::SMALL - 1.5, t.text);
+    let tick = if on { size::ICON_SM + space::S } else { 0.0 };
+    let w = space::M + size::ICON + space::S + g.size().x + tick + space::M;
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(w, size::CONTROL_LG), Sense::click());
+    let h = hover_t(ui, &resp);
+    let (fill, stroke) = if on {
+        (t.accent_soft.gamma_multiply(0.6), theme::line(theme::EMPHASIS, t.accent))
+    } else {
+        (theme::mix(Color32::TRANSPARENT, t.hover, h), theme::hairline(theme::mix(t.field_border, t.text_faint, h)))
+    };
+    ui.painter().rect(rect, t.radius, fill, stroke, egui::StrokeKind::Inside);
+    let mut x = rect.left() + space::M;
+    icons::paint(
+        ui,
+        egui::Rect::from_min_size(egui::pos2(x, rect.center().y - size::ICON / 2.0), Vec2::splat(size::ICON)),
+        icon,
+        size::ICON,
+        if on { t.accent_ink } else { t.icon },
+    );
+    x += size::ICON + space::S;
+    let gw = g.size().x;
+    ui.painter().galley_with_override_text_color(egui::pos2(x, rect.center().y - g.size().y / 2.0), g, t.text);
+    if on {
+        let at = egui::pos2(x + gw + space::S, rect.center().y - size::ICON_SM / 2.0);
+        icons::paint(ui, egui::Rect::from_min_size(at, Vec2::splat(size::ICON_SM)), "check", size::ICON_SM, t.accent_ink);
+    }
+    focus_ring(ui, &resp, rect);
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, on, tr(label)));
+    resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
 /// The main action: a button filled in the app colour.
 pub fn primary(ui: &mut Ui, label: &str) -> Response {
     primary_icon(ui, None, label, true)
 }
 
 pub fn primary_icon(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool) -> Response {
-    primary_sized(ui, icon, label, enabled, 32.0, 12.5)
+    primary_sized(ui, icon, label, enabled, size::CONTROL, 12.5)
 }
 
 /// The main button at a given height and label size (Simple mode's Start is a big one): filled
@@ -204,7 +292,8 @@ pub fn primary_sized(ui: &mut Ui, icon: Option<&str>, label: &str, enabled: bool
     let galley = label_galley(ui, &tr(label), text, t.on_accent);
     let icon_w = if icon.is_some() { BUTTON_ICON_W } else { 0.0 };
     let pad = ui.spacing().button_padding;
-    let size = Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 8.0 + (height - 32.0).max(0.0), (galley.size().y + pad.y * 2.0 + 8.0).max(height));
+    let size =
+        Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 8.0 + (height - size::CONTROL_LG).max(0.0), (galley.size().y + pad.y * 2.0 + 4.0).max(height));
     let sense = if enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(size, sense);
     let fill = if !enabled {
@@ -228,7 +317,7 @@ pub fn secondary(ui: &mut Ui, icon: Option<&str>, label: &str) -> Response {
     let galley = label_galley(ui, &tr(label), 12.0, t.text);
     let icon_w = if icon.is_some() { BUTTON_ICON_W } else { 0.0 };
     let pad = ui.spacing().button_padding;
-    let size = Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 6.0, (galley.size().y + pad.y * 2.0 + 6.0).max(30.0));
+    let size = Vec2::new(galley.size().x + icon_w + pad.x * 2.0 + 6.0, (galley.size().y + pad.y * 2.0 + 4.0).max(size::CONTROL));
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
     let h = hover_t(ui, &resp);
     let fill = if resp.is_pointer_button_down_on() { t.pressed } else { theme::mix(t.card, t.hover, h) };
@@ -245,7 +334,7 @@ fn button_content(ui: &Ui, rect: egui::Rect, icon: Option<&str>, galley: std::sy
     let icon_w = if icon.is_some() { BUTTON_ICON_W } else { 0.0 };
     let mut x = (rect.center().x - (icon_w + galley.size().x) / 2.0).round();
     if let Some(i) = icon {
-        icons::paint(ui, egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 8.0), Vec2::splat(16.0)), i, 15.0, icon_tint);
+        icons::paint(ui, egui::Rect::from_min_size(egui::pos2(x, rect.center().y - size::ICON / 2.0), Vec2::splat(size::ICON)), i, size::ICON, icon_tint);
         x += icon_w;
     }
     ui.painter().galley_with_override_text_color(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, fg);
@@ -553,30 +642,34 @@ pub fn working_since(ui: &mut Ui, title: &str, detail: Option<&str>, began: Opti
     let secs = began.map_or((now - since) as u64, |b| b.elapsed().as_secs());
     let note = wait_note(secs, quiet);
     let sub = [detail.map(str::to_string), note].into_iter().flatten().collect::<Vec<_>>().join("  ·  ");
-    card(&t).inner_margin(Margin::symmetric(16, 12)).show(ui, |ui| {
+    card(&t).inner_margin(theme::pad_xy(space::L, space::M)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(24.0), Sense::hover());
-            let (c, radius) = (r.center(), 9.0);
-            ui.painter().circle_stroke(c, radius, Stroke::new(2.5, t.separator));
+        // The clock is measured first and the words get only what's left, so they wrap before it.
+        let clock = crate::usage::duration_words(std::time::Duration::from_secs(secs));
+        let clock = ui.painter().layout_no_wrap(clock, theme::mono(theme::CAPTION), t.text_faint);
+        ui.horizontal_top(|ui| {
+            let (r, _) = ui.allocate_exact_size(Vec2::splat(size::ICON_XL), Sense::hover());
+            let (c, radius) = (r.center(), size::ICON_XL / 2.0 - theme::FOCUS);
+            ui.painter().circle_stroke(c, radius, theme::line(theme::FOCUS, t.separator));
             let start = (now * 4.0) as f32;
             let sweep = std::f32::consts::PI * (0.9 + 0.5 * (now * 1.7).sin() as f32);
             let arc = (0..=20).map(|i| c + radius * Vec2::angled(start + sweep * i as f32 / 20.0)).collect();
-            ui.painter().add(egui::Shape::line(arc, Stroke::new(2.5, t.accent)));
-            ui.add_space(4.0);
-            ui.vertical(|ui| {
+            ui.painter().add(egui::Shape::line(arc, theme::line(theme::FOCUS, t.accent)));
+            ui.add_space(space::XS);
+            let words_w = (ui.available_width() - clock.size().x - space::M).max(0.0);
+            ui.allocate_ui_with_layout(Vec2::new(words_w, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                ui.set_width(words_w);
                 ui.label(RichText::new(tr(title)).font(theme::semibold(theme::BODY)).color(t.text));
                 if !sub.is_empty() {
                     ui.add(egui::Label::new(RichText::new(sub).color(t.text_dim).size(theme::SMALL)).wrap());
                 }
             });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let clock = crate::usage::duration_words(std::time::Duration::from_secs(secs));
-                ui.label(RichText::new(clock).font(theme::mono(12.5)).color(t.text_faint));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                ui.label(RichText::new(clock.text()).font(theme::mono(theme::CAPTION)).color(t.text_faint));
             });
         });
         // An indeterminate sweep along the bottom: movement even when nothing new has arrived.
-        ui.add_space(10.0);
+        ui.add_space(space::M);
         let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 2.0), Sense::hover());
         ui.painter().rect_filled(bar, 1.0, t.separator);
         let seg = bar.width() * 0.25;

@@ -381,6 +381,33 @@ pub fn hairline(color: Color32) -> Stroke {
     line(HAIRLINE, color)
 }
 
+/// The size scale: every icon, control and row height is one of these. Icons sit on a 4 pt
+/// grid; controls and rows are the hit targets they sit in.
+pub mod size {
+    /// Icons: inline with caption text, with body text, the default, in a heading, a feature
+    /// icon, and the large one in an empty state or a project tile.
+    pub const ICON_XS: f32 = 12.0;
+    pub const ICON_SM: f32 = 14.0;
+    pub const ICON: f32 = 16.0;
+    pub const ICON_LG: f32 = 20.0;
+    pub const ICON_XL: f32 = 24.0;
+    pub const ICON_HERO: f32 = 32.0;
+    /// Control heights (icon buttons, segmented switches, buttons, fields): a tight toolbar,
+    /// a compact row, the default, a prominent one, and the single main action of a screen.
+    pub const CONTROL_XS: f32 = 20.0;
+    pub const CONTROL_SM: f32 = 24.0;
+    pub const CONTROL: f32 = 28.0;
+    pub const CONTROL_LG: f32 = 32.0;
+    pub const CONTROL_XL: f32 = 40.0;
+    /// List and property rows: dense (workbench, ledgers), the default, and a roomy one.
+    pub const ROW_DENSE: f32 = 22.0;
+    pub const ROW: f32 = 28.0;
+    pub const ROW_LG: f32 = 36.0;
+    /// The tinted square behind a feature icon (a project's or a target's).
+    pub const TILE: f32 = 32.0;
+    pub const TILE_LG: f32 = 40.0;
+}
+
 /// Scroll bars that can always be seen and grabbed. egui's thin preset paints the thumb in the
 /// button fill and its track in the field colour, which here are the same, and narrows it to 2 px
 /// at rest, so it showed only on hover. The thumb is the text colour, see-through enough to stay
@@ -598,6 +625,12 @@ mod tests {
             "ui.add_space(if dense { 4.0 } else { 6.0 });",
             "ui.spacing_mut().item_spacing.x = 10.0;",
             "egui::Grid::new(\"g\").spacing([12.0, 6.0])",
+            "icons::show(ui, \"info\", 14.0, t.text_dim);",
+            "icons::paint(ui, rect, \"check\", 18.0, t.accent);",
+            "icons::button(ui, \"x\", 24.0, false, \"Close\")",
+            "icons::paint(\n    ui,\n    rect,\n    icon,\n    16.0,\n    t.icon,\n);",
+            "icons::show(ui, \"cpu\", 14.0 * s, t.icon);",
+            "let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), Sense::hover());",
         ];
         for code in refused {
             assert!(!style_literals(code).is_empty(), "missed: {code}");
@@ -615,6 +648,10 @@ mod tests {
             "// let m = Margin::same(8);",
             "struct PaneMargin { left: f32 }",
             "#[cfg(test)]\nmod tests { fn t() { let m = Margin::same(8); } }",
+            "icons::show(ui, \"info\", size::ICON_SM, t.text_dim);",
+            "icons::paint(ui, rect, \"check\", size::ICON * s, t.accent);",
+            "icons::button(ui, \"x\", size::CONTROL_SM, false, \"Close (24 px)\")",
+            "let (r, _) = ui.allocate_exact_size(Vec2::splat(size::TILE), Sense::hover());",
         ];
         for code in spared {
             assert!(style_literals(code).is_empty(), "flagged: {code}: {:?}", style_literals(code));
@@ -688,6 +725,19 @@ mod tests {
             }
             if let Some((_, n, code)) = starts.iter().rev().find(|(start, _, _)| *start <= at) {
                 found.entry(*n).or_insert_with(|| (*code).to_string());
+            }
+        }
+        // Sizes: an icon's size, an icon button's box and a square box come from `size::*`
+        // (a number scaled by the title bar's zoom is still a number).
+        const SIZED: [(&str, usize); 4] = [("icons::show(", 2), ("icons::paint(", 3), ("icons::button(", 2), ("Vec2::splat(", 0)];
+        for (marker, arg) in SIZED {
+            for (at, _) in joined.match_indices(marker) {
+                let open = at + marker.len() - 1;
+                let Some(call) = call_text(&joined, open) else { continue };
+                let numeric = top_level_parts(call).get(arg).is_some_and(|a| a.trim().starts_with(|c: char| c.is_ascii_digit()));
+                if numeric && let Some((_, n, code)) = starts.iter().rev().find(|(start, _, _)| *start <= at) {
+                    found.entry(*n).or_insert_with(|| (*code).to_string());
+                }
             }
         }
         found.into_iter().collect()

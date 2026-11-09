@@ -4,7 +4,7 @@
 use crate::evidence_ui::{self, json_tree, truncate};
 use crate::i18n::tr;
 use crate::state::{BottomTab, CenterTab, Fill, RailKind, RightTab};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, Pick, Route, chat, icons, widgets};
 use craft_anything_engine::Consent;
 use egui::{RichText, Ui, Vec2};
@@ -122,7 +122,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     if !app.state.bottom_open {
         egui::Panel::bottom("wb-bottom-closed").exact_size(30.0).frame(widgets::pane(t.chrome, theme::pad_xy(space::M, space::XS))).show(ui, |ui| {
             ui.horizontal(|ui| {
-                if icons::button(ui, "chevron-up", 22.0, false, "Show the console").clicked() {
+                if icons::button(ui, "chevron-up", size::CONTROL_SM, false, "Show the console").clicked() {
                     app.state.bottom_open = true;
                 }
                 status_line(app, ui);
@@ -136,7 +136,7 @@ fn rail_icons(app: &mut CraftApp, ui: &mut Ui) {
     ui.vertical_centered(|ui| {
         for k in RailKind::ALL {
             let on = app.state.rail == k;
-            if icons::button(ui, k.icon(), 34.0, on, k.title()).clicked() && !on {
+            if icons::button(ui, k.icon(), size::CONTROL_LG, on, k.title()).clicked() && !on {
                 app.state.rail = k;
                 app.state.rail_filter.clear();
                 app.ensure_rail_loaded();
@@ -144,11 +144,11 @@ fn rail_icons(app: &mut CraftApp, ui: &mut Ui) {
             ui.add_space(space::XXS);
         }
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
-            if icons::button(ui, "search", 34.0, app.state.palette.open, "Command palette (Ctrl/⌘ K)").clicked() {
+            if icons::button(ui, "search", size::CONTROL_LG, app.state.palette.open, "Command palette (Ctrl/⌘ K)").clicked() {
                 app.state.palette.open = true;
             }
             // Projects and their builds; a dot when one needs an answer.
-            let r = icons::button(ui, "hammer", 34.0, false, "Projects and builds");
+            let r = icons::button(ui, "hammer", size::CONTROL_LG, false, "Projects and builds");
             if !app.asking.is_empty() {
                 let t = Tokens::get(ui.ctx());
                 ui.painter().circle_filled(r.rect.right_top() + egui::vec2(-7.0, 7.0), 4.5, t.warning);
@@ -193,7 +193,7 @@ fn rail_list(app: &mut CraftApp, ui: &mut Ui, kind: RailKind, fill: &Fill) {
     ui.horizontal(|ui| {
         panel_title(ui, kind.title(), matches!(fill, Fill::Ready(_) | Fill::Value(_)).then_some(all.len()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if icons::button(ui, "refresh-cw", 24.0, false, "Reload").clicked() {
+            if icons::button(ui, "refresh-cw", size::CONTROL_SM, false, "Reload").clicked() {
                 app.load_rail(kind);
             }
         });
@@ -307,7 +307,7 @@ fn targets_list(app: &mut CraftApp, ui: &mut Ui) {
     ui.horizontal(|ui| {
         panel_title(ui, "Targets", Some(app.view.targets.len()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if icons::button(ui, "plus", 24.0, false, "Open another target").clicked() {
+            if icons::button(ui, "plus", size::CONTROL_SM, false, "Open another target").clicked() {
                 app.pick(Pick::OpenFile);
             }
         });
@@ -326,9 +326,9 @@ fn targets_list(app: &mut CraftApp, ui: &mut Ui) {
         } else if resp.hovered() {
             ui.painter().rect_filled(rect, t.radius, t.hover);
         }
-        let ir = egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 10.0), Vec2::splat(30.0));
+        let ir = egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 10.0), Vec2::splat(size::CONTROL_LG));
         ui.painter().rect_filled(ir, t.radius_sm, t.raised);
-        icons::paint(ui, ir, crate::kind_icon(tgt.kind), 16.0, if active { t.accent_ink } else { t.icon });
+        icons::paint(ui, ir, crate::kind_icon(tgt.kind), size::ICON, if active { t.accent_ink } else { t.icon });
         ui.painter().text(egui::pos2(ir.right() + 10.0, rect.top() + 8.0), egui::Align2::LEFT_TOP, &tgt.name, theme::medium(theme::SMALL), t.text);
         ui.painter().text(
             egui::pos2(ir.right() + 10.0, rect.top() + 27.0),
@@ -371,9 +371,9 @@ fn tab_strip(ui: &mut Ui, tabs: &[(&str, &str)], selected: usize) -> Option<usiz
             if !icon.is_empty() {
                 icons::paint(
                     ui,
-                    egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 7.0), Vec2::splat(14.0)),
+                    egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 7.0), Vec2::splat(size::ICON_SM)),
                     icon,
-                    14.0,
+                    size::ICON_SM,
                     if on { t.accent } else { t.text_faint },
                 );
                 x += 20.0;
@@ -777,7 +777,7 @@ fn inspector(app: &mut CraftApp, ui: &mut Ui) {
                     ui.set_width(ui.available_width());
                     widgets::caption(ui, "Target");
                     ui.horizontal(|ui| {
-                        icons::show(ui, crate::kind_icon(tgt.kind), 16.0, t.accent);
+                        icons::show(ui, crate::kind_icon(tgt.kind), size::ICON, t.accent);
                         ui.label(RichText::new(&tgt.name).font(theme::semibold(theme::SMALL)));
                     });
                     ui.label(RichText::new(tr(tgt.kind.plain())).color(t.text_dim));
@@ -899,7 +899,7 @@ fn bottom(app: &mut CraftApp, ui: &mut Ui) {
             app.state.bottom = [BottomTab::Agent, BottomTab::Jobs, BottomTab::Log].get(i).copied().unwrap_or_default();
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if icons::button(ui, "chevron-down", 24.0, false, "Hide the console").clicked() {
+            if icons::button(ui, "chevron-down", size::CONTROL_SM, false, "Hide the console").clicked() {
                 app.state.bottom_open = false;
             }
             status_line(app, ui);
@@ -931,7 +931,7 @@ fn jobs(app: &mut CraftApp, ui: &mut Ui) {
                     Some(Ok(())) => ("check", t.success),
                     Some(Err(_)) => ("triangle-alert", t.danger),
                 };
-                icons::show(ui, icon, 14.0, col);
+                icons::show(ui, icon, size::ICON_SM, col);
                 ui.add_sized(Vec2::new(220.0, 18.0), egui::Label::new(RichText::new(tr(&j.title)).font(theme::medium(theme::CAPTION))).truncate());
                 let secs = j.finished_at.unwrap_or_else(std::time::Instant::now).duration_since(j.started).as_secs_f32();
                 ui.label(RichText::new(format!("{secs:.1}s")).font(theme::mono(11.5)).color(t.text_faint));
@@ -944,7 +944,7 @@ fn jobs(app: &mut CraftApp, ui: &mut Ui) {
                         if let Some(p) = p {
                             ui.label(RichText::new(p.message).color(t.text_dim).size(theme::CAPTION));
                         }
-                        if icons::button(ui, "x", 24.0, false, "Cancel").clicked() {
+                        if icons::button(ui, "x", size::CONTROL_SM, false, "Cancel").clicked() {
                             cancel = Some(j.id);
                         }
                     }

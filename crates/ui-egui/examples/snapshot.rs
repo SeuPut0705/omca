@@ -11,8 +11,10 @@
 //! card), Experienced workbench, and Home in Studio Light.
 
 use craft_anything_engine::Mode;
+use craft_anything_engine::evidence::Confidence;
 use craft_anything_ui_egui::state::{FirstRunStep, Screen};
-use craft_anything_ui_egui::{CraftApp, demo};
+use craft_anything_ui_egui::theme::{self, ThemeKind, Tokens, size, space};
+use craft_anything_ui_egui::{CraftApp, demo, icons, widgets};
 use std::path::PathBuf;
 
 fn arg(args: &[String], name: &str) -> Option<String> {
@@ -453,4 +455,184 @@ fn main() {
             a
         });
     }
+    for (kind, name) in [(ThemeKind::Studio, "kit"), (ThemeKind::StudioLight, "kit-light")] {
+        if want(name) {
+            render_kit(&out, name, w, 1100.0, scale, kind);
+        }
+    }
+}
+
+/// The UI kit on one page: every token and widget in one theme, the reference a redesign is
+/// checked against (`--only kit`).
+fn render_kit(out: &std::path::Path, name: &str, w: f32, h: f32, scale: f32, kind: ThemeKind) {
+    let mut harness = egui_kittest::Harness::builder().with_size(egui::vec2(w, h)).with_pixels_per_point(scale).with_max_steps(64).wgpu().build_ui_state(
+        move |ui, ready: &mut bool| {
+            if !*ready {
+                CraftApp::setup_context(ui.ctx());
+                theme::apply(ui.ctx(), kind, false);
+                craft_anything_ui_egui::i18n::set_language(LANG.get().map_or("en", String::as_str));
+                *ready = true;
+                // The fonts are bound from the next frame on.
+                return;
+            }
+            let t = Tokens::get(ui.ctx());
+            egui::Frame::new().fill(t.canvas).inner_margin(theme::pad(space::XL)).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.columns(3, |cols| {
+                    kit_tokens(&mut cols[0], &t);
+                    kit_controls(&mut cols[1], &t);
+                    kit_surfaces(&mut cols[2], &t);
+                });
+            });
+        },
+        false,
+    );
+    for _ in 0..24 {
+        harness.step();
+    }
+    match harness.render() {
+        Ok(img) => match img.save(out.join(format!("{name}.png"))) {
+            Ok(()) => println!("wrote {}", out.join(format!("{name}.png")).display()),
+            Err(e) => eprintln!("{name}: {e}"),
+        },
+        Err(e) => eprintln!("{name}: render failed: {e}"),
+    }
+}
+
+fn kit_heading(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(space::M);
+    ui.label(theme::heading(text, theme::SECTION));
+    ui.add_space(space::XS);
+}
+
+fn kit_tokens(ui: &mut egui::Ui, t: &Tokens) {
+    kit_heading(ui, "Colour");
+    for row in [
+        [("canvas", t.canvas), ("chrome", t.chrome), ("card", t.card), ("raised", t.raised)],
+        [("text", t.text), ("text_dim", t.text_dim), ("text_faint", t.text_faint), ("icon", t.icon)],
+        [("accent", t.accent), ("accent_ink", t.accent_ink), ("accent_soft", t.accent_soft), ("separator", t.separator)],
+        [("success", t.success), ("warning", t.warning), ("danger", t.danger), ("field_border", t.field_border)],
+    ] {
+        ui.horizontal(|ui| {
+            for (name, c) in row {
+                ui.vertical(|ui| {
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(size::TILE_LG * 2.0, size::TILE), egui::Sense::hover());
+                    ui.painter().rect(r, t.radius_sm, c, theme::hairline(t.card_border), egui::StrokeKind::Inside);
+                    ui.label(egui::RichText::new(name).size(theme::CAPTION).color(t.text_faint));
+                });
+            }
+        });
+    }
+    kit_heading(ui, "Type");
+    for (name, s) in [("TITLE", theme::TITLE), ("SECTION", theme::SECTION), ("CARD", theme::CARD)] {
+        ui.label(theme::heading(format!("{name} {s}"), s));
+    }
+    for (name, s) in [("LEAD", theme::LEAD), ("BODY", theme::BODY), ("SMALL", theme::SMALL), ("CAPTION", theme::CAPTION), ("TINY", theme::TINY)] {
+        ui.label(egui::RichText::new(format!("{name} {s} · 빠른 갈색 여우")).size(s).color(t.text));
+    }
+    kit_heading(ui, "Space");
+    for (name, s) in [
+        ("XXS", space::XXS),
+        ("XS", space::XS),
+        ("S", space::S),
+        ("SM", space::SM),
+        ("M", space::M),
+        ("L", space::L),
+        ("XL", space::XL),
+        ("XXL", space::XXL),
+        ("XXXL", space::XXXL),
+    ] {
+        ui.horizontal(|ui| {
+            ui.add_sized([size::TILE_LG, size::ROW_DENSE], egui::Label::new(egui::RichText::new(name).size(theme::CAPTION).color(t.text_faint)));
+            let (r, _) = ui.allocate_exact_size(egui::vec2(s, space::SM), egui::Sense::hover());
+            ui.painter().rect_filled(r, 0.0, t.accent);
+        });
+    }
+    kit_heading(ui, "Icons");
+    ui.horizontal(|ui| {
+        for s in [size::ICON_XS, size::ICON_SM, size::ICON, size::ICON_LG, size::ICON_XL, size::ICON_HERO] {
+            icons::show(ui, "sparkles", s, t.icon);
+        }
+    });
+}
+
+fn kit_controls(ui: &mut egui::Ui, t: &Tokens) {
+    kit_heading(ui, "Buttons");
+    ui.horizontal_wrapped(|ui| {
+        widgets::primary_icon(ui, Some("sparkles"), "Start", true);
+        widgets::primary_icon(ui, None, "Disabled", false);
+        widgets::secondary(ui, Some("folder-open"), "Open folder");
+        widgets::link(ui, "Change…");
+        icons::button(ui, "x", size::CONTROL_SM, false, "Close");
+        icons::button(ui, "pin", size::CONTROL_SM, true, "Pinned");
+    });
+    ui.add_space(space::S);
+    widgets::primary_sized(ui, Some("sparkles"), "Main action", true, size::CONTROL_XL, 14.0);
+    kit_heading(ui, "Choices");
+    ui.horizontal_wrapped(|ui| {
+        widgets::choice_chip(ui, "globe", "A website", true);
+        widgets::choice_chip(ui, "app-window", "An app", false);
+        widgets::choice_chip(ui, "puzzle", "A game", false);
+    });
+    ui.add_space(space::S);
+    widgets::segmented(ui, &["Simple", "Advanced"], 0, size::CONTROL);
+    ui.add_space(space::S);
+    let mut on = true;
+    widgets::toggle(ui, &mut on, "Explain like I'm new");
+    kit_heading(ui, "Fields");
+    let mut text = String::from("https://example.com");
+    ui.add(egui::TextEdit::singleline(&mut text).desired_width(f32::INFINITY).frame(widgets::text_field_frame(t)));
+    ui.add_space(space::S);
+    let mut dense = String::from("0x401a30");
+    ui.add(egui::TextEdit::singleline(&mut dense).desired_width(f32::INFINITY).frame(widgets::text_field_frame_compact(t)));
+    kit_heading(ui, "Status");
+    ui.horizontal_wrapped(|ui| {
+        widgets::pill(ui, "Ready", t.success, t.raised);
+        widgets::pill(ui, "Needs you", t.warning, t.raised);
+        widgets::pill(ui, "Deep", t.accent_ink, t.accent_soft);
+        widgets::confidence_badge(ui, Some(Confidence::Observed));
+        widgets::confidence_badge(ui, Some(Confidence::Inferred));
+        widgets::confidence_badge(ui, None);
+    });
+    ui.add_space(space::S);
+    widgets::working(ui, "Building", Some("Running cargo test"));
+}
+
+fn kit_surfaces(ui: &mut egui::Ui, t: &Tokens) {
+    kit_heading(ui, "Properties");
+    widgets::panel(t).inner_margin(theme::pad(space::M)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            widgets::icon_tile(ui, "globe", size::TILE);
+            ui.label(theme::heading("example.com", theme::CARD));
+        });
+        widgets::property_text(ui, "From", "https://example.com");
+        widgets::property_text(ui, "Built with", "React + Vite");
+        widgets::section(ui, "Usage", false);
+        widgets::property_text(ui, "Time spent", "12m 05s");
+        widgets::property_text(ui, "Tokens", "1.2M");
+    });
+    kit_heading(ui, "Cards");
+    widgets::card(t).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label(theme::heading("Card", theme::CARD));
+        ui.label(egui::RichText::new("A soft rounded box with a hairline edge.").color(t.text_dim));
+    });
+    ui.add_space(space::S);
+    widgets::callout(t, t.warning).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label(theme::heading("May I run a command?", theme::CARD));
+    });
+    ui.add_space(space::S);
+    widgets::callout_soft(t).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label("A soft note on the accent wash.");
+    });
+    ui.add_space(space::S);
+    widgets::code_block(t).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.label(egui::RichText::new("void main() { return 0; }").font(theme::mono(theme::SMALL)));
+    });
+    kit_heading(ui, "Empty state");
+    widgets::empty_state(ui, "folder-open", "Nothing here yet", "What you make shows up here.");
 }

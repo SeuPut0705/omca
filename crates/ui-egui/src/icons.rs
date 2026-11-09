@@ -40,7 +40,7 @@ pub fn paint(ui: &egui::Ui, rect: Rect, name: &str, size: f32, tint: Color32) {
     let r = Rect::from_center_size(rect.center(), Vec2::splat(size));
     // Left is right turned around: one icon fewer to carry.
     if name == "chevron-left" {
-        image("chevron-right", size, tint).rotate(std::f32::consts::PI, Vec2::splat(0.5)).paint_at(ui, r);
+        image("chevron-right", size, tint).rotate(std::f32::consts::PI, Vec2::new(0.5, 0.5)).paint_at(ui, r);
         return;
     }
     image(name, size, tint).paint_at(ui, r);

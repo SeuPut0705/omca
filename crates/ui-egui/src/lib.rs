@@ -1041,7 +1041,7 @@ impl CraftApp {
         };
         egui::Panel::top("stuck-banner").frame(widgets::pane(t.card, theme::pad_xy(space::L, space::SM))).show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
-                icons::show(ui, "triangle-alert", 16.0, t.danger);
+                icons::show(ui, "triangle-alert", theme::size::ICON, t.danger);
                 ui.label(egui::RichText::new(i18n::tr(text)).color(t.text)).on_hover_text(problem.summary.clone());
                 if let Some(path) = &problem.log
                     && widgets::secondary(ui, None, "Open log").on_hover_text(path.display().to_string()).clicked()
@@ -1846,10 +1846,10 @@ impl CraftApp {
                         ui.set_width(width - 2.0 * space::L);
                         ui.horizontal(|ui| {
                             let (icon, col) = if *error { ("triangle-alert", t.danger) } else { ("check", t.success) };
-                            icons::show(ui, icon, 15.0, col);
+                            icons::show(ui, icon, theme::size::ICON, col);
                             ui.add(egui::Label::new(egui::RichText::new(text).color(if *error { t.text } else { t.text_dim })).wrap());
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if icons::button(ui, "x", 28.0, false, "Dismiss").clicked() {
+                                if icons::button(ui, "x", theme::size::CONTROL, false, "Dismiss").clicked() {
                                     dismiss = Some(i);
                                 }
                             });

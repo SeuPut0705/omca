@@ -8,7 +8,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::{MakeDraft, Modal, Screen};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, Done, icons, widgets};
 use craft_anything_ai::rebuild::KindRegistry;
 use craft_anything_engine::{CallOptions, Caller};
@@ -207,9 +207,7 @@ pub fn ghidra_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     let ready = app.ghidra_ready();
     let downloading = app.ghidra_download();
     ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), egui::Sense::hover());
-        ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-        icons::paint(ui, rect, if ready { "check" } else { "microscope" }, 24.0, t.accent_ink);
+        widgets::icon_tile(ui, if ready { "check" } else { "microscope" }, size::TILE_LG);
         ui.vertical(|ui| {
             let title = if ready {
                 "Ghidra is ready"
@@ -487,9 +485,7 @@ pub fn assets_modal(app: &mut CraftApp, ui: &mut Ui, close: &mut bool) {
     let t = Tokens::get(ui.ctx());
     ui.set_width(520.0);
     ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), egui::Sense::hover());
-        ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-        icons::paint(ui, rect, "boxes", 24.0, t.accent_ink);
+        widgets::icon_tile(ui, "boxes", size::TILE_LG);
         ui.vertical(|ui| {
             ui.label(theme::heading(tr("Your fal.ai key"), theme::SECTION));
             ui.label(RichText::new(tr("Generated pictures and 3D models are made with fal.ai.")).color(t.text_dim));
@@ -618,7 +614,7 @@ pub fn build_with(app: &mut CraftApp, ui: &mut Ui) {
     let b = chosen(&app.kinds, &app.state.make);
     if let Some(f) = app.state.make.found.clone() {
         ui.horizontal_wrapped(|ui| {
-            icons::show(ui, "puzzle", 16.0, t.accent_ink);
+            icons::show(ui, "puzzle", size::ICON, t.accent_ink);
             ui.label(RichText::new(trf("Made with {engine}", &[("engine", &f.label())])).font(theme::semibold(theme::BODY)));
         });
         if !matches!(f.engine, game::Made::Unity | game::Made::Unreal | game::Made::Godot) {
@@ -645,7 +641,7 @@ pub fn build_with(app: &mut CraftApp, ui: &mut Ui) {
         None => {
             let named = app.kinds.named(&app.state.make.request, &crate::make::resolve_target(&app.state.make)).unwrap_or_default();
             ui.horizontal_wrapped(|ui| {
-                icons::show(ui, "check", 16.0, t.success);
+                icons::show(ui, "check", size::ICON, t.success);
                 ui.label(
                     RichText::new(trf("Built with {stack}, as you asked, so no game engine is needed.", &[("stack", named)]))
                         .color(t.text_dim)
@@ -692,13 +688,13 @@ fn status_line(app: &mut CraftApp, ui: &mut Ui, b: Builder, offer: bool) {
             ui.label(RichText::new(tr("Looking for game engines on this computer…")).color(t.text_dim).size(theme::SMALL));
         }
         Some(inv) if inv.ready(b) => {
-            icons::show(ui, "check", 16.0, t.success);
+            icons::show(ui, "check", size::ICON, t.success);
             let v = inv.best(b).map(|i| i.version.clone()).unwrap_or_default();
             let what = if v.is_empty() { b.name().to_string() } else { format!("{} {v}", b.name()) };
             ui.label(RichText::new(trf("Ready: {what} is on this computer.", &[("what", &what)])).color(t.text_dim).size(theme::SMALL));
         }
         Some(inv) => {
-            icons::show(ui, "download", 16.0, t.warning);
+            icons::show(ui, "download", size::ICON, t.warning);
             let text = if b == Builder::Unreal && inv.best(b).is_some() {
                 tr(unreal_tools_missing(std::env::consts::OS))
             } else {
@@ -816,9 +812,7 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
     ui.ctx().request_repaint_after(Duration::from_secs(1));
 
     ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), egui::Sense::hover());
-        ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-        icons::paint(ui, rect, if ready { "check" } else { "download" }, 24.0, t.accent_ink);
+        widgets::icon_tile(ui, if ready { "check" } else { "download" }, size::TILE_LG);
         ui.vertical(|ui| {
             let title = if ready { trf("{name} is ready", &[("name", b.name())]) } else { trf("Get {name}", &[("name", b.name())]) };
             ui.label(theme::heading(title, theme::SECTION));
@@ -833,10 +827,10 @@ pub fn modal(app: &mut CraftApp, ui: &mut Ui, b: Builder, close: &mut bool) {
     for (i, s) in list.iter().enumerate() {
         let now = Some(i) == current;
         ui.horizontal_top(|ui| {
-            let (r, _) = ui.allocate_exact_size(Vec2::splat(28.0), egui::Sense::hover());
+            let (r, _) = ui.allocate_exact_size(Vec2::splat(size::CONTROL), egui::Sense::hover());
             if s.done {
                 ui.painter().rect_filled(r, r.width() / 2.0, t.success);
-                icons::paint(ui, r, "check", 16.0, t.canvas);
+                icons::paint(ui, r, "check", size::ICON, t.canvas);
             } else {
                 ui.painter().rect_stroke(r, r.width() / 2.0, theme::hairline(if now { t.accent } else { t.field_border }), egui::StrokeKind::Inside);
                 let g = widgets::label_galley(ui, &(i + 1).to_string(), 12.0, t.text);

@@ -7,7 +7,7 @@
 use crate::i18n::{tr, trf};
 use crate::slash::{self, Command, Typed};
 use crate::state::FeedItem;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, chat, icons, prompt_box, widgets};
 use craft_anything_engine::evidence::ToolError;
 use craft_anything_engine::questions::{self, AskedQuestion};
@@ -146,9 +146,9 @@ pub fn card(ui: &mut Ui, a: &mut Asked, glossary: bool) {
         let mut toggle = false;
         ui.horizontal(|ui| {
             let name = if a.collapsed { "Show the answer" } else { "Hide the answer" };
-            toggle |= icons::button(ui, if a.collapsed { "chevron-right" } else { "chevron-down" }, 22.0, false, name).clicked();
-            let (icon, _) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::hover());
-            icons::paint(ui, icon, "circle-help", 16.0, t.icon);
+            toggle |= icons::button(ui, if a.collapsed { "chevron-right" } else { "chevron-down" }, size::CONTROL_SM, false, name).clicked();
+            let (icon, _) = ui.allocate_exact_size(egui::Vec2::splat(size::ICON), egui::Sense::hover());
+            icons::paint(ui, icon, "circle-help", size::ICON, t.icon);
             let line = egui::Label::new(RichText::new(&a.question).strong()).sense(egui::Sense::click()).selectable(false);
             let line = if a.collapsed { line.truncate() } else { line.wrap() };
             toggle |= ui.add(line).on_hover_cursor(egui::CursorIcon::PointingHand).clicked();

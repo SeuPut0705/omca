@@ -3,8 +3,8 @@
 
 use crate::i18n::tr;
 use crate::state::{Modal, Screen};
-use crate::theme::{self, Tokens, space};
-use crate::{CraftApp, Pick, Route, icons, widgets};
+use crate::theme::{self, Tokens, size, space};
+use crate::{CraftApp, Pick, Route, widgets};
 use craft_anything_engine::Consent;
 use egui::{RichText, Ui, Vec2};
 use serde_json::json;
@@ -79,9 +79,7 @@ pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
         ui.set_width(440.0);
         match &modal {
             Modal::ComingSoon { title, body, icon } => {
-                let (rect, _) = ui.allocate_exact_size(Vec2::splat(52.0), egui::Sense::hover());
-                ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-                icons::paint(ui, rect, icon, 26.0, t.accent_ink);
+                widgets::icon_tile(ui, icon, size::TILE_LG);
                 ui.add_space(space::M);
                 ui.label(theme::heading(tr(title), theme::SECTION));
                 ui.add_space(space::XS);
@@ -138,8 +136,8 @@ pub fn modals(app: &mut CraftApp, ctx: &egui::Context) {
                     ui.add_space(space::M);
                     for (n, s) in steps.iter().enumerate() {
                         ui.horizontal(|ui| {
-                            let (rect, _) = ui.allocate_exact_size(Vec2::splat(24.0), egui::Sense::hover());
-                            ui.painter().circle_filled(rect.center(), 12.0, t.accent_soft);
+                            let (rect, _) = ui.allocate_exact_size(Vec2::splat(size::CONTROL_SM), egui::Sense::hover());
+                            ui.painter().circle_filled(rect.center(), rect.width() / 2.0, t.accent_soft);
                             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, (n + 1).to_string(), theme::semibold(theme::CAPTION), t.accent_ink);
                             ui.add(egui::Label::new(tr(s)).wrap());
                         });

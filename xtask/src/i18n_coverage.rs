@@ -41,11 +41,16 @@ impl<'ast> Visit<'ast> for Lookups {
             let owner = path.path.segments.iter().rev().nth(1).map(|s| s.ident.to_string()).unwrap_or_default();
             let positions: &[usize] = match (owner.as_str(), name.as_str()) {
                 (_, "tr" | "trf") => &[0],
-                ("widgets", "primary" | "link" | "suggestion" | "caption" | "pill" | "working" | "working_since" | "segmented" | "segmented_sized") => &[1],
+                (
+                    "widgets",
+                    "primary" | "link" | "suggestion" | "caption" | "pill" | "working" | "working_since" | "segmented" | "segmented_sized" | "section"
+                    | "property" | "property_text",
+                ) => &[1],
                 ("widgets", "named") => &[1],
                 ("widgets", "primary_icon" | "primary_sized" | "secondary") => &[2],
                 ("widgets", "toggle") => &[2],
                 ("widgets", "choice_tile" | "big_card") => &[3, 4],
+                ("widgets", "choice_chip") => &[2],
                 ("widgets", "empty_state") => &[2, 3],
                 ("icons", "button") => &[4],
                 _ => &[],

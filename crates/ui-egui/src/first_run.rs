@@ -3,7 +3,7 @@
 
 use crate::i18n::tr;
 use crate::state::FirstRunStep;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_ai::{BackendKind, Detected};
 use craft_anything_engine::Mode;
@@ -104,13 +104,13 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
     match app.default_builder() {
         Some(b) => {
             ui.horizontal(|ui| {
-                icons::show(ui, "check", 16.0, t.success);
+                icons::show(ui, "check", size::ICON, t.success);
                 ui.label(RichText::new(crate::i18n::trf("{name} builds what you make.", &[("name", &b)])).color(t.text_dim));
             });
         }
         None => {
             ui.horizontal_wrapped(|ui| {
-                icons::show(ui, "triangle-alert", 16.0, t.warning);
+                icons::show(ui, "triangle-alert", size::ICON, t.warning);
                 ui.label(
                     RichText::new(tr("Nothing can build yet: install Claude Code (and sign in to it once), or add an AI with an API key below."))
                         .color(t.text_dim),
@@ -146,7 +146,7 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
             widgets::card(&t).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    icons::show(ui, "radar", 22.0, t.text_faint);
+                    icons::show(ui, "radar", size::ICON_XL, t.text_faint);
                     ui.vertical(|ui| {
                         ui.label(RichText::new(tr("We didn't find an AI on this computer yet")).font(theme::medium(theme::BODY)));
                         ui.label(RichText::new(tr("You can add a Claude, ChatGPT or OpenRouter key, a local model (Ollama, LM Studio) or an agent you already use, later in Settings → AI.")).color(t.text_dim));
@@ -195,9 +195,9 @@ fn brain_card(app: &mut CraftApp, ui: &mut Ui, d: &Detected) {
     frame.show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            let (rect, _) = ui.allocate_exact_size(Vec2::splat(40.0), egui::Sense::hover());
+            let (rect, _) = ui.allocate_exact_size(Vec2::splat(size::TILE_LG), egui::Sense::hover());
             ui.painter().rect_filled(rect, t.radius, t.raised);
-            icons::paint(ui, rect, kind_icon(d.suggestion.kind), 20.0, t.accent_ink);
+            icons::paint(ui, rect, kind_icon(d.suggestion.kind), size::ICON_LG, t.accent_ink);
             ui.vertical(|ui| {
                 ui.label(theme::heading(&name, theme::CARD));
                 ui.label(RichText::new(&d.reason).color(t.text_dim).size(theme::SMALL));
@@ -247,13 +247,19 @@ fn option_row(ui: &mut Ui, icon: &str, title: &str, sub: &str, on: bool) -> egui
     let fill = if on { t.accent_soft } else { theme::mix(t.card, t.raised, h) };
     let stroke = if on { theme::hairline(t.accent) } else { theme::hairline(theme::mix(t.card_border, t.field_border, h)) };
     ui.painter().rect(rect, t.radius_lg, fill, stroke, egui::StrokeKind::Inside);
-    let ir = egui::Rect::from_min_size(rect.min + Vec2::new(14.0, 12.0), Vec2::splat(40.0));
+    let ir = egui::Rect::from_min_size(rect.min + Vec2::new(14.0, 12.0), Vec2::splat(size::TILE_LG));
     ui.painter().rect_filled(ir, t.radius, t.raised);
-    icons::paint(ui, ir, icon, 20.0, if on { t.accent_ink } else { t.icon });
+    icons::paint(ui, ir, icon, size::ICON_LG, if on { t.accent_ink } else { t.icon });
     ui.painter().text(egui::pos2(ir.right() + 14.0, rect.top() + 14.0), Align2::LEFT_TOP, tr(title), theme::semibold(theme::BODY), t.text);
     ui.painter().text(egui::pos2(ir.right() + 14.0, rect.top() + 35.0), Align2::LEFT_TOP, tr(sub), egui::FontId::proportional(theme::SMALL), t.text_dim);
     if on {
-        icons::paint(ui, egui::Rect::from_center_size(egui::pos2(rect.right() - 26.0, rect.center().y), Vec2::splat(20.0)), "check", 18.0, t.accent);
+        icons::paint(
+            ui,
+            egui::Rect::from_center_size(egui::pos2(rect.right() - 26.0, rect.center().y), Vec2::splat(size::ICON_LG)),
+            "check",
+            size::ICON_LG,
+            t.accent,
+        );
     }
     widgets::focus_ring(ui, &resp, rect);
     resp.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, tr(title)));
@@ -302,9 +308,9 @@ fn purpose_icon(p: craft_anything_engine::project::Purpose) -> &'static str {
 
 fn done(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    let (rect, _) = ui.allocate_exact_size(Vec2::splat(72.0), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(size::TILE_LG + size::ICON_HERO), egui::Sense::hover());
     ui.painter().rect(rect, rect.width() / 2.0, t.accent_soft, theme::hairline(t.accent), egui::StrokeKind::Inside);
-    icons::paint(ui, rect, "check", 34.0, t.accent);
+    icons::paint(ui, rect, "check", size::ICON_HERO, t.accent);
     ui.add_space(space::L);
     ui.label(theme::heading(tr("You're all set"), theme::TITLE));
     ui.add_space(space::S);

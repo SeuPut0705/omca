@@ -5,7 +5,7 @@
 use crate::i18n::tr;
 use crate::make::{ago, status_shown};
 use crate::state::Screen;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
 use egui::{RichText, Sense, Ui, Vec2};
 
@@ -46,7 +46,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
             // Over the row icons when folded, in the corner when open.
             let layout = if fold { egui::Layout::top_down(egui::Align::Center) } else { egui::Layout::right_to_left(egui::Align::Min) };
             ui.with_layout(layout, |ui| {
-                if icons::button(ui, icon, 24.0, false, tip).clicked() {
+                if icons::button(ui, icon, size::CONTROL_SM, false, tip).clicked() {
                     app.state.sidebar_folded = !fold;
                 }
             });
@@ -65,7 +65,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
         crate::pins::section(app, ui, fold);
         // Folded, the heading's words don't fit: the rule and the icon stay, on the same line, so
         // nothing moves when the sidebar folds.
-        let refresh = |ui: &mut Ui| icons::button(ui, "refresh-cw", 22.0, false, "Look for projects again").clicked();
+        let refresh = |ui: &mut Ui| icons::button(ui, "refresh-cw", size::CONTROL_SM, false, "Look for projects again").clicked();
         let again = if fold {
             centred_row(ui, 22.0, refresh)
         } else {
@@ -149,7 +149,13 @@ pub(crate) fn row(ui: &mut Ui, icon: &str, label: &str, status: Option<(egui::Co
     // Project names are shown as written; the app's own rows are translated.
     let text = if status.is_some() { label.to_string() } else { tr(label) };
     let icon_x = if fold { rect.center().x } else { rect.left() + 22.0 };
-    icons::paint(ui, egui::Rect::from_center_size(egui::pos2(icon_x, rect.center().y), Vec2::splat(16.0)), icon, 16.0, if on { t.text } else { t.icon });
+    icons::paint(
+        ui,
+        egui::Rect::from_center_size(egui::pos2(icon_x, rect.center().y), Vec2::splat(size::ICON)),
+        icon,
+        size::ICON,
+        if on { t.text } else { t.icon },
+    );
     let name = match status {
         Some((_, s, _)) => format!("{text}, {}", tr(s)),
         None => text.clone(),

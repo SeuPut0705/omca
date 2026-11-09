@@ -4,7 +4,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, Pick, widgets};
 use craft_anything_ai::rebuild::stacks;
 use craft_anything_engine::workspace::{self, ExistingFiles, FolderState, Workspace};
@@ -30,7 +30,7 @@ pub fn make_line(app: &mut CraftApp, ui: &mut Ui) {
     let picked = d.folder.is_some();
     // Where it goes (and what the files there are), then what can be changed, each on its own line.
     ui.horizontal(|ui| {
-        crate::icons::show(ui, "folder", 14.0, t.text_faint);
+        crate::icons::show(ui, "folder", size::ICON_SM, t.text_faint);
         ui.label(RichText::new(tr("Saved in")).size(theme::SMALL).color(t.text_dim));
         ui.add(egui::Label::new(RichText::new(&place).size(theme::SMALL).color(t.text)).truncate()).on_hover_text(&place);
     });

@@ -1,7 +1,7 @@
 //! Evidence: proof cards ("Show me the proof"), a pretty JSON viewer and compact ledger rows.
 
 use crate::i18n::tr;
-use crate::theme::{self, Tokens, confidence_color, space};
+use crate::theme::{self, Tokens, confidence_color, size, space};
 use crate::{icons, widgets};
 use craft_anything_engine::evidence::{CoverageStatus, Evidence};
 use egui::{RichText, Ui};
@@ -66,7 +66,7 @@ fn details(ui: &mut Ui, e: &Evidence, t: &Tokens) {
         widgets::caption(ui, "What we couldn't check");
         for l in &e.limitations {
             ui.horizontal(|ui| {
-                icons::show(ui, "info", 13.0, t.warning);
+                icons::show(ui, "info", size::ICON_XS, t.warning);
                 ui.add(egui::Label::new(RichText::new(&l.message).color(t.text_dim)).wrap());
             });
         }

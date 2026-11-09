@@ -3,7 +3,7 @@
 
 use crate::i18n::tr;
 use crate::state::{ChatItem, ConsentAnswer};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, evidence_ui, glossary, icons, widgets};
 use craft_anything_ai::AgentEvent;
 use craft_anything_engine::TargetKind;
@@ -152,9 +152,7 @@ fn target_card(app: &mut CraftApp, ui: &mut Ui) {
         match app.view.active_target().cloned() {
             Some(target) => {
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), egui::Sense::hover());
-                    ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-                    icons::paint(ui, rect, crate::kind_icon(target.kind), 26.0, t.accent_ink);
+                    widgets::icon_tile(ui, crate::kind_icon(target.kind), size::TILE_LG);
                     ui.vertical(|ui| {
                         ui.add(egui::Label::new(theme::heading(&target.name, theme::CARD)).truncate());
                         ui.label(RichText::new(crate::human_bytes(target.bytes.len())).color(t.text_faint).size(theme::CAPTION));
@@ -367,7 +365,7 @@ enum ChatAction {
 }
 
 /// The side of a message's copy button.
-const COPY: f32 = 22.0;
+const COPY: f32 = size::CONTROL_SM;
 
 fn margin(dense: bool) -> Margin {
     if dense { theme::pad_xy(space::M, space::S) } else { theme::pad_xy(space::L, space::M) }
@@ -426,7 +424,7 @@ pub(crate) fn answer_bubble(ui: &mut Ui, dense: bool, text: &str, content: impl 
 pub(crate) fn activity_row(ui: &mut Ui, text: RichText) {
     let t = Tokens::get(ui.ctx());
     ui.horizontal_top(|ui| {
-        icons::show(ui, "activity", 14.0, t.accent);
+        icons::show(ui, "activity", size::ICON_SM, t.accent);
         ui.add(egui::Label::new(text).wrap());
     });
 }
@@ -459,7 +457,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
                 };
                 widgets::chip(&t).inner_margin(theme::pad_xy(space::M, space::XXS)).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        icons::show(ui, icon, 13.0, col);
+                        icons::show(ui, icon, size::ICON_XS, col);
                         ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(12.5)).color(t.text_dim));
                     });
                 });
@@ -483,7 +481,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
             widgets::callout(&t, t.warning).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    icons::show(ui, "shield", 18.0, t.warning);
+                    icons::show(ui, "shield", size::ICON_LG, t.warning);
                     ui.label(RichText::new(crate::i18n::trf("May I run \"{title}\"?", &[("title", title)])).font(theme::semibold(theme::BODY)));
                 });
                 ui.label(RichText::new(explanation).color(t.text_dim));
@@ -522,7 +520,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
             widgets::card(&t).stroke(theme::hairline(t.danger.gamma_multiply(0.6))).inner_margin(theme::pad(space::M)).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    icons::show(ui, "triangle-alert", 16.0, t.danger);
+                    icons::show(ui, "triangle-alert", size::ICON, t.danger);
                     ui.add(egui::Label::new(RichText::new(message).color(t.text)).wrap());
                 });
                 if let Some(r) = remediation {
@@ -539,7 +537,7 @@ fn item_ui(ui: &mut Ui, item: &ChatItem, beginner: bool, dense: bool, open: bool
             widgets::callout_soft(&t).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    icons::show(ui, "sparkles", 20.0, t.accent_ink);
+                    icons::show(ui, "sparkles", size::ICON_LG, t.accent_ink);
                     ui.vertical(|ui| {
                         ui.label(RichText::new(tr("Want answers in plain words?")).font(theme::semibold(theme::BODY)));
                         ui.label(

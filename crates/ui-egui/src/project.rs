@@ -6,7 +6,7 @@
 use crate::i18n::{tr, trf};
 use crate::make::{self, resolve_target};
 use crate::state::{FeedItem, MakeDraft, Modal, PlanStatus, PlanStep, Screen, UserItem};
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, Done, chat, icons, prompt_box, widgets};
 use craft_anything_ai::AgentEvent;
 use craft_anything_ai::rebuild::activity::{Action, ActivityNow, LineKind};
@@ -668,7 +668,7 @@ fn checklist(ui: &mut Ui, steps: &[PlanStep], t: &Tokens, began: Option<std::tim
         ui.horizontal(|ui| {
             widgets::caption(ui, "Plan");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if fold && icons::button(ui, "x", 18.0, false, &tr("Fold the plan")).clicked() {
+                if fold && icons::button(ui, "x", size::CONTROL_XS, false, &tr("Fold the plan")).clicked() {
                     folded = true;
                 }
                 if let Some(b) = began {
@@ -688,11 +688,11 @@ fn checklist(ui: &mut Ui, steps: &[PlanStep], t: &Tokens, began: Option<std::tim
             egui::ScrollArea::vertical().id_salt("plan-steps").max_height(height).min_scrolled_height(height).auto_shrink([false, true]).show(ui, |ui| {
                 for s in steps {
                     ui.horizontal(|ui| {
-                        let (r, _) = ui.allocate_exact_size(Vec2::splat(18.0), egui::Sense::hover());
+                        let (r, _) = ui.allocate_exact_size(Vec2::splat(size::CONTROL_XS), egui::Sense::hover());
                         match s.status {
                             PlanStatus::Done => {
                                 ui.painter().circle_filled(r.center(), 7.0, t.success);
-                                icons::paint(ui, r.shrink(4.0), "check", 10.0, t.canvas);
+                                icons::paint(ui, r.shrink(4.0), "check", size::ICON_XS, t.canvas);
                             }
                             PlanStatus::Doing => {
                                 ui.painter().circle_stroke(r.center(), 6.5, theme::line(theme::EMPHASIS, t.accent));
@@ -924,56 +924,61 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     });
 }
 
+/// The project's details beside the feed, as one panel of sections (Linear's property panel):
+/// what it is, where the build is, what it has used, what's still open, and what to do with it.
 fn side(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     let t = Tokens::get(ui.ctx());
-    ui.add_space(space::M);
     let m = &ws.manifest;
-    widgets::card(&t).show(ui, |ui| {
+    widgets::panel(&t).inner_margin(theme::pad(space::M)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), egui::Sense::hover());
-            ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-            icons::paint(ui, rect, make::project_icon(m), 24.0, t.accent_ink);
+            widgets::icon_tile(ui, make::project_icon(m), size::TILE);
             ui.vertical(|ui| {
                 ui.add(egui::Label::new(theme::heading(&m.name, theme::CARD)).truncate());
                 let (label, fg, bg) = make::status_shown(app, ws, &t);
                 widgets::pill(ui, label, fg, bg);
             });
         });
-        ui.add_space(space::M);
+        ui.add_space(space::SM);
         if !matches!(m.target, TargetRef::None) {
-            widgets::caption(ui, "From");
-            ui.add(egui::Label::new(RichText::new(m.target.label()).color(t.text_dim)).truncate());
-            ui.add_space(space::S);
+            widgets::property_text(ui, "From", &m.target.label()).on_hover_text(m.target.label());
         }
         if !m.stack.is_empty() && !app.beginner() {
-            widgets::caption(ui, "Built with");
-            ui.label(RichText::new(&m.stack).color(t.text_dim));
+            widgets::property_text(ui, "Built with", &m.stack);
         }
+        widgets::section(ui, "Progress", false);
+        steps(app, ui, ws);
+        usage(app, ui, ws);
+        open_questions(app, ui);
+        widgets::section(ui, "Actions", false);
+        actions(app, ui, ws);
     });
-    ui.add_space(space::L);
-    steps(app, ui, ws);
-    ui.add_space(space::L);
-    open_questions(app, ui);
+}
+
+/// What to do with the project: see the result, add pictures, open its folder, pin, manage.
+fn actions(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
+    let m = &ws.manifest;
     asset_line(app, ui, ws);
     if outcome(app).is_some() {
-        outcome_button(app, ui, ws, 32.0, 12.5);
+        outcome_button(app, ui, ws, size::CONTROL, 12.5);
         ui.add_space(space::S);
     }
     // Pictures of the original: the look the builder matches (websites are photographed for it).
-    if !matches!(m.target, TargetRef::Website { .. }) {
+    let pictures = !matches!(m.target, TargetRef::Website { .. });
+    if pictures {
         let n = app.facts.references;
-        if widgets::secondary(ui, Some("paperclip"), "Add pictures of the original")
-            .on_hover_text(tr("Screenshots of how it should look. The builder opens each one and matches it."))
-            .clicked()
+        let note = if n == 0 { tr("None yet. Screenshots help it look right.") } else { trf("{n} picture(s) to match.", &[("n", &n.to_string())]) };
+        widgets::property(ui, "Pictures", |ui| ui.add(egui::Label::new(RichText::new(note).color(Tokens::get(ui.ctx()).text_dim).size(theme::SMALL)).wrap()));
+        ui.add_space(space::XS);
+    }
+    ui.horizontal_wrapped(|ui| {
+        if pictures
+            && widgets::secondary(ui, Some("paperclip"), "Add pictures of the original")
+                .on_hover_text(tr("Screenshots of how it should look. The builder opens each one and matches it."))
+                .clicked()
         {
             app.pick(crate::Pick::Pictures);
         }
-        let note = if n == 0 { tr("None yet. Screenshots help it look right.") } else { trf("{n} picture(s) to match.", &[("n", &n.to_string())]) };
-        ui.label(RichText::new(note).color(Tokens::get(ui.ctx()).text_dim).size(theme::SMALL));
-        ui.add_space(space::SM);
-    }
-    ui.horizontal_wrapped(|ui| {
         if widgets::secondary(ui, Some("folder-open"), "Open folder").clicked() {
             open_folder(app, ws);
         }
@@ -1036,25 +1041,19 @@ fn open_questions(app: &CraftApp, ui: &mut Ui) {
         return;
     }
     let t = Tokens::get(ui.ctx());
-    widgets::card(&t).inner_margin(theme::pad_xy(space::L, space::L)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        widgets::caption(ui, "Open questions");
-        ui.add_space(space::S);
-        const SHOWN: usize = 5;
-        for q in app.facts.open_questions.iter().take(SHOWN) {
-            ui.horizontal_wrapped(|ui| {
-                icons::show(ui, "info", 14.0, t.text_dim);
-                ui.add(egui::Label::new(RichText::new(q).size(theme::SMALL).color(t.text)).wrap());
-            });
-        }
-        if app.facts.open_questions.len() > SHOWN {
-            let more = trf("and {n} more", &[("n", &(app.facts.open_questions.len() - SHOWN).to_string())]);
-            ui.label(RichText::new(more).size(theme::SMALL).color(t.text_dim));
-        }
-        ui.add_space(space::XS);
-        ui.label(RichText::new(tr("Answer any of them in a message below.")).size(theme::SMALL).color(t.text_dim));
-    });
-    ui.add_space(space::L);
+    widgets::section(ui, "Open questions", false);
+    const SHOWN: usize = 5;
+    for q in app.facts.open_questions.iter().take(SHOWN) {
+        ui.horizontal_top(|ui| {
+            icons::show(ui, "info", size::ICON_SM, t.text_dim);
+            ui.add(egui::Label::new(RichText::new(q).size(theme::SMALL).color(t.text)).wrap());
+        });
+    }
+    if app.facts.open_questions.len() > SHOWN {
+        let more = trf("and {n} more", &[("n", &(app.facts.open_questions.len() - SHOWN).to_string())]);
+        ui.label(RichText::new(more).size(theme::SMALL).color(t.text_dim));
+    }
+    ui.label(RichText::new(tr("Answer any of them in a message below.")).size(theme::CAPTION).color(t.text_faint));
 }
 
 fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
@@ -1062,11 +1061,8 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
     let current = current_step(app, ws);
     let live = current.is_some_and(|(_, live)| live);
     let idx = current.and_then(|(c, _)| Step::ALL.iter().position(|s| *s == c));
-    widgets::card(&t).inner_margin(theme::pad_xy(space::L, space::L)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        widgets::caption(ui, "Progress");
-        ui.add_space(space::SM);
-        let row_h = 38.0;
+    {
+        let row_h = size::ROW;
         for (i, s) in Step::ALL.iter().enumerate() {
             // `here`: where a paused or interrupted build stopped.
             let (done, now, here) = match idx {
@@ -1075,21 +1071,21 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
                 None => (false, false, false),
             };
             let (row, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::hover());
-            let marker = egui::Rect::from_min_size(egui::pos2(row.left(), row.center().y - 12.0), Vec2::splat(24.0));
+            let marker = egui::Rect::from_min_size(egui::pos2(row.left(), row.center().y - size::CONTROL_XS / 2.0), Vec2::splat(size::CONTROL_XS));
             // The line to the next step: ink once this step is done, a hairline before that.
             if i + 1 < Step::ALL.len() {
                 let x = marker.center().x;
                 let col = if done { t.text_dim } else { t.separator };
-                ui.painter().vline(x, marker.bottom()..=row.bottom() + 12.0, theme::hairline(col));
+                ui.painter().vline(x, marker.bottom()..=row.bottom() + size::CONTROL_XS / 2.0, theme::hairline(col));
             }
             let number = format!("{:02}", i + 1);
             let round = marker.width() / 2.0;
             if done {
                 ui.painter().rect_filled(marker, round, t.text);
-                icons::paint(ui, marker.shrink(5.0), "check", 14.0, t.canvas);
+                icons::paint(ui, marker, "check", size::ICON_XS, t.canvas);
             } else if now {
                 ui.painter().rect_filled(marker, round, t.accent);
-                let g = widgets::label_galley(ui, &number, 11.0, t.on_accent);
+                let g = widgets::label_galley(ui, &number, theme::TINY - 1.5, t.on_accent);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.on_accent);
                 let pulse = (ui.input(|i| i.time) as f32 * 2.5).sin().abs();
                 ui.painter().rect_stroke(
@@ -1101,14 +1097,14 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
                 widgets::animate(ui, widgets::FRAME);
             } else if here {
                 ui.painter().rect(marker, round, t.card, theme::line(theme::EMPHASIS, t.accent), egui::StrokeKind::Inside);
-                let g = widgets::label_galley(ui, &number, 11.0, t.accent_ink);
+                let g = widgets::label_galley(ui, &number, theme::TINY - 1.5, t.accent_ink);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.accent_ink);
             } else {
                 ui.painter().rect(marker, round, t.card, theme::hairline(t.field_border), egui::StrokeKind::Inside);
-                let g = widgets::label_galley(ui, &number, 11.0, t.text_faint);
+                let g = widgets::label_galley(ui, &number, theme::TINY - 1.5, t.text_faint);
                 ui.painter().galley_with_override_text_color(marker.center() - g.size() / 2.0, g, t.text_faint);
             }
-            let x = marker.right() + 12.0;
+            let x = marker.right() + space::SM;
             let (font, col) = if now || here {
                 (theme::semibold(theme::SMALL), t.text)
             } else if done {
@@ -1137,58 +1133,54 @@ fn steps(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
                 ui.painter().galley_with_override_text_color(pos, g, ink);
             }
         }
-        // How long it has worked and what the AI has used, live while it builds.
-        if let Some(u) = app.usage.get(&ws.root).filter(|u| u.working() || !u.elapsed().is_zero()) {
-            ui.add_space(space::L);
-            let tip = || crate::usage::explain(&u.saved, "Every build of this project.");
-            stat_row(ui, "Time spent", &crate::usage::duration_words(u.elapsed()));
-            if u.saved.priced {
-                let cost = crate::usage::cost_stat(&u.saved);
-                stat_row(ui, cost.label, &cost.value).on_hover_text(tip());
-                // Said outright, not only on hover: on a subscription this isn't what they pay.
-                if let Some(note) = cost.note {
-                    ui.add(egui::Label::new(RichText::new(tr(note)).color(Tokens::get(ui.ctx()).text_faint).size(theme::CAPTION)).wrap());
-                }
-            }
-            if u.saved.tokens() > 0 {
-                stat_row(ui, "Tokens", &crate::usage::tokens_short(u.saved.tokens())).on_hover_text(tip());
-            }
-            if u.working() {
-                ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
+    }
+}
+
+/// What the builds took and used, and how alike the last check found it, as properties.
+fn usage(app: &CraftApp, ui: &mut Ui, ws: &Workspace) {
+    let t = Tokens::get(ui.ctx());
+    let u = app.usage.get(&ws.root).filter(|u| u.working() || !u.elapsed().is_zero());
+    let sim = ws.manifest.checks.last().and_then(|c| c.similarity);
+    if u.is_none() && sim.is_none() {
+        return;
+    }
+    widgets::section(ui, "Usage", false);
+    if let Some(u) = u {
+        let tip = || crate::usage::explain(&u.saved, "Every build of this project.");
+        stat_row(ui, "Time spent", &crate::usage::duration_words(u.elapsed()));
+        if u.saved.priced {
+            let cost = crate::usage::cost_stat(&u.saved);
+            stat_row(ui, cost.label, &cost.value).on_hover_text(tip());
+            // Said outright, not only on hover: on a subscription this isn't what they pay.
+            if let Some(note) = cost.note {
+                ui.add(egui::Label::new(RichText::new(tr(note)).color(t.text_faint).size(theme::CAPTION)).wrap());
             }
         }
-        if let Some(sim) = ws.manifest.checks.last().and_then(|c| c.similarity) {
-            ui.add_space(space::L);
-            stat_row(ui, "Likeness", &format!("{sim:.0}%"));
-            let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 4.0), egui::Sense::hover());
-            ui.painter().rect_filled(bar, 2.0, t.separator);
-            let filled = egui::Rect::from_min_size(bar.min, Vec2::new(bar.width() * (sim / 100.0).clamp(0.0, 1.0) as f32, bar.height()));
-            ui.painter().rect_filled(filled, 2.0, t.accent);
+        if u.saved.tokens() > 0 {
+            stat_row(ui, "Tokens", &crate::usage::tokens_short(u.saved.tokens())).on_hover_text(tip());
         }
-    });
+        if u.working() {
+            ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
+        }
+    }
+    if let Some(sim) = sim {
+        widgets::property(ui, "Likeness", |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{sim:.0}%")).font(theme::mono(theme::SMALL)).color(t.text));
+                let (bar, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), space::XS), egui::Sense::hover());
+                ui.painter().rect_filled(bar, space::XXS, t.separator);
+                let filled = egui::Rect::from_min_size(bar.min, Vec2::new(bar.width() * (sim / 100.0).clamp(0.0, 1.0) as f32, bar.height()));
+                ui.painter().rect_filled(filled, space::XXS, t.accent);
+            });
+        });
+    }
 }
 
 /// A caption on the left and its value on the right, or the value on a line of its own when the
 /// two would overlap: a right-to-left layout doesn't make room for what's already on the row.
 fn stat_row(ui: &mut Ui, label: &str, value: &str) -> egui::Response {
     let t = Tokens::get(ui.ctx());
-    let text = RichText::new(value).font(theme::mono(13.0)).color(t.text);
-    let value_width =
-        egui::WidgetText::from(text.clone()).into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::FontSelection::Default).size().x;
-    let caption_width = widgets::label_galley(ui, &tr(label), 12.0, t.text_faint).size().x;
-    if caption_width + ui.spacing().item_spacing.x + value_width <= ui.available_width() {
-        ui.horizontal(|ui| {
-            widgets::caption(ui, label);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(text));
-        })
-        .response
-    } else {
-        ui.vertical(|ui| {
-            widgets::caption(ui, label);
-            ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| ui.label(text));
-        })
-        .response
-    }
+    widgets::property(ui, label, |ui| ui.add(egui::Label::new(RichText::new(value).font(theme::mono(theme::SMALL)).color(t.text)).truncate()))
 }
 
 fn feed(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
@@ -1213,9 +1205,7 @@ fn feed(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
         widgets::card(&t).inner_margin(theme::pad(space::L)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(Vec2::splat(44.0), egui::Sense::hover());
-                ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-                icons::paint(ui, rect, w.icon, 22.0, t.accent_ink);
+                widgets::icon_tile(ui, w.icon, size::TILE_LG);
                 ui.vertical(|ui| {
                     ui.label(theme::heading(tr(w.ready), theme::CARD));
                     ui.label(RichText::new(tr("Try it out, then ask below for any changes.")).color(t.text_dim));
@@ -1409,7 +1399,7 @@ fn draw_items(
                 widgets::card(&t).stroke(theme::hairline(t.danger.gamma_multiply(0.6))).inner_margin(theme::pad(space::L)).show(ui, |ui| {
                     ui.set_width(ui.available_width());
                     ui.horizontal(|ui| {
-                        icons::show(ui, "triangle-alert", 16.0, t.danger);
+                        icons::show(ui, "triangle-alert", size::ICON, t.danger);
                         ui.add(egui::Label::new(RichText::new(message).color(t.text)).wrap());
                     });
                     if let Some(r) = remediation {
@@ -1467,7 +1457,7 @@ fn work(ui: &mut Ui, tools: &[(String, Option<bool>)], notes: &[String], advance
                         Some(true) => ("check", t.success),
                         Some(false) => ("triangle-alert", t.warning),
                     };
-                    icons::show(ui, icon, 12.0, col);
+                    icons::show(ui, icon, size::ICON_XS, col);
                     ui.label(RichText::new(tool.replace('_', " ")).font(theme::mono(12.5)).color(t.text_dim));
                 });
             }
@@ -1522,7 +1512,7 @@ fn continue_card(app: &mut CraftApp, ui: &mut Ui, ws: &Workspace) {
     widgets::callout(&t, t.accent).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            icons::show(ui, "history", 18.0, t.accent);
+            icons::show(ui, "history", size::ICON_LG, t.accent);
             ui.add(egui::Label::new(RichText::new(tr(title)).font(theme::semibold(theme::BODY))).wrap());
         });
         ui.add(egui::Label::new(RichText::new(tr(body)).color(t.text_dim)).wrap());
@@ -1554,7 +1544,7 @@ fn ask_card(app: &mut CraftApp, ui: &mut Ui, r: &Request, answered: Option<&str>
     widgets::callout(&t, border).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            icons::show(ui, if approval { "shield" } else { "circle-help" }, 18.0, border);
+            icons::show(ui, if approval { "shield" } else { "circle-help" }, size::ICON_LG, border);
             let title = if approval { trf("May I {action}?", &[("action", &lower_first(&r.title))]) } else { r.title.clone() };
             ui.add(egui::Label::new(RichText::new(title).font(theme::semibold(theme::BODY))).wrap());
         });
@@ -1653,7 +1643,7 @@ fn claims_list(ui: &mut Ui, c: &CheckResult, t: &Tokens) {
     }
     let row = |ui: &mut Ui, icon: &str, colour: Color32, text: String| {
         ui.horizontal_wrapped(|ui| {
-            icons::show(ui, icon, 14.0, colour);
+            icons::show(ui, icon, size::ICON_SM, colour);
             ui.add(egui::Label::new(RichText::new(text).size(theme::SMALL).color(colour)).wrap());
         });
     };
@@ -1678,7 +1668,7 @@ fn check_card(app: &mut CraftApp, ui: &mut Ui, ctx: &egui::Context, ws: &Workspa
     widgets::card(&t).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(|ui| {
-            icons::show(ui, "scan-search", 18.0, t.accent_ink);
+            icons::show(ui, "scan-search", size::ICON_LG, t.accent_ink);
             let title = match c.similarity {
                 Some(s) => trf("Check {n}: about {s}% like the original", &[("n", &c.round.to_string()), ("s", &format!("{s:.0}"))]),
                 None => trf("Check {n}", &[("n", &c.round.to_string())]),
@@ -1756,7 +1746,7 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens) {
     }
     if let Some(n) = app.queue_position() {
         ui.horizontal(|ui| {
-            icons::show(ui, "history", 15.0, t.accent_ink);
+            icons::show(ui, "history", size::ICON, t.accent_ink);
             let line = if n == 1 {
                 tr("Waiting for another build to finish: this one starts next.")
             } else {
@@ -1774,7 +1764,7 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens) {
         for (i, note) in waiting.iter().enumerate() {
             chat::user_bubble(ui, &note.shown, false);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if icons::button(ui, "x", 22.0, false, "Take back: puts it in the box again").clicked() {
+                if icons::button(ui, "x", size::CONTROL_SM, false, "Take back: puts it in the box again").clicked() {
                     take_back = Some(note.id);
                 }
                 // Said once, under the last note.

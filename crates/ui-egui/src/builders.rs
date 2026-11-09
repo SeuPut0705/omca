@@ -4,11 +4,11 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_ai::rebuild::replaced_builder_notice;
 use craft_anything_ai::{BackendConfig, BackendKind};
-use egui::{RichText, Ui, Vec2};
+use egui::{RichText, Ui};
 
 /// A live agent catalogue and a draft selection, tied to the settings that were queried.
 pub struct AgentModelPicker {
@@ -353,7 +353,7 @@ impl CraftApp {
 pub fn built_by(app: &mut CraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(default) = app.default_builder() else {
-        icons::show(ui, "triangle-alert", 16.0, t.warning);
+        icons::show(ui, "triangle-alert", size::ICON, t.warning);
         ui.label(RichText::new(tr("Building needs a coding agent such as Claude Code, or an AI with an API key.")).size(theme::BODY).color(t.text_dim));
         if widgets::link(ui, "Set one up").clicked() {
             app.need_builder(false);
@@ -395,9 +395,6 @@ pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &
     let t = Tokens::get(ui.ctx());
     ui.set_width(520.0);
     ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), egui::Sense::hover());
-        ui.painter().rect_filled(rect, t.radius, t.accent_soft);
-        icons::paint(ui, rect, "bot", 24.0, t.accent_ink);
         ui.vertical(|ui| {
             ui.label(theme::heading(tr("Set up a builder"), theme::CARD));
             ui.add(
@@ -440,7 +437,7 @@ pub fn need_builder_modal(app: &mut CraftApp, ui: &mut Ui, start: bool, close: &
         widgets::panel(&t).show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                icons::show(ui, "bot", 18.0, t.accent);
+                icons::show(ui, "bot", size::ICON_LG, t.accent);
                 ui.vertical(|ui| {
                     ui.label(RichText::new(&b.name).font(theme::semibold(theme::SMALL)));
                     ui.label(RichText::new(tr("Found on this computer")).color(t.text_faint).size(theme::CAPTION));

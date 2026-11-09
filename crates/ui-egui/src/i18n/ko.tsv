@@ -4,6 +4,7 @@ OpenCode default	OpenCode 기본값
 Model default	모델 기본값
 Thinking depth	생각 깊이
 OpenCode model	OpenCode 모델
+Actions	동작
 Remote program	원격 프로그램
 Reload models	모델 다시 불러오기
 Apply	적용
@@ -1189,6 +1190,7 @@ Use as a goal	목표로 사용
 Use the projects folder	프로젝트 폴더 사용
 Use this	이것 사용
 Use {name}	{name} 사용
+Usage	사용량
 Value flow	값 흐름
 Version	버전
 Waiting	대기 중

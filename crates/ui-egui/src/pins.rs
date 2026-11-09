@@ -5,7 +5,7 @@
 
 use crate::i18n::{tr, trf};
 use crate::state::Modal;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
 use craft_anything_engine::evidence::ToolError;
 use craft_anything_engine::pins::{Pin, PinMode};
@@ -142,8 +142,8 @@ pub fn section(app: &mut CraftApp, ui: &mut Ui, fold: bool) {
     let t = Tokens::get(ui.ctx());
     let collapsed = app.state.pins_collapsed;
     let arrow = |ui: &mut Ui| {
-        let (rect, resp) = ui.allocate_exact_size(Vec2::splat(18.0), egui::Sense::click());
-        icons::paint(ui, rect, if collapsed { "chevron-right" } else { "chevron-down" }, 14.0, t.icon);
+        let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size::CONTROL_XS), egui::Sense::click());
+        icons::paint(ui, rect, if collapsed { "chevron-right" } else { "chevron-down" }, size::ICON_SM, t.icon);
         resp
     };
     // Folded, the arrow stays where the heading was, so nothing moves.

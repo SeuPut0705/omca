@@ -3,7 +3,7 @@
 
 use crate::i18n::tr;
 use crate::state::Screen;
-use crate::theme::{self, Tokens, space};
+use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, Pick, Route, icons, schema_form, widgets};
 use craft_anything_engine::{Consent, Mode};
 use egui::{RichText, Vec2};
@@ -114,7 +114,7 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
         widgets::panel(&t).corner_radius(t.r_lg()).shadow(ui.visuals().window_shadow).inner_margin(theme::pad(space::M)).show(ui, |ui| {
             ui.set_width(width);
             ui.horizontal(|ui| {
-                icons::show(ui, "search", 18.0, t.text_faint);
+                icons::show(ui, "search", size::ICON_LG, t.text_faint);
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut app.state.palette.query)
                         .hint_text(tr("Type a command or tool…"))
@@ -150,9 +150,9 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
                     r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, &title));
                     icons::paint(
                         ui,
-                        egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 12.0), Vec2::splat(16.0)),
+                        egui::Rect::from_min_size(rect.min + Vec2::new(8.0, 12.0), Vec2::splat(size::ICON)),
                         icon,
-                        16.0,
+                        size::ICON,
                         if on { t.accent_ink } else { t.icon },
                     );
                     ui.painter().text(rect.min + Vec2::new(34.0, 5.0), egui::Align2::LEFT_TOP, title, theme::medium(theme::SMALL), t.text);
@@ -260,7 +260,7 @@ fn form(app: &mut CraftApp, ctx: &egui::Context, tool: &str) {
             ui.label(RichText::new(spec.id).font(theme::mono(theme::CAPTION)).color(t.text_faint));
             if spec.effects.needs_consent() {
                 ui.horizontal(|ui| {
-                    icons::show(ui, "shield", 14.0, t.warning);
+                    icons::show(ui, "shield", size::ICON_SM, t.warning);
                     ui.label(RichText::new(tr("This runs code from the target or changes a device. Clicking Run is your OK.")).color(t.warning));
                 });
             }
