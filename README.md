@@ -32,6 +32,8 @@ The engine, workflow, Clean room / Deep modes and tool set come from upstream Cr
   | MCP server / skill name | `omca` (tools are `mcp__omca__*`) |
 
 - Releases for Apple silicon Macs and Windows x64 only; the interface in Korean and English only.
+- Its own version numbers, starting at 0.1.0, and its own `vX.Y.Z` tags; upstream's tags are not
+  kept.
 - No GitHub Actions CI; see [CI (local)](#ci-local).
 - Internal crate and binary names (`craft_anything_*`, `craft-anything`, `craft-anything-cli`)
   and `CRAFT_ANYTHING_*` environment variables are unchanged, to keep upstream merges simple.
@@ -80,6 +82,7 @@ Windows MSI and portable zip.
 ## Upstream
 
 ```sh
+git config remote.upstream.tagOpt --no-tags   # once per clone: keep upstream's version tags out
 git fetch upstream
 git merge upstream/main
 ```
