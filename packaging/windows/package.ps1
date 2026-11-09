@@ -157,7 +157,8 @@ Invoke-Native 'MSI shortcut icon validation (ICE50)' {
 # The licences are installed with the app: decompile the MSI and refuse one without them.
 $Decompiled = Join-Path $Stage 'msi-decompiled.wxs'
 Invoke-Native 'wix msi decompile' { wix msi decompile $Msi -o $Decompiled }
-$Installed = @(([xml](Get-Content -Raw $Decompiled)).SelectNodes("//*[local-name()='File']") | ForEach-Object { Split-Path -Leaf $_.GetAttribute('Source') })
+# Source holds the cabinet's internal id; Name is the installed file name.
+$Installed = @(([xml](Get-Content -Raw $Decompiled)).SelectNodes("//*[local-name()='File']") | ForEach-Object { $_.GetAttribute('Name') })
 foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md', 'LICENSE-lucide.txt', 'THIRD-PARTY-LICENSES.html') {
   if ($Installed -notcontains $f) { throw "$f is missing from the MSI (it installs: $($Installed -join ', '))" }
 }
