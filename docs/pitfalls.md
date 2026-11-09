@@ -56,6 +56,12 @@ added an app the new rule rejected; both were green on their own branch.
   #664, merged next, tested a button on that list without picking the tab. Checking that two PRs
   merge cleanly isn't checking that their tests pass together: run the UI tests on the merge.
 
+**A table row kept twice by a merge.** Two PRs edited the same STATUS.md row; resolving the
+conflict kept both versions, so five rows reached `main` twice, each copy with a different
+update, and the three OpenCode rows disagreed on whether SSH runs get the tools. When a
+conflict is in a table row, merge the edits into one row, and after merging look for a row
+name that appears twice.
+
 **A dependency change merged without its lockfile.** Changes were staged with
 `git add -A crates apps docs`, which leaves out the root `Cargo.lock`, so a new dependency reached
 `main` without its lock entry. Stage by `git add -A` (then review `git status`), or list `Cargo.lock`
@@ -161,6 +167,12 @@ Negative probes use loopback port zero so another fixture cannot acquire a relea
 A controlled fragmented request reproduced the fixture defect; the old CI log did not preserve
 the probe's underlying error, so it does not establish that failure's cause.
 
+**A socket option set after the peer reset it.** A preview test set its clients' read timeout
+after stopping the server. macOS answers `setsockopt` with `Invalid argument` on a socket closed in
+both directions (a reset, or the peer's FIN after our own `shutdown(Write)`); Linux doesn't check,
+so the test failed only on Macs. Set socket options right after connecting, before anything can
+close the connection.
+
 **A script written and run at once.** Tests that write a stand-in program and start it failed now
 and then on Linux with "Text file busy": another test thread was starting a child at that moment,
 and the child still held the new file open for writing. Starting a program goes through
@@ -170,6 +182,11 @@ instead.
 **Proving a refactor changed nothing.** Unit tests that check substrings can miss changed prompts.
 For a refactor that must keep output identical, dump the outputs for every combination before and
 after and compare them byte for byte (done for every brief across 162 combinations in R1.1).
+
+**A guard phrase that matched the wording it protects.** A test that no blind builder is told to
+"look at the picture" failed on the new "you can't look at the pictures in reference/". Make a
+forbidden phrase the instruction's exact words, check each one still appears in what the other
+case is sent (or the guard goes stale without failing), and break the code once to see it fail.
 
 **A Windows-only test that no check ran.** #748 added a second Antigravity folder to the search
 path; the Windows test that counts those folders wasn't updated, and `main` stayed green because CI
@@ -528,6 +545,13 @@ V2 also names a tool call `id` (V1: `callID`), so every tool event was dropped a
 for the whole turn. Use a file in `OPENCODE_CONFIG` with `run --standalone`, and confirm a live run
 reached the server (`mcp connected server=craft-anything` in OpenCode's log), not just that it started.
 
+**A side door to a service the main path avoided.** Runs used `--standalone` so OpenCode's shared
+service never saw them, and #1185 deleted the sessions a stopped turn left. But the model check
+before each turn ran plain `api model.list`, which starts that service, and the service resumed a
+session the person had left unfinished days before and went on editing another project for half
+an hour. When a program has a mode that must be avoided, give every call to it the same flag, not
+only the main one: list each command we run (`run`, `api`, `session delete`) and test each.
+
 **Keywords that only some code paths honour.** "…in Rust" picked Rust for apps but not for games, so
 a headless game rebuild stopped at once for want of Unity. It was found only by a live run. Run the
 real flow end to end after changing how requests are read, and add the case as a test.
@@ -625,6 +649,11 @@ on Windows (`write_atomic`); show errors where the person is looking.
 `env` values included, which can hold API keys; a tool's output reaches the journal and MCP
 clients. The journal only redacts by field name. When a setting can hold a secret, hide its value
 in every tool that prints settings, and test that it doesn't appear.
+
+**A secret check that matched a word inside a name.** `cargo xtask secrets` took any variable
+with `AUTH` in its name as a secret; git sets `GIT_AUTHOR_NAME` while the hook runs, so a contributor
+whose git name is their handle couldn't commit their own roadmap claim. Name the exceptions
+(`NOT_SECRET`) rather than loosening the word, and test both sides with a list of variables.
 
 **Secret files kept out only by one person's gitignore.** `.env` files and
 `.claude/settings.local.json` were ignored by a contributor's global gitignore, not the repo's, so
@@ -857,6 +886,14 @@ parser between JSON recovery and ReAct: count the opener, require a standalone c
 least that long, and reject an earlier matching close followed by more text. Shorter backtick
 lines inside a longer fence are content. Test both paths and the next HTTP request, including
 malformed suffixes and non-call JSON examples whose strings contain protocol markers.
+
+**A call the server couldn't read, taken for the answer.** A llama.cpp server turns a Qwen
+model's `<tool_call><function=…>` markup into a real call only when it names an offered tool;
+otherwise it hands the markup back as text. The loop read text with no call as the final
+answer, so a 512k-window build that called `web_search` stopped its turn after 3 minutes and
+failed its check. Text recovery that only knows the formats seen so far ends a turn silently on
+the next one: read a model's own call format, and when it names a tool it doesn't have, tell it
+so and name the ones it has, rather than ending.
 
 **A view that asked to be scrolled on every frame.** The command palette called `scroll_to_me` on
 the selected row each frame, so the wheel's scroll was pulled back to it at once and the list

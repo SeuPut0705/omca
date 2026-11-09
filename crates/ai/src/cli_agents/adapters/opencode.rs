@@ -100,8 +100,45 @@ impl AgentAdapter for OpenCode {
         false
     }
 
+    /// A turn stopped part-way stays `running` in OpenCode's storage, and its shared service picks
+    /// it up the next time it starts and runs the builder's commands again (#1115, seen with 2.2.5).
+    /// A private server deletes it without resuming it. Short: the turn waits for it before it ends.
+    fn discard_unfinished(&self, program: &str, id: &str, host: Option<&str>) -> Result<(), ToolError> {
+        // From the agent's output: one read as a flag would delete nothing, or something else.
+        if id.is_empty() || id.starts_with('-') {
+            return Err(ToolError::invalid(format!("OpenCode named its session {id:?}, which can't be passed to `opencode session delete`."))
+                .with_remediation("Find it with `opencode session list` and delete it with `opencode session delete --standalone <id>`."));
+        }
+        // With --standalone, as here: without it, the command may start the shared service, which resumes it.
+        // Said for every failure (a time limit here isn't a setting the person can raise).
+        let on = host.map(|h| format!(" on {h}")).unwrap_or_default();
+        let by_hand = format!("Delete it yourself{on} with `opencode session delete --standalone {id}`, so OpenCode doesn't pick it up again.");
+        let args = ["session", "delete", "--standalone", id].map(String::from);
+        let proc = match host {
+            Some(h) => Process::new("ssh").args(crate::ssh::ssh_line_args(h, crate::cli_agents::remote_command(program, args.to_vec(), &[]))),
+            None => self.process(program).args(args),
+        };
+        let out = proc.timeout(std::time::Duration::from_secs(30)).stdout_cap(64 * 1024).run().map_err(|e| e.with_remediation(by_hand.clone()))?;
+        if out.success {
+            Ok(())
+        } else {
+            Err(ToolError::new(
+                ErrorCode::ProgramFailed,
+                format!("opencode session delete exited with {}", out.code.map_or("no code".into(), |c| c.to_string())),
+            )
+            .with_remediation(by_hand))
+        }
+    }
+
+    fn discards_sessions(&self) -> bool {
+        true
+    }
+
     fn parse(&self, p: &mut StreamParser, v: &Value) -> Vec<AgentEvent> {
         let mut events = Vec::new();
+        if p.run_session.is_none() {
+            p.run_session = v.get("sessionID").and_then(Value::as_str).map(str::to_string);
+        }
         let part = v.get("part").unwrap_or(&Value::Null);
         match v.get("type").and_then(Value::as_str) {
             Some("text") => {
@@ -184,49 +221,12 @@ fn octal_escape(bytes: &[u8]) -> String {
     out
 }
 
-/// One `ssh` run for a remote set-up step. Never interactive (`BatchMode`, stdin closed).
-fn ssh_run(host: &str, line: &str, timeout: std::time::Duration, stop: Option<&CancelToken>) -> Result<craft_anything_platform::Output, ToolError> {
-    let argv = crate::ssh::ssh_line_args(host, line.to_string());
-    let mut proc = craft_anything_platform::process::Process::new("ssh").args(&argv).timeout(timeout).stdout_cap(64 * 1024);
-    if let Some(stop) = stop {
-        let stop = stop.clone();
-        proc = proc.cancel_when(move || stop.is_cancelled());
-    }
-    proc.run()
-}
-
-/// The remote helper is on PATH, checked before a build starts (the remote server runs it).
-fn remote_check(host: &str, stop: Option<&CancelToken>) -> Result<(), ToolError> {
-    let out = ssh_run(host, "command -v craft-anything-cli >/dev/null", std::time::Duration::from_secs(15), stop)?;
-    if out.success {
-        return Ok(());
-    }
-    Err(remote_failure(host, &out))
-}
-
 /// The remote shell line: the helper is on PATH, then the config file goes in atomically and
 /// private (`printf` with octal escapes; no byte ends the quoted string). One line, no input.
 fn remote_prepare_line(name: &str, content: &str) -> String {
     let escaped = octal_escape(content.as_bytes());
     format!(
         "command -v craft-anything-cli >/dev/null && mkdir -p \"$HOME/.cache/omca\" && printf '{escaped}' > \"$HOME/.cache/omca/{name}.tmp.$$\" && chmod 600 \"$HOME/.cache/omca/{name}.tmp.$$\" && mv \"$HOME/.cache/omca/{name}.tmp.$$\" \"$HOME/.cache/omca/{name}\""
-    )
-}
-
-/// Map the remote failure onto the fix, reusing the ssh failure wording other remote runs use.
-fn remote_failure(host: &str, out: &craft_anything_platform::Output) -> ToolError {
-    if let Some(failure) = crate::ssh::diagnose(host, "craft-anything-cli", crate::ssh::is_git_server(host), out.code, out.stderr_text().as_str()) {
-        return ToolError::new(ErrorCode::EngineMissing, format!("OMCA can't set up its tools on {host}: {}.", failure.what)).with_remediation(failure.fix);
-    }
-    let stderr = out.stderr_text();
-    let snippet: String = stderr.trim().chars().take(200).collect();
-    let exit = out.code.map_or_else(|| "it was stopped".to_string(), |code| format!("exit {code}"));
-    ToolError::new(ErrorCode::EngineMissing, format!("OMCA couldn't set up its tools on {host}: ssh didn't come back as expected ({exit}).")).with_remediation(
-        if snippet.is_empty() {
-            "Check that craft-anything-cli is on the PATH this ssh session uses, and that the host lets you run programs over ssh.".to_string()
-        } else {
-            format!("ssh said: {snippet}")
-        },
     )
 }
 
@@ -310,9 +310,11 @@ mod tests {
             json!({"type":"text","part":{"text":"Built a page"}}),
             json!({"type":"tool_use","part":{"callID":"write-1","tool":"write","state":{"status":"completed","input":{"path":"index.html"},"output":"wrote the page"}}}),
             json!({"type":"step_finish","part":{"tokens":{"input":10,"output":5,"reasoning":2,"cache":{"read":3,"write":1}},"cost":0.01}}),
-            json!({"type":"step_finish","part":{"tokens":{"input":1,"output":2},"cost":0.02}}),
+            json!({"type":"step_finish","sessionID":"another","part":{"tokens":{"input":1,"output":2},"cost":0.02}}),
         ];
         let events: Vec<_> = lines.iter().flat_map(|v| p.line(&v.to_string())).collect();
+        // #1115: kept so an unfinished turn's session can be deleted, the first one it named.
+        assert_eq!(p.run_session.as_deref(), Some("reported-but-not-resumable"));
         assert!(
             matches!(events.as_slice(), [AgentEvent::TextDelta { text }, AgentEvent::ToolStarted { tool, .. }, AgentEvent::ToolFinished { ok:true, .. }] if text=="Built a page" && tool=="write")
         );
@@ -366,7 +368,7 @@ mod tests {
         let v: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         assert_eq!(v["mcp"][MCP_NAME]["command"], json!(["craft-anything-cli", "mcp"]));
         let options = BackendOptions { cli_model: Some("test/model".into()), ..Default::default() };
-        assert!(OpenCode.check_native_options(&options).is_ok());
+        assert!(OpenCode.check_native_options(&options, None).is_ok());
     }
 
     #[test]
@@ -475,6 +477,20 @@ mod tests {
     }
 
     /// Every supported depth reaches native chat and builder runs in the selected model reference.
+    #[test]
+    fn a_session_id_that_reads_as_a_flag_is_refused_before_anything_runs() {
+        // No such program: had it been started, the error would say it wasn't found.
+        for (id, host) in [("", None), ("-h", None), ("--all", Some("studio"))] {
+            let e = OpenCode.discard_unfinished("no-such-opencode-here", id, host).unwrap_err();
+            assert_eq!(e.code, ErrorCode::BadInput, "{id:?}: {e:?}");
+            assert!(e.remediation.unwrap_or_default().contains("--standalone"), "the manual command doesn't wake the shared service");
+        }
+        // A delete that couldn't run says how to do it by hand, not the process runner's own advice.
+        let e = OpenCode.discard_unfinished("no-such-opencode-here", "ses_1", None).unwrap_err();
+        assert_ne!(e.code, ErrorCode::BadInput, "{e:?}");
+        assert!(e.remediation.as_deref().unwrap_or_default().contains("opencode session delete --standalone ses_1"), "{e:?}");
+    }
+
     #[test]
     fn thinking_depth_is_part_of_the_selected_model_reference() {
         for depth in crate::Effort::ALL {

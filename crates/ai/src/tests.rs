@@ -7,13 +7,27 @@ use serde_json::{Value, json};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 
-/// #1096: an AI's timeout_secs sets how long its streamed answer may take; unset or 0 is an hour.
+/// #1096, #1239: an AI's timeout_secs is its own limit on a streamed answer, starting included;
+/// unset or 0 leaves the defaults.
 #[test]
 fn an_ais_own_timeout_bounds_its_streamed_answer() {
     let with = |timeout_secs| BackendOptions { timeout_secs, ..Default::default() };
-    assert_eq!(stream_limit(&with(None)), http::STREAM_BODY);
-    assert_eq!(stream_limit(&with(Some(0))), http::STREAM_BODY);
-    assert_eq!(stream_limit(&with(Some(4 * 3600))), std::time::Duration::from_secs(4 * 3600));
+    assert_eq!(stream_limit(&with(None)), None);
+    assert_eq!(stream_limit(&with(Some(0))), None);
+    assert_eq!(stream_limit(&with(Some(2700))), Some(std::time::Duration::from_secs(2700)));
+}
+
+/// #1225: with no session id saved (a backend added before there was one, or found from an
+/// environment key), OpenCode Go still gets its session header, the same on every request.
+#[test]
+fn opencode_go_gets_a_session_header_without_a_saved_id() {
+    let (h, _d) = hub();
+    assert!(h.config().install_id.is_none(), "nothing saved");
+    let id = h.session_id();
+    assert!(!id.is_empty());
+    assert_eq!(h.session_id(), id, "the same for every request of this run");
+    let client = compatible_client("OpenCode Go", openai::OPENCODE_GO_BASE, Some("sk-test".into()), "m", &id);
+    assert!(client.extra_headers.iter().any(|(name, value)| *name == openai::OPENCODE_GO_SESSION_HEADER && *value == id), "{:?}", client.extra_headers);
 }
 
 /// The model list lives at /v1 on the service root, not under the chat path's /openai/v1.
@@ -1159,6 +1173,40 @@ fn fenced_legacy_react_calls_still_execute() {
         let observation = seen[1].body["messages"].as_array().unwrap().last().unwrap()["content"].as_str().unwrap();
         assert!(observation.starts_with("Observation:"), "{observation}");
     }
+}
+
+#[test]
+fn a_qwen_markup_call_to_a_missing_tool_is_answered_and_the_build_goes_on() {
+    // A live build stopped here: the server handed back a call to a tool it wasn't offered as
+    // text, and the loop took the text for the final answer.
+    let missing = "<tool_call>\n<function=web_search>\n<parameter=query>\neframe screenshot example\n</parameter>\n</function>\n</tool_call>";
+    let real = "<tool_call>\n<function=core_session_show>\n</function>\n</tool_call>";
+    let replies = [missing, real, "Nothing open."]
+        .map(|text| (200, "text/event-stream", chat_sse(&[json!({"choices":[{"delta":{"content":text},"finish_reason":"stop"}]})])));
+    let (url, seen) = mock(replies.into());
+    let (hub, _dir) = hub();
+    let config = BackendConfig {
+        name: "Local".into(),
+        kind: BackendKind::OpenaiCompatible,
+        model: "scripted".into(),
+        base_url: Some(url),
+        ssh_host: None,
+        enabled: true,
+    };
+    hub.add_backend_with(BackendEntry { config, options: BackendOptions::default() }, None).unwrap();
+    let mut conversation = hub.start(Some("Local"), true).unwrap();
+    let events = run(&mut conversation, "status?");
+    assert_eq!(events.iter().filter(|e| matches!(e, AgentEvent::ToolFinished { tool, ok: true, .. } if tool == "core_session_show")).count(), 1, "{events:?}");
+    assert!(!events.iter().any(|e| matches!(e, AgentEvent::ToolStarted { tool, .. } if tool == "web_search")), "{events:?}");
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 3, "the turn must go on after the missing tool");
+    let told = seen[1].body["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(told["role"], "user");
+    let told = told["content"].as_str().unwrap();
+    assert!(told.contains("`web_search` isn't a tool you can use here") && told.contains("core_session_show"), "{told}");
+    // The call that ran is paired with its result in the next request.
+    let last = seen[2].body["messages"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["role"], "tool", "{last}");
 }
 
 #[test]

@@ -181,12 +181,20 @@ Owner: maintainers · Status: in progress
 - [x] Address PR #1030 review: take the heartbeat baseline after stopping, guard the descendant
       stand-in against direct ignored-test runs, and document the test helpers
       — claimed: Codex, branch bugfix/r5.2-watched-launch-tests
-- [ ] `regression_preview_limits_connections_and_releases_listener` (platform) fails on macOS
+- [x] `regression_preview_limits_connections_and_releases_listener` (platform) fails on macOS
       with `Invalid argument` in its socket fixture, also reported before PR #1030's review fixes.
-      Investigate the fixture separately from the watched descendant shutdown test
+      The fixture set its excess clients' read timeout after dropping the server, and macOS
+      refuses socket options on a connection it has reset; the fixture now sets them when connecting
+      — PR #1207; claimed: rmsff, branch test/r5.2-macos-preview-socket-fixture
 Review comes before new work while the queue is long, smallest and clean PRs first. A PR is merged
 only when it's green and a maintainer has fully reviewed it, code as well as wording.
 - [ ] Maintainers: protect `main` (PRs required, squash only); the only ruleset covers `release`
+- [x] `cargo xtask secrets` treats every environment variable whose name contains `AUTH` as a
+      secret, git's `GIT_AUTHOR_NAME` among them, so the pre-commit hook refuses any added line with
+      the committer's own name when it's 12 characters or more (a roadmap claim by a contributor
+      whose git name is their handle). Leave git's identity variables out of `env_values`
+      (`NOT_SECRET`); `OAUTH`, `AUTHORIZATION` and other `AUTH` names are still checked
+      — claimed: youkaicountry, branch bugfix/r5.2-secrets-git-identity
 - [x] Auto mode's delete check is a safety bug that shows up as Mac test failures. It splits a
       command on spaces, so `rm -rf "C:/x/Game Backup/y"` from a project at `C:/x/Game` goes ahead
       unasked, and it lower-cases paths, so on a Mac or Linux a delete inside a project with
@@ -282,6 +290,16 @@ only when it's green and a maintainer has fully reviewed it, code as well as wor
 - [x] Limit the decision line above to what was measured (one RX 6900 XT, one driver, one Windows
       build) and say other Radeons and drivers aren't checked (#912 review)
       — claimed: 00xJS, branch docs/r5.2-radeon-idle-scope
+- [x] STATUS.md has rows twice, kept by squash merges of PRs that edited the same row: OpenCode
+      models and thinking (three copies that disagree about SSH), Claude desktop app without Claude
+      Code, Websites as targets, Desktop app and CLI; `docs/opencode.md` has a paragraph twice.
+      Keep the newest complete copy of each
+      — claimed: youkaicountry, branch docs/r5.2-doubled-status-rows — PR #1226
+- [ ] Have `cargo xtask` refuse a STATUS.md table with two rows of the same name, so a merge
+      that keeps both copies of an edited row fails CI instead of reaching `main`
+- [x] `docs/opencode.md` still has one passage twice, missed by #1226: in "Configuration and
+      execution", the older copy of the standalone-server sentence, cut off after "both"
+      — claimed: youkaicountry, branch docs/r5.2-opencode-doubled-passage
 
 ### R5.3 A builder that can't make progress stops
 Owner: open · Status: todo
@@ -368,6 +386,12 @@ been run live.
 - [x] Keep the retry condition when `Action:` or `Final Answer:` appears between fenced
       calls, without rejecting ordinary words between calls (PR #1031 review)
       — claimed: Codex, branch bugfix/r5.4-fenced-call-followup
+- [x] A call to a tool that isn't offered comes back from a llama.cpp server as text in Qwen's
+      markup (`<tool_call><function=web_search><parameter=query>…`), and the loop takes it as the
+      final answer: a live build on a 512k-window Qwen model stopped at its second check in 3
+      minutes. Read that markup as a call when it names an offered tool; when it names one that
+      isn't, say so and name the tools it has, and ask again
+      — claimed: youkaicountry, branch bugfix/r5.4-text-tool-calls
 - [ ] A local builder spends its rounds on the project file and never writes the app: run 4 had a
       compiling `Cargo.toml` by check 3, its last, with `main.rs` still "Hello, world!". See whether
       more rounds get there, or whether a small model needs the window and the `--screenshot`
@@ -414,6 +438,17 @@ been run live.
 - [ ] Find how each local server is told its context size and set it, or stop with a plain message
       when the prompt won't fit. We assume 24k and send no `num_ctx`, which an OpenAI-style endpoint
       may ignore anyway; LM Studio refused a 12.6k prompt on its 8k default (#73)
+- [x] A builder that can't see pictures (the API loop) is told it can't, then sent to open
+      screenshots with Read: the website capture lines and the `--screenshot` and reference-picture
+      lines in `brief.rs`, the website check's "Open each pair", the reminder after each round, the
+      `--screenshot` contract and `capture/README.md`'s window picture. Give it only what it can
+      use, and say what the check measures instead. `BriefCx::sees_pictures` (today: not the API
+      loop) picks the wording: a website's `layouts` and each round's `capture.json`, a program's
+      `ui-tree.json` and the check's likeness, and asking the person what their pictures show
+      — claimed: youkaicountry, branch bugfix/r5.4-blind-builder-prompts
+- [ ] The carry-on and follow-up prompts (`continue_prompt`, `follow_up`) ask an API-loop builder
+      to check its work with rebuild_check, which the loop refuses while it builds; only its first
+      message says so. Say "Craft Anything checks it after your turn" there instead
 - [x] When a server refuses a request for its context window and says the size (Ollama, llama.cpp,
       OpenAI-style), fit the conversation to that window and ask once more, else say how to raise it (#962)
 - [x] A per-backend context budget in `[[ai.backends]]` (`LoopConfig::context_tokens` exists), for
@@ -695,6 +730,29 @@ Owner: open · Status: in progress
       kept somewhere we don't look (#1060)
 - [ ] Verify OpenCode model discovery and an explicit thinking selection on a live SSH host,
       and complete a live generation with the selected model and variant (local catalogue verified).
+- [x] A stopped, failed or killed OpenCode turn deletes its session, so OpenCode's shared service
+      can't resume it and keep running the builder's commands later (#1115). Probed live with
+      OpenCode 2.2.5 on Windows: a killed `run --standalone` session stays `running` and the
+      service resumes it; `session delete --standalone` removes it without resuming it
+      — claimed: justinjohn0306, branch bugfix/r2.2-opencode-interrupted-sessions
+- [x] When Craft Anything itself is killed mid-turn (uninstalled, a crash; closing the app during a
+      build isn't known to wait for the delete either), no turn is left to delete the OpenCode
+      session, and the service still resumes it (#1115): each turn records its session under a
+      lock the system drops when the process ends; the next agent turn and
+      `craft-anything-cli uninstall` delete the sessions of records nobody holds. Over SSH, the
+      delete runs on the host too
+      — claimed: justinjohn0306, branch bugfix/r2.2-opencode-leftover-sessions
+- [ ] Sweep leftover agent sessions when the desktop app starts, not only at the next agent turn
+      or `craft-anything-cli uninstall` (#1115)
+- [ ] A turn stopped before OpenCode's first event leaves no session id to delete: OpenCode names its
+      session only in that event, so the session it may already have made stays (#1115, review on
+      #1176). Needs a session id known before the run (one we create and pass in), if OpenCode allows it
+- [x] OpenCode's model discovery (`api model.list`, run before every turn to check the chosen
+      model) has no `--standalone`, so it starts the shared service, and the service resumes any
+      unfinished session on the computer, in any project (#1115). Seen live with 2.2.5 on Linux: a
+      build's model check woke it, and a session left from days before went on editing another
+      project. Discover with a private server unless the person chose `--server`
+      — claimed: youkaicountry, branch bugfix/r2.2-opencode-discovery-standalone
 
 "Found on this computer" has to mean "can do the job". Today only Claude Code gets everything.
 **Every builder gets the same tools:**
@@ -722,7 +780,12 @@ Owner: open · Status: in progress
       code) and a refusal explains the fix (`docs/codex.md`)
 - [ ] Codex (#540): run `codex exec` on a real install and check `rebuild_start` gets through
 - [ ] Codex: resume support (`codex exec resume <id>`), verified on a real install
-- [ ] Aider: move the message to `--message-file` once the launcher can write one (see the argv item above), and read project-folder `.aider.conf.yml` and `.env` in `check_setup`, which needs the working directory passed into `check_native_options`.
+- [ ] Aider: move the message to `--message-file` once the launcher can write one (see the argv item above).
+- [x] Aider: read project-folder `.aider.conf.yml` and `.env` in `check_setup`, which needs the working directory passed into `check_native_options`.
+      It reads the run's folder, the top of its git repository, then the home folder, as Aider
+      does — PR #1210; claimed: rmsff, branch feature/r2.2-aider-project-settings
+- [ ] Aider over SSH: its setup check still reads this computer's environment and home folder.
+      Read the remote host's `~/.env`, `~/.aider.conf.yml` and `~/.aider/oauth-keys.env` there
 - [ ] Every adapter but Claude Code's still takes the message in argv (`prompt_on_stdin`), so a long
       one can pass Windows' command-line limit as Claude Code's did (#402); hand each its message on
       stdin or in a file where its CLI reads one
@@ -821,6 +884,11 @@ Owner: open · Status: in progress
       command that breaks it. The installed skill now warns against running `setup` on such an entry;
       `doctor` and `setup` should keep the person's extra arguments instead
       — claimed: 18923837179wjt-dot, branch fix/setup-skill-warns-before-setup-drops-all-tools
+- [x] Windows: a `.cmd` that only runs one `.exe` by its full path (`"C:\…\codex.exe" %*`, written
+      by hand or by another tool) was started through `cmd.exe`, which refuses an argument with a
+      line break ("batch file arguments are invalid"), expands `%` and caps the line at 8191
+      characters; that `.exe` is now started directly, as an npm shim's is (#1237)
+      — claimed: jgt87, branch bugfix/r2.2-cmd-wrapper-exe — PR #1238
 
 ### R2.4 Runtime study for apps and games (with consent)
 Owner: maintainers · Status: in progress
@@ -887,10 +955,17 @@ Owner: open · Status: in progress
       working directory, preserving virtualenv paths for relative project placements — PR #950
 - [x] Launch a Go project with one `cmd/<name>/main.go` as a package when the root has no
       `main.go` — claimed: Afloat16, branch feature/r2.7-go-command-layouts
-- [ ] Extend launch recipes to Python package scripts and Java build outputs; build checks already
-      use their toolchain commands
+- [x] Launch the single installed console script of a Python project from its virtual environment
+      — claimed: Afloat16, branch feature/r2.7-python-console-entrypoint
+- [x] Extend launch recipes to Java build outputs and Python packages; build checks already use
+      their toolchain commands. A single `<name>/__main__.py` runs as `python3 -m <name>`, the
+      single runnable jar in `target/` or `build/libs/` with `java -jar` (Maven now builds with
+      `package`); build wrappers stay out of launch
+      — PR #1209; claimed: rmsff, branch feature/r2.7-python-java-launch
 - [ ] Audit relative project placements in build, option-run and Play paths too: runtime window
       capture now normalizes its request paths, but earlier runner paths can still be relative
+- [x] Resolve Godot's project argument and the local Electron binary and project argument before
+      starting either runner from a relative project folder — claimed: Afloat16, branch bugfix/r2.7-project-launch-paths
 - [x] "player" alone doesn't make a request a game: a video or music player is an app (#953)
       — claimed: justinjohn0306, branch bugfix/953-player-not-a-game
 - [x] System-tool and media-player phrases keep the app target: "a low level disk tool",
@@ -899,8 +974,17 @@ Owner: open · Status: in progress
 
 ### R2.8 Clean room means clean room
 Owner: maintainers · Status: in progress
-- [ ] A remote (SSH) builder needs a craft-anything-cli that knows `--deep` and `--clean-room`:
-      check its version first and say so when it's older
+- [x] A remote (SSH) builder needs a craft-anything-cli that knows `--deep` and `--clean-room`.
+      Every release from 0.1.0 declares both as global flags and applies them in `mcp`, and has
+      `mcp --all-tools`, the only flags a remote tool server gets; a test fails when `mcp_for`
+      gives it another. Claude Code and Codex builds over SSH now check the host has
+      `craft-anything-cli` before starting, as OpenCode's did — PR #1211; claimed: rmsff, branch
+      test/r2.8-remote-cli-flags
+- [ ] A remote builder's `craft-anything-cli` should know `CRAFT_ANYTHING_AGENT` (#1022), which no
+      release up to 0.5.0 reads: there, a CLI the builder starts calls tools as the person. Today
+      that loosens nothing of the build's (the remote tool server has no project or inbox). Check
+      it before a build once a release has it: version numbers can't tell (`main` says 0.4.0), so
+      ask the CLI itself
 
 ### R2.9 Everyday use: typing, projects, settings
 Owner: maintainers · Status: in progress
@@ -961,9 +1045,23 @@ Gaps found while using the app for real projects.
       note's hand-over file carries the answers, and the after-turn path puts them before the
       notes; only answers the run's mode may show, marked told when read or sent
       — claimed: AlexJoaquimPereira, branch bugfix/r2.9-note-just-ask; commit 78d3963
-- [ ] Record which mode a builder's session ran in: `agent_session` is kept across modes, so a Clean
+- [x] Record which mode a builder's session ran in: `agent_session` is kept across modes, so a Clean
       room build or question can resume a session from a Deep build and carry what it read, and such
       a question's answer is recorded as asked in Clean room. Don't resume one for Clean room
+      — `agent_session_deep` in `craft.json` records it (one saved before the field counts as Deep);
+      a mismatch starts from the brief, and a question is answered from the files; tests cover both
+      directions and the legacy case. Claimed: AlexJoaquimPereira, branch bugfix/r2.9-session-mode
+- [x] The shared investigation chat (`SharedConversation`) doesn't continue a Deep chat's agent
+      session once the chat is in Clean room; Clean room to Deep still continues — claimed: rmsff,
+      branch fix/r2.9-shared-chat-mode
+- [ ] A Clean room build or question must also not resume an API backend's kept transcript:
+      `ws.transcript_path()` is loaded whenever it exists, so switching modes can carry what a Deep
+      API build read. Clear it, or record its mode, when the mode changes; add a regression
+- [ ] A saved Claude `--resume`/`--continue` in the backend's extra arguments is refused in a
+      Clean room build or question when it would reuse the project's Deep session, leaving
+      unrelated arguments alone; unit and scripted CLI tests cover the build and question paths
+      (Clean room refuses, Deep allows), but no live signed-in Claude run is done, so this stays
+      open — claimed: AlexJoaquimPereira, branch bugfix/r2.9-saved-resume
 - [x] #504: the builder's plan card can be folded away with its X, or with `project_plan_fold`
       (between builds: a fold during a build can be overwritten by its next save). The steps stay
       in the conversation (`FEED_VERSION` 4, `FeedItem::PlanDismissed`), and a later run's
@@ -1067,6 +1165,12 @@ Gaps found while using the app for real projects.
       default fonts: without craft-fonts they show as boxes, and with it each such letter comes from
       Noto Sans CJK while the rest of the word is DM Sans. Bundle a DM Sans build that has the
       Vietnamese set (with its OFL notice) so Tiếng Việt renders in one face
+- [x] An engine download the server can't answer right now (a 5xx, 429) says to try again later,
+      not "update the pinned URL", which nobody installing an engine can do (#1193)
+      — claimed: justinjohn0306, branch bugfix/r2.9-download-server-errors
+- [x] Settings → AI: a card for an AI found on this computer wraps its description beside its Add
+      button; the line didn't wrap and ran on under the button
+      — claimed: jgt87, branch bugfix/r2.9-detected-cards-wrap — PR #1235
 
 ### R2.10 Pinned builds
 Owner: maintainers · Status: in progress
@@ -1093,6 +1197,13 @@ An open lane: anyone may take these at any time.
 ### R3.3 Frida sessions for real
 Owner: open · Status: todo
 - [ ] Replace the in-memory session bookkeeping with real attach, resume and detach
+- [x] The Frida and adb output parsers cut a 64 KiB line at a byte index, so a multibyte character
+      at the boundary keeps the whole line; cut at a character boundary and test both (#1095
+      follow-up) — a shared `capped_line` helper walks back to a character boundary; regression
+      tests cover both parsers and the helper
+      — claimed: AlexJoaquimPereira, branch bugfix/r3.3-engine-line-cap
+- [ ] `adb` `parse_ps` reads its header line before the 64 KiB cap, so a hostile header can
+      materialize a full token list; cap it like the body lines
 
 ### R3.9 Game assets out
 Owner: open · Status: in progress
@@ -1149,6 +1260,15 @@ Owner: open · Status: in progress
 
 ### R3.12 Format parser correctness
 Owner: open · Status: in progress
+- [x] Bound rejected ASAR names by the archive listing limit.
+      — claimed: Afloat16, branch bugfix/r3.12-asar-limit-bounds-20261107
+- [x] Keep .NET bundle member reads before the manifest.
+      — claimed: Afloat16, branch bugfix/r3.12-dotnet-data-bounds-20261107
+- [x] SQLite TEXT values cut at the 4 KiB cap can end in a spurious U+FFFD when the cut lands
+      inside a character; cut at a UTF-8/UTF-16 boundary and keep the `truncated` flag
+      — tests cover a UTF-8 character, a UTF-16 surrogate pair and a UTF-16 continuation-like
+      byte at the cut; invalid bytes keep their lossy prefix. Claimed: AlexJoaquimPereira,
+      branch bugfix/r3.12-sqlite-text-cap
 - [x] Require a complete DNS question's type and class fields before retaining it, and keep
       truncated questions out of packet inventories while reporting the incomplete message
       — claimed: Afloat16, branch bugfix/r3.12-dns-question-class-review-20261104
@@ -1156,6 +1276,8 @@ Owner: open · Status: in progress
       — claimed: Afloat16, branch bugfix/r3.12-ipv4-header-lengths-20261105
 - [x] Validate the version in IPv6 frames.
       — claimed: Afloat16, branch bugfix/r3.12-ipv6-version-20261105
+- [x] Recognize ZIP directories from DOS directory attributes and Unix file-type metadata when the entry name has no trailing slash.
+      — claimed: Afloat16, branch bugfix/r3.12-zip-directory-attributes
 - [x] Stop decoding extension headers inside noninitial IPv6 fragments.
       — claimed: Afloat16, branch bugfix/r3.12-ipv6-fragment-payload-20261105
 - [x] Enforce the expanded DNS name wire-length limit.
@@ -1212,6 +1334,8 @@ Owner: open · Status: in progress
       — claimed: Afloat16, branch bugfix/r3.12-pe-optional-header-framing-20261105
 - [x] Keep PE resource metadata within the resource directory.
       — claimed: Afloat16, branch bugfix/r3.12-pe-resource-directory-boundary-20261105
+- [x] Decode inline source-map data URLs without treating their URL fragments as payload; recognize case-insensitive scheme and base64 markers.
+      — claimed: Afloat16, branch bugfix/r3.12-source-map-data-url-fragment
 - [x] Keep Go function tables and names within their section.
       — claimed: Afloat16, branch bugfix/r3.12-go-pclntab-section-boundary-20261105
 - [x] Preserve complete Unicode characters in shortened .NET strings.
@@ -1254,9 +1378,19 @@ Owner: open · Status: in progress
       — claimed: Afloat16, branch bugfix/r3.12-dns-rdata-names-review-20261104
 - [x] Keep address and service records attached to their owner and validate the record's wire fields.
       — claimed: Afloat16, branch bugfix/r3.12-dns-record-evidence
+- [x] Accept binary plist arrays and sets that name one stored value many times; repeated data and
+      text spend a byte budget, and containers past the node cap are refused before reserving space.
+      — claimed: Plastic-time, branch bugfix/r3.12-plist-shared-array-values
+- [x] SQLite rows keep each value on its own column when a table has VIRTUAL generated columns:
+      SQLite computes those when a row is read and stores no field for them, so they show as not
+      read (with a note) instead of shifting later values onto the wrong columns, in rowid and
+      WITHOUT ROWID tables alike.
+      — claimed: Chr0mium24, branch bugfix/r3.12-sqlite-virtual-generated-columns
 
 ### R3.13 Web inspection correctness
 Owner: open · Status: in progress
+- [x] Read HAR captures with the permitted UTF-8 byte order mark.
+      — claimed: Afloat16, branch bugfix/r3.13-har-bom-bounds-20261107
 - [x] The HTML scanner finds script preloads in `rel` token lists, decodes asset URLs once (numeric
       and named references), keeps script and title text through lookalike closing tags, and skips
       raw-text elements, markup inside attribute values and custom tag names such as
