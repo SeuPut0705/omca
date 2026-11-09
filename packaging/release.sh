@@ -27,6 +27,9 @@ done
 
 TAG="v$VERSION"
 cd "$ROOT"
+# gh picks the upstream remote when no default is set; release to origin, never to upstream.
+GH_REPO="$(git remote get-url origin | sed -E 's#\.git$##; s#^.*github\.com[:/]##')"
+export GH_REPO
 if [ -n "$(git status --porcelain)" ]; then
   echo "error: the working tree has uncommitted changes; commit them first" >&2
   exit 1
