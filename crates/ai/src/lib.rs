@@ -21,6 +21,7 @@ pub mod model;
 pub mod model_options;
 pub mod model_tools;
 pub mod openai;
+mod pace;
 pub mod price;
 pub mod prompt;
 pub mod providers;
@@ -35,12 +36,18 @@ pub use model::Effort;
 
 use crate::agent::{ApiConversation, EngineHost, LoopConfig, ModelSlot};
 use crate::model::{ChatModel, Delta, Msg, Stop, TurnRequest, TurnResult};
-use craft_anything_engine::{Engine, Settings};
+use craft_anything_engine::{CancelToken, Engine, Settings};
 use craft_anything_evidence::{ErrorCode, ToolError};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+/// How long adding a server by its address waits to reach it.
+pub const SERVER_CONNECT_WAIT: Duration = Duration::from_secs(15);
+/// How long adding a server by its address waits for its models once it's reached: one still
+/// starting, or loading a model before it answers, took longer than the 10 seconds it had (#1429).
+pub const SERVER_ANSWER_WAIT: Duration = Duration::from_secs(60);
 
 /// Kinds of backend. See `plan/05-ai-backends.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -165,6 +172,26 @@ fn compatible_client(name: &str, base: &str, key: Option<String>, model: &str, s
 
 /// Where OpenCode Go lists its models: the chat base ends in `/openai/v1`, while the list answers at
 /// the same service root with `/v1` (https://opencode.ai/inference/go/v1/models).
+/// Run a blocking request on a helper thread and wait for its answer, giving up as soon as `cancel`
+/// is set. A request given up on ends by itself when its own time limits run out.
+fn until_cancelled<T: Send + 'static>(cancel: &CancelToken, ask: impl FnOnce() -> Result<T, ToolError> + Send + 'static) -> Result<T, ToolError> {
+    let (send, answer) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("ask-server".into())
+        .spawn(move || {
+            let _ = send.send(ask());
+        })
+        .map_err(|e| ToolError::internal(format!("Couldn't start asking the server: {e}")))?;
+    loop {
+        cancel.check()?;
+        match answer.recv_timeout(Duration::from_millis(100)) {
+            Ok(result) => return result,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return Err(ToolError::internal("Asking the server stopped without an answer.")),
+        }
+    }
+}
+
 fn opencode_go_models_base(base: &str) -> String {
     let base = base.trim_end_matches('/');
     match base.strip_suffix("/openai/v1") {
@@ -495,9 +522,29 @@ impl AiHub {
 
     /// Add an OpenAI-compatible server by its address: Ollama or LM Studio on another computer, or
     /// a hosted service with its key. It's added only when it answers with its models; without a
-    /// model, the first one it lists that can chat is used. Returns the model. Anthropic's own
+    /// model, a chat model it says is loaded (`/api/ps`) is used, else the first one it lists that
+    /// can chat. Returns the model. Anthropic's own
     /// address is added as an Anthropic backend, as its API isn't OpenAI's.
     pub fn add_server(&self, name: &str, address: &str, model: Option<&str>, key: Option<String>) -> Result<String, ToolError> {
+        self.add_server_within(name, address, model, key, SERVER_ANSWER_WAIT, &CancelToken::default())
+    }
+
+    /// [`AiHub::add_server`], given up as soon as `cancel` is set, even while the server is still
+    /// being asked for its models: a person can stop waiting for one that is slow to answer (#1429).
+    pub fn add_server_until(&self, name: &str, address: &str, model: Option<&str>, key: Option<String>, cancel: &CancelToken) -> Result<String, ToolError> {
+        self.add_server_within(name, address, model, key, SERVER_ANSWER_WAIT, cancel)
+    }
+
+    /// [`AiHub::add_server`], waiting `wait` for the server to list its models once reached.
+    fn add_server_within(
+        &self,
+        name: &str,
+        address: &str,
+        model: Option<&str>,
+        key: Option<String>,
+        wait: Duration,
+        cancel: &CancelToken,
+    ) -> Result<String, ToolError> {
         let name = name.trim();
         let address = address.trim().trim_end_matches('/');
         if name.is_empty() {
@@ -509,22 +556,46 @@ impl AiHub {
         }
         let key = key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
         let kind = if anthropic::is_anthropic_api(address) { BackendKind::Anthropic } else { BackendKind::OpenaiCompatible };
-        let listed = if kind == BackendKind::Anthropic {
-            anthropic::Anthropic::new(Some(address), key.clone().unwrap_or_default(), "").list_models(Duration::from_secs(10))
-        } else {
-            // OpenCode Go lists its models at /v1, not under the chat path a person would paste.
-            let probe = if openai::is_opencode_go(address) { opencode_go_models_base(address) } else { address.to_string() };
-            openai::OpenAi::compatible(name, &probe, key.clone(), "").list_models(Duration::from_secs(10))
-        };
+        let (asked_name, asked_address, asked_key) = (name.to_string(), address.to_string(), key.clone());
+        let listed = until_cancelled(cancel, move || {
+            if kind == BackendKind::Anthropic {
+                anthropic::Anthropic::new(Some(&asked_address), asked_key.unwrap_or_default(), "").list_models(Duration::from_secs(10))
+            } else {
+                // OpenCode Go lists its models at /v1, not under the chat path a person would paste.
+                let probe = if openai::is_opencode_go(&asked_address) { opencode_go_models_base(&asked_address) } else { asked_address };
+                openai::OpenAi::compatible(&asked_name, &probe, asked_key, "").list_models_within(SERVER_CONNECT_WAIT, wait)
+            }
+        });
         let models = listed.map_err(|e| {
-            let why = e.message.clone();
-            e.with_remediation(format!(
-                "Check the address (it usually ends in /v1), that the server is running and can be reached from this computer, and its key if it needs one. ({why})"
-            ))
+            if e.code == ErrorCode::Cancelled {
+                return e;
+            }
+            // A server that took the request has the right address: it may still be starting, or
+            // loading a model before it answers (#1429).
+            if http::was_reached(&e) {
+                let secs = wait.as_secs();
+                return e.with_remediation(format!(
+                    "The server was reached but didn't list its models within {secs} seconds. It may still be starting or loading a model: \
+                     wait until it's ready, then add it again."
+                ));
+            }
+            e.with_remediation(
+                "Check the address (it usually ends in /v1), that the server is running and can be reached from this computer, and its key if it needs one.",
+            )
         })?;
+        // With no model named, one the server has loaded comes first: its `/models` may be a
+        // download catalogue, and the first entry there may start a download and unload the
+        // model in use (#1434).
+        cancel.check()?;
+        let loaded = || {
+            if kind == BackendKind::Anthropic || openai::is_opencode_go(address) {
+                return None;
+            }
+            detect::chat_model(&openai::OpenAi::compatible(name, address, key.clone(), "").loaded_models(Duration::from_secs(5)))
+        };
         let model = match model.map(str::trim).filter(|m| !m.is_empty()) {
             Some(m) => m.to_string(),
-            None => detect::chat_model(&models).ok_or_else(|| {
+            None => loaded().or_else(|| detect::chat_model(&models)).ok_or_else(|| {
                 let reason = if models.is_empty() { "has no models yet" } else { "doesn't list a model that can chat" };
                 ToolError::new(ErrorCode::NotFound, format!("{address} {reason}."))
                     .with_remediation("Load a chat model on the server first, or enter the name of a chat model you know is available.")
@@ -870,6 +941,10 @@ impl AiHub {
             Some(t) => Box::new(Tunneled { inner: model, _tunnel: t }) as Box<dyn ChatModel>,
             None => model,
         };
+        let model = match pace::gap(e.options.requests_per_minute) {
+            Some(gap) => Box::new(pace::Paced { inner: model, backend: c.name.clone(), gap }) as Box<dyn ChatModel>,
+            None => model,
+        };
         Ok(ModelSlot {
             name: c.name.clone(),
             model,
@@ -995,8 +1070,8 @@ impl AiHub {
         }
     }
 
-    /// Send a tiny request and time it; a coding agent only runs `--version`, so its report says
-    /// `version_only`. Blocking (bounded); run it off the UI thread.
+    /// Send a tiny request and time it; a coding agent checks its version and, when its local
+    /// adapter can tell, sign-in, without a prompt (`version_only`). Blocking; run off the UI thread.
     pub fn test_backend(&self, name: &str) -> Result<TestReport, ToolError> {
         let e = self.entry(name)?;
         let start = Instant::now();
@@ -1007,11 +1082,23 @@ impl AiHub {
                 None => craft_anything_platform::Process::new(&program).arg("--version"),
             };
             let out = p.timeout(Duration::from_secs(15)).run_checked()?;
+            let mut reply = out.stdout_text().lines().next().unwrap_or_default().trim().to_string();
+            if e.config.ssh_host.as_deref().is_none_or(|host| host.trim().is_empty()) {
+                let adapter = cli_agents::AgentAdapters::built_in().for_backend(&e.config.model, &e.options);
+                match adapter.signed_in(&program) {
+                    Some(true) => reply.push_str(" · signed in (model access is checked when you send a message)"),
+                    Some(false) => {
+                        return Err(ToolError::new(ErrorCode::BadSettings, format!("{} is installed but is not signed in.", e.config.name))
+                            .with_remediation(adapter.sign_in_fix().unwrap_or_default()));
+                    }
+                    None => {}
+                }
+            }
             return Ok(TestReport {
                 backend: e.config.name.clone(),
                 model: e.config.model.clone(),
                 latency_ms: start.elapsed().as_millis() as u64,
-                reply: out.stdout_text().lines().next().unwrap_or_default().trim().to_string(),
+                reply,
                 version_only: true,
                 saved_program_replaced: crate::cli_agents::replaced_program(&e.options, &program),
                 program: Some(program),

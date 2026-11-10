@@ -333,6 +333,7 @@ fn model_options_loading(ui: &mut Ui, backend: &str) {
 }
 
 /// Draw AI settings and model pickers, preserving drafts during contention and invalidating confirmed context changes.
+/// Connection checks are delegated to the shared worker API.
 fn ai(app: &mut CraftApp, ui: &mut Ui) {
     if app.agent_model_picker.as_ref().is_some_and(|p| app.hub.model_context(&p.context.backend.config.name).is_ok_and(|current| current != p.context)) {
         app.agent_model_picker = None;
@@ -347,6 +348,7 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
     }
     let (mut pick, mut builds, mut extracts, mut toggle, mut remove) = (None, None, None, None, None);
     let (mut choose_program, mut usual_program) = (None, None);
+    let mut check_agent = None;
     let mut save_folder = None;
     // Taken out while the rows borrow the app, and put back after them.
     let mut folder_drafts = std::mem::take(&mut app.folder_inputs);
@@ -597,6 +599,14 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
                         extracts = Some(Some(b.name.clone()));
                     }
                 }
+                if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_none_or(|host| host.trim().is_empty()) {
+                    let pending = app.agent_connections.get(&b.name) == Some(&None);
+                    ui.add_enabled_ui(!pending, |ui| {
+                        if widgets::secondary(ui, None, if pending { "Checking" } else { "Check" }).clicked() {
+                            check_agent = Some(b.name.clone());
+                        }
+                    });
+                }
                 // Off: kept with its key, but nothing uses it.
                 let (label, tip) = if b.enabled {
                     ("Turn off", "Nothing uses it until it's on again; it keeps its key.")
@@ -620,11 +630,21 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
             if !b.enabled {
                 ui.label(RichText::new(tr("Off")).color(t.text_faint).size(theme::CAPTION));
             }
+            if let Some(Some(result)) = app.agent_connections.get(&b.name) {
+                let (message, color) = match result {
+                    Ok(message) => (message, t.text_dim),
+                    Err(message) => (message, t.danger),
+                };
+                ui.label(RichText::new(message).color(color).size(theme::CAPTION));
+            }
         });
         ui.add_space(space::S);
     }
     if let Some((name, on)) = toggle {
         app.set_backend_enabled(&name, on);
+    }
+    if let Some(name) = check_agent {
+        app.check_agent_connection(name);
     }
     if let Some(name) = choose_program {
         app.picking_program_for = Some(name);
@@ -787,7 +807,8 @@ pub(crate) fn server_form(app: &mut CraftApp, ui: &mut Ui) {
         let w = ui.available_width() - FRAME;
         field(ui, &mut form.address, "address, e.g. http://192.168.1.20:11434/v1", w, "Server address", false);
     });
-    let ready = !form.name.trim().is_empty() && !form.address.trim().is_empty();
+    // One server at a time: pressing Add again while it's asked would only start a second wait.
+    let ready = !form.name.trim().is_empty() && !form.address.trim().is_empty() && form.connecting.is_none();
     let mut add = false;
     ui.horizontal(|ui| {
         field(ui, &mut form.model, "model (optional)", 150.0, "Model", false);
@@ -796,6 +817,27 @@ pub(crate) fn server_form(app: &mut CraftApp, ui: &mut Ui) {
         field(ui, &mut form.key, "API key, if it needs one", w, "API key", true);
         add = widgets::primary_icon(ui, Some("plus"), "Add", ready).clicked() && ready;
     });
+    // A server still starting or loading a model may take up to a minute to answer: say it's being
+    // asked and for how long, so the form doesn't look like nothing happened (#1429).
+    let mut stop = None;
+    if let Some((job, name, started)) = &form.connecting {
+        let seconds = started.elapsed().as_secs().to_string();
+        ui.horizontal(|ui| {
+            ui.add(widgets::Spinner::new().size(theme::CAPTION).color(t.accent));
+            ui.label(
+                RichText::new(trf("Connecting to {name}… {seconds} s", &[("name", name), ("seconds", &seconds)])).color(t.text_faint).size(theme::CAPTION),
+            );
+            // Waiting out the minute isn't the only way: what was typed stays to fix and add again.
+            if widgets::secondary(ui, Some("x"), "Stop").clicked() {
+                stop = Some(*job);
+            }
+        });
+        // The seconds count on even when the spinner is out of view.
+        ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
+    }
+    if let Some(job) = stop {
+        app.jobs.cancel(job);
+    }
     if add {
         app.add_server();
     }
@@ -1043,6 +1085,66 @@ mod tests {
     use craft_anything_ai::{BackendConfig, BackendKind};
 
     #[test]
+    /// A non-Codex local agent gets the same Check action and result presentation.
+    fn agent_connection_check_and_its_result_are_visible_in_settings() {
+        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Experienced, true));
+        app.backends = vec![BackendConfig {
+            name: "Agent test".into(),
+            kind: BackendKind::AgentCli,
+            model: "plain-test-agent".into(),
+            base_url: None,
+            ssh_host: None,
+            enabled: true,
+        }];
+        app.agent_connections.insert("Agent test".into(), Some(Err("Agent test is installed but is not signed in.".into())));
+        let context = egui::Context::default();
+        theme::install_fonts(&context);
+        let mut output = context.run_ui(Default::default(), |ui| ai(&mut app, ui));
+        output.textures_delta.clear();
+        let text = output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::epaint::Shape::Text(text) => Some(text.galley.text().to_string()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("Check"));
+        assert!(text.contains("Agent test is installed but is not signed in."));
+    }
+
+    /// A failed worker frees only its own Check button; unrelated pending/results remain intact.
+    #[test]
+    fn failed_agent_check_workers_can_be_retried_without_clearing_other_checks() {
+        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Experienced, true));
+        app.agent_connections.insert("Failed agent".into(), None);
+        app.agent_connections.insert("Running agent".into(), None);
+        app.agent_connections.insert("Finished agent".into(), Some(Ok("already checked".into())));
+        app.agent_connection_jobs.insert(41, "Failed agent".into());
+        app.agent_connection_jobs.insert(42, "Running agent".into());
+        // Jobs::spawn emits this same Err completion if the thread cannot start (or panics).
+        app.handle_done(Finished { job: 41, result: Err("Couldn't start a worker thread: test failure".into()) });
+        assert!(matches!(app.agent_connections.get("Failed agent"), Some(Some(Err(error))) if error.contains("Couldn't start a worker thread")));
+        assert!(!app.agent_connection_jobs.contains_key(&41));
+        assert_eq!(app.agent_connections.get("Running agent"), Some(&None));
+        assert_eq!(app.agent_connection_jobs.get(&42).map(String::as_str), Some("Running agent"));
+        assert_eq!(app.agent_connections.get("Finished agent"), Some(&Some(Ok("already checked".into()))));
+        app.handle_done(Finished { job: 99, result: Err("unrelated job failed".into()) });
+        assert_eq!(app.agent_connections.get("Running agent"), Some(&None));
+        app.handle_done(Finished { job: 42, result: Ok(Done::AgentConnection("Running agent".into(), Ok("checked".into()))) });
+        assert!(app.agent_connection_jobs.is_empty());
+        assert_eq!(app.agent_connections.get("Running agent"), Some(&Some(Ok("checked".into()))));
+        // The backend is intentionally absent: no real agent or credential access is needed.
+        app.check_agent_connection("Failed agent".into());
+        assert_eq!(app.agent_connections.get("Failed agent"), Some(&None));
+        assert_eq!(app.agent_connection_jobs.len(), 1, "retry was scheduled");
+        let count = app.jobs.list.len();
+        app.check_agent_connection("Failed agent".into());
+        assert_eq!(app.jobs.list.len(), count, "a pending retry cannot start a duplicate");
+    }
+
+    #[test]
     fn identical_model_names_are_shown_once_in_the_shared_picker() {
         use craft_anything_ai::{AgentModel, BackendEntry, ModelContext};
         use egui_kittest::{Harness, kittest::Queryable};
@@ -1232,6 +1334,76 @@ mod model_options_tests {
             })
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    /// #1429: while a server is asked for its models the form says so, with the seconds waited, and
+    /// Add waits; the line goes when the job ends, whether the server was added or not.
+    #[test]
+    fn a_server_being_added_shows_that_it_is_connecting() {
+        let draw = |app: &mut CraftApp| {
+            let context = egui::Context::default();
+            crate::theme::install_fonts(&context);
+            let mut output = context.run_ui(egui::RawInput::default(), |ui| server_form(app, ui));
+            output.textures_delta.clear();
+            output
+                .shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::epaint::Shape::Text(text) => Some(text.galley.text().to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        let mut app = app_with_backend();
+        assert!(!draw(&mut app).contains("Connecting to"), "nothing to say before Add");
+        // Port zero refuses at once: the job never reaches a network.
+        app.server_form.name = "Home box".into();
+        app.server_form.address = "http://127.0.0.1:0/v1".into();
+        app.add_server();
+        let job = app.server_form.connecting.as_ref().map(|(job, ..)| *job).expect("connecting");
+        let text = draw(&mut app);
+        assert!(text.contains("Connecting to Home box… 0 s"), "{text}");
+        // A different job finishing leaves it alone; this one's failure clears it.
+        app.handle_done(crate::jobs::Finished { job: job.wrapping_add(1000), result: Err("other".into()) });
+        assert!(app.server_form.connecting.is_some());
+        let refused = craft_anything_engine::evidence::ToolError::invalid("refused");
+        app.handle_done(crate::jobs::Finished {
+            job,
+            result: Ok(crate::Done::BackendAdded { name: "Home box".into(), result: Err(refused), choices: app.backend_choices }),
+        });
+        assert!(app.server_form.connecting.is_none());
+        assert!(!draw(&mut app).contains("Connecting to"));
+        assert_eq!(app.server_form.address, "http://127.0.0.1:0/v1", "what was typed is kept to fix it");
+    }
+
+    /// #1429: the wait can be stopped from the form; a stop is said plainly, not as an error, and
+    /// what was typed stays.
+    #[test]
+    fn adding_a_server_can_be_stopped_from_the_form() {
+        let mut app = app_with_backend();
+        app.server_form.name = "Home box".into();
+        app.server_form.address = "http://127.0.0.1:0/v1".into();
+        app.add_server();
+        let job = app.server_form.connecting.as_ref().map(|(job, ..)| *job).expect("connecting");
+        let context = egui::Context::default();
+        crate::theme::install_fonts(&context);
+        let mut output = context.run_ui(egui::RawInput::default(), |ui| server_form(&mut app, ui));
+        output.textures_delta.clear();
+        let shown = output.shapes.iter().any(|shape| matches!(&shape.shape, egui::epaint::Shape::Text(t) if t.galley.text() == "Stop"));
+        assert!(shown, "a Stop button beside the wait");
+        app.handle_done(crate::jobs::Finished {
+            job,
+            result: Ok(crate::Done::BackendAdded {
+                name: "Home box".into(),
+                result: Err(craft_anything_engine::evidence::ToolError::cancelled()),
+                choices: app.backend_choices,
+            }),
+        });
+        assert!(app.server_form.connecting.is_none());
+        let (text, error) = app.state.toasts.last().cloned().expect("a note");
+        assert_eq!((text.as_str(), error), ("Stopped adding Home box.", false));
+        assert_eq!(app.server_form.name, "Home box", "what was typed is kept to add it again");
     }
 
     #[test]

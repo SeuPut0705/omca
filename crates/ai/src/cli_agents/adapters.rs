@@ -181,13 +181,13 @@ pub trait AgentAdapter: Send + Sync {
     fn process(&self, program: &str) -> Process {
         Process::new(program)
     }
-    /// Whether it's signed in, checked before a build starts. `None`: can't tell (the run itself
-    /// reports any sign-in problem).
     /// Whether it still names an account it was signed in to, so a sign-in that doesn't work any
     /// more has expired (or was signed out) rather than never happened.
     fn signed_in_before(&self) -> bool {
         false
     }
+    /// Whether it's signed in, checked before a local build or connection test. `None`: can't
+    /// tell; leave version-only results unchanged and let the run report any sign-in problem.
     fn signed_in(&self, _program: &str) -> Option<bool> {
         None
     }
@@ -783,6 +783,16 @@ impl AgentAdapter for Codex {
         &["codex"]
     }
 
+    /// Ask the selected CLI, not its auth file or keychain; discard raw status output.
+    fn signed_in(&self, program: &str) -> Option<bool> {
+        let out = Process::new(program).args(["login", "status"]).timeout(Duration::from_secs(10)).stdout_cap(16 * 1024).run().ok()?;
+        codex_login_status(out.success, &out.stdout_text(), &out.stderr_text())
+    }
+
+    fn sign_in_fix(&self) -> Option<String> {
+        Some("Run the selected Codex program with `login` in a terminal, choose Sign in with ChatGPT, then test it again in Settings → AI.".into())
+    }
+
     /// `codex exec -` reads the message from stdin, so a long one can't pass Windows'
     /// command-line limit (os error 206, #528).
     fn prompt_on_stdin(&self) -> bool {
@@ -845,6 +855,7 @@ impl AgentAdapter for Codex {
         false
     }
 
+    /// Translate Codex JSON events; only explicit authentication failures get sign-in guidance.
     fn parse(&self, p: &mut StreamParser, v: &Value) -> Vec<AgentEvent> {
         let mut out = Vec::new();
         let t = v.get("type").and_then(Value::as_str).unwrap_or_default();
@@ -886,11 +897,35 @@ impl AgentAdapter for Codex {
             }
             ("turn.failed", _) | ("error", _) => {
                 let m = v.pointer("/error/message").or_else(|| v.get("message")).and_then(Value::as_str).unwrap_or("unknown error");
-                out.push(AgentEvent::Error { message: format!("Codex: {m}"), remediation: None, log: None });
+                let lower = m.to_ascii_lowercase();
+                let auth = [
+                    "unauthorized",
+                    "not logged in",
+                    "authentication expired",
+                    "authentication failed",
+                    "authentication required",
+                    "login required",
+                    "token expired",
+                ]
+                .iter()
+                .any(|phrase| lower.contains(phrase));
+                out.push(AgentEvent::Error { message: format!("Codex: {m}"), remediation: if auth { self.sign_in_fix() } else { None }, log: None });
             }
             _ => {}
         }
         out
+    }
+}
+
+/// Unknown output (including future CLI formats) is not a claim that the account is connected.
+fn codex_login_status(success: bool, stdout: &str, stderr: &str) -> Option<bool> {
+    let text = format!("{stdout}\n{stderr}").to_ascii_lowercase();
+    if text.contains("not logged in") {
+        Some(false)
+    } else if success && text.contains("logged in") {
+        Some(true)
+    } else {
+        None
     }
 }
 
@@ -974,6 +1009,15 @@ impl AgentAdapter for GeminiCli {
                     p.input_tokens = st.get("input_tokens").and_then(Value::as_u64).unwrap_or(0);
                     p.output_tokens = st.get("output_tokens").and_then(Value::as_u64).unwrap_or(0);
                 }
+                // Documented stream-json only ever ends a run with `result` on success (a failure
+                // is its own `error` event instead), but a `status` other than "success" here, if
+                // one is ever sent, must still fail the turn rather than quietly counting as done:
+                // `saw_result` alone now also decides whether a lingering process is treated as
+                // finished (`RESULT_GRACE` in `run_cli`).
+                if let Some(status) = v.get("status").and_then(Value::as_str).filter(|s| *s != "success") {
+                    let why = v.get("error").and_then(Value::as_str).unwrap_or(status);
+                    out.push(AgentEvent::Error { message: format!("Gemini CLI: {why}"), remediation: None, log: None });
+                }
             }
             _ => {}
         }
@@ -994,7 +1038,37 @@ fn ssh_run(host: &str, line: &str, timeout: std::time::Duration, stop: Option<&C
 
 /// `command -v` only promises a nonzero status for a missing program: 127 is the shell's own "not
 /// found", which [`crate::ssh::diagnose`] turns into how to install it or put it on the PATH.
-pub(super) const REMOTE_CHECK_LINE: &str = "command -v craft-anything-cli >/dev/null || exit 127";
+/// It prints where the helper is, which [`remote_cli_path`] reads.
+pub(super) const REMOTE_CHECK_LINE: &str = "command -v craft-anything-cli || exit 127";
+
+/// Where `craft-anything-cli` is on `host`, as an absolute path. Claude Code starts the tool server
+/// with its own PATH, not the one ssh gave this check: by bare name the server failed on a host
+/// where the check passed ("server status: failed"), and by absolute path it connected. None: the
+/// host didn't say, so the bare name stays and the build's own error explains.
+pub(super) fn remote_cli_path(host: &str) -> Option<String> {
+    let out = ssh_run(host, REMOTE_CHECK_LINE, std::time::Duration::from_secs(15), None).ok().filter(|out| out.success)?;
+    absolute_path_line(&out.stdout_text())
+}
+
+/// The first line of `text` when it is an absolute path; a shell function, alias or banner isn't.
+fn absolute_path_line(text: &str) -> Option<String> {
+    let line = text.lines().map(str::trim).find(|line| !line.is_empty())?;
+    line.starts_with('/').then(|| line.to_string())
+}
+
+#[cfg(test)]
+mod remote_path_tests {
+    use super::absolute_path_line;
+
+    #[test]
+    fn only_an_absolute_path_is_taken_as_the_helper_location() {
+        assert_eq!(absolute_path_line("/home/a/.cargo/bin/craft-anything-cli\n").as_deref(), Some("/home/a/.cargo/bin/craft-anything-cli"));
+        assert_eq!(absolute_path_line("\n  /opt/ca/craft-anything-cli  \n").as_deref(), Some("/opt/ca/craft-anything-cli"));
+        assert_eq!(absolute_path_line("craft-anything-cli"), None);
+        assert_eq!(absolute_path_line("alias craft-anything-cli='x'"), None);
+        assert_eq!(absolute_path_line(""), None);
+    }
+}
 
 /// The remote helper is on PATH, checked before a build starts (the remote server runs it). For
 /// every agent that's handed our tool server over SSH, as the local check is for one here.
@@ -1021,4 +1095,19 @@ pub(super) fn remote_failure(host: &str, out: &craft_anything_platform::Output) 
             format!("ssh said: {snippet}")
         },
     )
+}
+
+#[cfg(test)]
+mod codex_login_tests {
+    use super::codex_login_status;
+
+    #[test]
+    fn login_status_reads_both_streams_without_inferring_success_from_exit_alone() {
+        assert_eq!(codex_login_status(true, "", "Logged in using ChatGPT"), Some(true));
+        assert_eq!(codex_login_status(true, "Logged in using an API key", ""), Some(true));
+        assert_eq!(codex_login_status(false, "", "Not logged in"), Some(false));
+        assert_eq!(codex_login_status(true, "Not logged in", ""), Some(false));
+        assert_eq!(codex_login_status(false, "", "could not read credentials"), None);
+        assert_eq!(codex_login_status(true, "", ""), None);
+    }
 }

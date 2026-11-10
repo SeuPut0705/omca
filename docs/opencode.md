@@ -124,8 +124,8 @@ So a local turn that doesn't finish (stopped, failed or timed out) deletes its s
 `opencode session delete --standalone <id>`, which removes it without resuming it (over SSH, on
 the host). A turn that finishes keeps its session. While a turn runs, its session is recorded in
 `logs/unfinished-sessions/` in the config folder, under a lock the system drops when Craft
-Anything ends; if Craft Anything is killed mid-turn, the next agent turn, or
-`craft-anything-cli uninstall`, deletes the session of any record nobody holds. A delete that
+Anything ends; if Craft Anything is killed mid-turn, the desktop app sweeps the records when it
+starts, and the next agent turn or `craft-anything-cli uninstall` does too. A delete that
 keeps failing is given up after three tries, with the command to run by hand.
 
 Model discovery uses `opencode api model.list --param location[directory]=...` (the V2

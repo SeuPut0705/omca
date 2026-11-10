@@ -267,6 +267,10 @@ only when it's green and a maintainer has fully reviewed it, code as well as wor
       — claimed: Codex, branch docs/r5.2-headless-status
 - [x] A spinner on screen no longer makes the window redraw at the display's rate: egui's own asks
       for a frame at once every frame, ours at the animation's pace (`widgets::Spinner`, #579)
+- [x] A job whose progress isn't known no longer makes the window redraw at the display's rate:
+      the jobs list used egui's animated `ProgressBar`, which asks for a frame at once every frame
+      like egui's spinner did (`widgets::ProgressBar`)
+      — claimed: Claude, branch bugfix/r5.2-paced-progress-bar
 - [ ] Measure #579 on Windows 11 (0.3.0 portable): the app's CPU while idle, while a build runs and
       during a website capture, before and after; and why a website capture is slow and sits for a
       long time (no details were given, so nothing was changed for it)
@@ -349,6 +353,22 @@ Every round spends the person's money or quota. One that can't do anything shoul
       write the project and show its build's output, not to fix a build (`NO_PROJECT_PROMPT`). — claimed: fabox-os, branch bugfix/736-stop-empty-build-loop
 - [ ] Live-check #736 on Windows with gemini-cli: an empty app/ and a builder that claims `npm run build`
       stops after two turns (or 10 checks) with the "no files yet" note, and Try again doesn't restart it
+- [x] A finished builder turn whose own CLI process lingers after its stream already said it was
+      done (e.g. a stuck shutdown hook) no longer leaves the build on "Building"/"Pausing" for as
+      long as the idle timeout allows (hours, for a builder turn): `run_cli` ends the turn
+      `RESULT_GRACE` after its terminal `result` line instead of waiting for the process itself to
+      exit. A wall or idle deadline that fires during that grace period (the result was already
+      parsed) counts as completion, not a failure; a deadline with no parsed result still stops the
+      turn as before — claimed: mytrade2909-design, branch bugfix/builder-stuck-after-turn-completes, PR #1426
+- [x] A program that's stopped (time limit, pause, or leftovers after it exits) is waited for
+      only 5 s: stopping it used a wait with no limit, the one step of a run that neither its time
+      limit nor Pause could reach (#1438, #981: a check that sits for hours with Pause dead). Found
+      by reading the code; the reporters' hangs are not reproduced here
+      — claimed: justinjohn0306, branch bugfix/r5.3-stopped-program-wait
+- [ ] Confirm on a reporter's Windows machine that #1438 / #981 no longer sit at a check (their
+      `build-activity.log` after the stall, and whether "still there 5 s after it was stopped" is
+      in the app's log). `Launched::stop` (Play) and the console capture still use the same
+      unlimited `kill()`
 
 ### R5.4 Local models can build
 Owner: open · Status: todo
@@ -461,15 +481,34 @@ been run live.
       for the window read from the server (#1155)
 - [x] A per-backend context budget in `[[ai.backends]]` (`LoopConfig::context_tokens` exists), for
       services whose real window differs from 150k (#374) — implementation: `6bd94b84828ec89b805cb8a246f557d0a778c037`
+- [x] A per-backend request rate in `[[ai.backends]]`, for services that limit requests per
+      second or minute (#668): `requests_per_minute`, shared by every conversation on the backend.
+      Not run against a live provider — claimed: justinjohn0306, branch `feature/r5.4-requests-per-minute`
+- [ ] Offer `requests_per_minute` in Settings → AI, and say in the feed when a build is waiting
+      for its turn (#668); a tokens-per-minute limit isn't covered either
 - [x] Find LM Studio on another port (#73): the port in its settings file (when it is there) and
       the ports 1235-1239 are probed like the usual servers; OpenCode's own `baseURL`s were already
       read (#83)
 - [ ] Check live that LM Studio on `--port 1235` is offered, and where its settings file is on
       Windows, macOS and Linux (`LM_STUDIO_SETTINGS` is from memory of its folders, not verified)
+- [x] "Look for AI" (`detect::probe_local`) saved the first chat model a local server lists; LM
+      Studio lists every model downloaded and FastFlowLM every model it can download, so it could
+      load or download one the person isn't using (#1434). Prefer the loaded model: `/api/ps`
+      (Ollama, FastFlowLM) or LM Studio's `/api/v0/models` (`state: "loaded"`)
+      — claimed: jgt87, branch bugfix/r5.4-detect-loaded-model — PR #1437
 - [ ] See why Bionic or LM Studio can't be picked (#140)
 - [x] Do not select an embedding, ranking or transcription model as a chat backend when a local server has no chat models — claimed: Afloat16, branch bugfix/r5.4-nonchat-model-detection-20261103
 - [x] Recognize specialised model file paths and numeric task-name versions during local chat setup
       — claimed: Afloat16, branch bugfix/r5.4-model-task-identifiers-20261103
+- [x] Adding a server by its address with no model took the first chat model its `/models` lists;
+      FastFlowLM lists every model it can download, so the saved model started a 5.5 GB download
+      and unloaded the one in use (#1434). Prefer a chat model the server says is loaded
+      (`/api/ps`, which Ollama and FastFlowLM answer) before the list
+      — claimed: jgt87, branch bugfix/r5.4-add-server-loaded-model — PR #1435
+- [ ] **decision** When nothing says which model is loaded and a server lists more than one chat
+      model, ask the person to pick one (the list in the address form's model field) instead of
+      taking the first (#1434): `/api/ps` helps only while a model is loaded, and LM Studio and
+      llama.cpp routers don't answer it
 - [x] The first run's AI step can add a model server on another computer by its address (llama.cpp,
       Ollama or LM Studio on a home server), the same form as Settings → AI
 - [ ] A chat sent while a llama.cpp router is still loading the model ended after 31 s with "The
@@ -482,6 +521,15 @@ been run live.
       that never started didn't say a large model may still be loading or reading a long prompt
       (#1239 gave it the `timeout_secs` advice)
       — claimed: jgt87, branch bugfix/r5.4-local-server-messages — PR #1242
+- [x] Adding a server by its address showed nothing while it connected and gave up after 10 s with
+      "check the address" for a server that was reached but still starting or loading a model
+      (#1429): show "Connecting to <name>…" with a spinner and the seconds waited, wait a minute,
+      and give advice for a server that was reached
+      — claimed: jgt87, branch bugfix/r5.4-add-server-connecting — PR #1430
+- [x] Let a person stop adding a server while it's asked for its models (#1429): the request runs
+      on a helper thread and the wait checks the job's cancel, so Stop beside "Connecting to…"
+      ends it at once (`AiHub::add_server_until`); the request given up on ends by its own limits
+      — claimed: FuryNocturn, branch bugfix/r5.4-stop-adding-a-server
 
 ### R5.5 API-key builds fail in words people can use
 Owner: open · Status: todo
@@ -654,6 +702,12 @@ Owner: maintainers · Status: in progress
       environment variables, #669, [PR #726](https://github.com/storytold/craft-anything/pull/726))
       — claimed: riyaz, branch `bugfix/r1.6-windows-vs-cpp-tools`
 - [x] Turn off web and capture tools by default in restricted MCP mode (#856, #855).
+- [x] Find a Unity Editor that was added to Unity Hub with "Locate" (#1077): read the Hub's own
+      list of editors (`editors-v2.json`, `editors.json`), on macOS and Linux too. Unit-tested with
+      both layouts of the list
+      — claimed: justinjohn0306, branch `bugfix/r1.6-unity-located-editors`
+- [ ] Check on a computer with Unity Hub that a located editor is found (#1077): the list's
+      layout was taken from descriptions of it, not from a real file
 
 ---
 
@@ -661,6 +715,9 @@ Owner: maintainers · Status: in progress
 
 ### R2.2 More coding agents
 Owner: open · Status: in progress
+- [x] Find Codex bundled with ChatGPT.app/Codex.app after a macOS Dock launch, and
+      verify the selected CLI's sign-in through the headless connection check and Settings.
+      — claimed: dbzx6r, branch bugfix/r2.2-macos-codex-signin-upstream
 - [x] A saved agent program path that no longer exists (Codex desktop moves its CLI to a new
       build folder on every update) says so and names the path, instead of "isn't installed or
       isn't on your PATH" (#721); it stays a missing program, so a builder turn isn't retried
@@ -770,8 +827,10 @@ Owner: open · Status: in progress
       `craft-anything-cli uninstall` delete the sessions of records nobody holds. Over SSH, the
       delete runs on the host too
       — claimed: justinjohn0306, branch bugfix/r2.2-opencode-leftover-sessions
-- [ ] Sweep leftover agent sessions when the desktop app starts, not only at the next agent turn
-      or `craft-anything-cli uninstall` (#1115)
+- [x] Sweep leftover agent sessions when the desktop app starts, not only at the next agent turn
+      or `craft-anything-cli uninstall` (#1115) — a background thread at start-up, so a delete
+      over SSH can't hold up the window
+      — claimed: AlexJoaquimPereira, branch bugfix/r2.2-startup-session-sweep
 - [ ] A turn stopped before OpenCode's first event leaves no session id to delete: OpenCode names its
       session only in that event, so the session it may already have made stays (#1115, review on
       #1176). Needs a session id known before the run (one we create and pass in), if OpenCode allows it
@@ -1110,8 +1169,11 @@ Gaps found while using the app for real projects.
       added, as a paste does (`workspace::attachable_picture`), before anything is copied
 - [ ] When the builder decides a question, show the question and its choice as an answered card
       in the feed (the run sees only the tool call today; the builder's words say what it chose)
-- [ ] A question's own cost: a forked Claude Code session reports the whole session's running
-      total, so a forked answer shows none; count questions in the project's usage
+- [x] A question's own cost: a forked Claude Code session reports the whole session's running
+      total, so a forked answer shows none; count questions in the project's usage — a question's
+      cost is what its total added since the builder's last turn, unknown without a kept total;
+      its cost is added to the project's usage, and concurrent usage writes in the app are serialized
+      — claimed: AlexJoaquimPereira, branch bugfix/r2.9-question-cost
 - [ ] "Make this change" on an answer that suggests one (sends it as a normal message)
 - [x] "Just ask" is told it has fewer tools than the builder and that the build may be running
       beside it, so it no longer reports the build's tools as disconnected or its work as cut off
@@ -1138,9 +1200,17 @@ Gaps found while using the app for real projects.
       mode, or a version-1 one (counts as Deep), isn't resumed. A same-mode continuation keeps its
       transcript and carries on; a mismatch studies again from the brief. Claimed:
       AlexJoaquimPereira, branch bugfix/r2.9-api-transcript-mode
-- [ ] Study can still be skipped after a mode switch: a coding agent's `builder_started()` is
-      mode-unaware, and an API follow-up message with an existing capture leaves `first` false even
-      when the transcript was rejected. Gate both on the run's mode
+- [x] Study can still be skipped after a mode switch: a coding agent's `builder_started()` was
+      mode-unaware, and an API follow-up message with an existing capture left `first` false even
+      when the transcript was rejected. Gate both on the run's mode — `builder_session_in` matches
+      the saved session's mode, and a run studies again when its only kept conversation is in the
+      other mode; a follow-up with no kept conversation keeps its old path
+      — claimed: AlexJoaquimPereira, branch bugfix/r2.9-mode-switch-study
+- [ ] Exercise a mode-switched API follow-up end to end: an other-mode transcript, a capture and a
+      message must study again, not only the decision helper
+- [ ] Record which mode wrote `capture/`, so a failed run that leaves a capture from the other mode
+      isn't handed to a same-mode conversation; remove Deep-only capture files when a Clean room
+      study replaces them
 - [ ] A saved Claude `--resume`/`--continue` in the backend's extra arguments is refused in a
       Clean room build or question when it would reuse the project's Deep session, leaving
       unrelated arguments alone; unit and scripted CLI tests cover the build and question paths
@@ -1276,6 +1346,33 @@ Gaps found while using the app for real projects.
       no cost. Live check (2026-11-09, Haiku 5.5): the second turn's own tokens cost $0.00146751, and
       the reported running total was $0.00350053. Earlier builds' totals stay as they were.
       — claimed: fabox-os, branch bugfix/1187-claude-resumed-cost
+- [x] A Deep-mode build told the builder "You haven't decompiled anything yet" after every request
+      from the person, though it had read decompiled functions in an earlier run: the flag lived
+      only for one run, and each request starts a new one. It is now kept in craft.json
+      (`decompiled`), so a run reminds the builder only while it has never decompiled in this
+      project. Unit test only; not run live
+      — claimed: NeuTroNBZh, branch bugfix/r2.9-decompile-reminder-every-request
+- [x] #1421: a run after the first skipped the study, so in Deep mode its builder's tool server had
+      nothing open and the first `native_*` calls said "Nothing is open yet". Such a run now opens
+      the program the study looked at (`core_target_open`, only when nothing is open, never in
+      Clean room); a failure is said in the feed and the builder can still open it. Unit test
+      only; not run live
+      — claimed: NeuTroNBZh, branch bugfix/1421-reopen-project-target
+- [x] `rebuild_check` said "no build is running" when the run had taken the check and one of its
+      steps hadn't finished: on a Windows Unity build, three checks in a row stopped at
+      "game-self-test" and the builder gave up after its default 20 minutes, below the run's own
+      30-minute limit on a check. The run now marks a request it takes, the tool tells "still
+      going" (`TimedOut`) from "no run took it", and its default wait (35 min) outlasts the run's
+      limit, so the run reports a stuck check itself. Unit tests only; the stuck self-test wasn't
+      reproduced (the same game's `--self-test` now exits in 16 s)
+      — claimed: NeuTroNBZh, branch bugfix/r2.9-rebuild-check-wait
+- [x] Review of #1417: an answer landing as `rebuild_check`'s wait ended could still read as "no
+      build is running", since the run removed its mark when it answered; only the asker removes
+      it now. A build stopped during a check answers it ("stopped before this check finished")
+      instead of leaving the builder waiting, including a stop seen before the check starts
+      — claimed: NeuTroNBZh, branch bugfix/r2.9-rebuild-check-mark-race
+- [ ] Find why a builder's own check stayed on "game-self-test" for over 20 minutes on Windows,
+      past the run's 90 s limit on the game's run (seen three times with a Unity 6000.6 build)
 
 ### R2.10 Pinned builds
 Owner: maintainers · Status: in progress
@@ -1288,8 +1385,15 @@ to the project next.
 - [ ] Pin a website (a frozen copy of the built site, each served on its own port)
 - [ ] A pin started before the app restarted shows as running (keep its process id and start
       time in the pin, and check both), and can be stopped
-- [ ] Cap a run's log (`last-run.log`, `play.log`): it grows as long as the program prints
-      — in PR #218
+- [x] Cap a run's log (`last-run.log`, `play.log`): it grows as long as the program prints. The
+      program keeps writing straight to an append-only file, and while we are alive a watcher cuts
+      that file back to empty once it passes 1 MiB, so its writes never fail or block and a program
+      that outlives us is untouched; past our exit the file grows again, as it did before.
+      — claimed: muraa-p, branch bugfix/r2.10-cap-run-log
+- [x] The log-cap test assumed a cut lands within a few seconds of the stand-in's printing, so a
+      loaded machine could grow the file past the bound with nothing wrong. The stand-in now reads
+      its own log and stops once it has seen a cut and written past it
+      — claimed: muraa-p, branch test/r2.10-log-cap-waits-for-cut
 - [ ] Opening a pin that's already running brings its window to the front, instead of a message
 - [x] How much space pins take in Settings
       — claimed: Afloat16, branch feature/r2.10-pinned-copy-storage
@@ -1598,11 +1702,22 @@ Owner: open · Status: in progress
       existential of a protocol named this way was reported invalid ("expected a type"):
       `_$sSS6encode2toys7Encoder_p_tKF` is `Swift.String.encode(to: Swift.Encoder) throws -> ()`.
       — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-existentials
+- [x] Swift value witness symbols decode. A symbol ending `w` and two letters is one of the
+      functions the runtime calls to copy, move, destroy or read the enum tag of a value of a
+      type, but the demangler had no `w` operator and reported it invalid ("unsupported operator
+      'w'"): `_$ss6ResultOwug` is `getEnumTag value witness for Swift.Result`.
+      — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-value-witnesses
 - [x] Swift enum case symbols decode. A symbol ending `WC` is the function that builds an enum
       case, but the demangler read `WC` as an unknown witness kind and reported it invalid
       ("unsupported witness kind"): `_$s10FindMyBase3BitO3oneyA2CmFWC` is
       `enum case for FindMyBase.Bit.one(FindMyBase.Bit.Type) -> FindMyBase.Bit`.
       — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-enum-cases
+- [x] Swift symbols decode private declarations. A private or `fileprivate` declaration's name
+      is followed by an identifier for its file and `LL`, and the demangler reported every such
+      symbol invalid ("unsupported operator 'L'"):
+      `_$s10DVTIconKit12_isDebugging33_8F51EEEBC836B21F9ED44F4C6D38A8CBLLSbvp` is
+      `DVTIconKit.(_isDebugging in _8F51EEEBC836B21F9ED44F4C6D38A8CB) : Swift.Bool`.
+      — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-private-names
 - [x] Swift symbols name the right type after an optional, an associated type or an extension.
       The demangler's substitution list left out `Sg` optionals and `Qz`/`Qy` associated types
       and added extensions, so a later `A…` reference named the wrong node
@@ -1614,6 +1729,11 @@ Owner: open · Status: in progress
       and `Equatable` conformance descriptors and witness tables (`…SQAAMc`, `…SQsWP`) were
       reported invalid ("expected a protocol").
       — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-equatable
+- [x] Swift symbols name the type metadata singleton initialization cache. The demangler read
+      `Ml` with the name of `ML`, so `_$s10RealityKit30__RKEntityTriggerSpecificationOMl` read
+      "lazy cache variable for type metadata for RealityKit.__RKEntityTriggerSpecification" where
+      `swift-demangle` prints `type metadata singleton initialization cache for …`.
+      — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-singleton-cache
 - [x] Require a complete Cargo package version before a registry or vendor path becomes Rust dependency evidence.
       — claimed: Afloat16, branch bugfix/r3.12-rust-dependency-versions
 - [x] Swift symbols name the right generic parameter in an associated type. `Qy` numbers its
@@ -1629,6 +1749,12 @@ Owner: open · Status: in progress
       `Swift.Double.__allocating_init(Swift.Double) -> Swift.Double` for
       `Swift.Double.init(Swift.Double) -> Swift.Double`.
       — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-init-names
+- [x] Swift arguments without a label read `_:` when another argument of the same function,
+      initialiser or subscript has one. The demangler printed the bare type, so
+      `_$s10Foundation13__DataStorageC6append_6lengthySV_SitF` read
+      `Foundation.__DataStorage.append(Swift.UnsafeRawPointer, length: Swift.Int) -> ()` where
+      `swift-demangle` prints `append(_: Swift.UnsafeRawPointer, length: Swift.Int) -> ()`.
+      — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-unlabeled-args
 - [x] Apply the extracted-string limit in file-offset order across UTF-16LE and narrow strings, so an early wide string is not hidden by later ASCII.
       — claimed: Afloat16, branch bugfix/r3.12-earliest-extracted-strings
 - [x] Visit XML plist values only inside a complete, correctly encoded document.
@@ -1822,6 +1948,12 @@ Owner: open · Status: in progress
       operator, so every addressor was reported invalid: `_$s5Books19PAGETURNLOG_ENABLEDSbvau` is
       `Books.PAGETURNLOG_ENABLED.unsafeMutableAddressor : Swift.Bool`.
       — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-addressors
+- [x] Swift subscript accessors print the accessor after `subscript` and the type after a colon,
+      as `swift-demangle` does. The demangler put the accessor last, so
+      `_$s10Foundation4DataV06InlineB0Vys5UInt8VSiciM` read
+      `Foundation.Data.InlineData.subscript(Swift.Int) -> Swift.UInt8.modify` where `swift-demangle`
+      prints `Foundation.Data.InlineData.subscript.modify : (Swift.Int) -> Swift.UInt8`.
+      — claimed: Chr0mium24, branch bugfix/r3.12-swift-demangle-subscript-accessors
 - [x] Name the glyph weight (26) and glyph size (27) key attributes of asset catalogs, which hold
       SF Symbol style images; they're listed as `attribute-26` and `attribute-27` today.
       — claimed: Chr0mium24, branch bugfix/r3.12-car-glyph-attributes

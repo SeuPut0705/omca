@@ -78,6 +78,14 @@ fn retire(file: &File, path: &Path) {
     let _ = std::fs::remove_file(path);
 }
 
+/// Sweep the records in a config folder's logs, as the desktop app does when it starts (#1115):
+/// a turn that was killed mid-turn left its record, and the next agent turn may not come for a
+/// while. Returns what to tell the person, as [`sweep`] does.
+pub fn sweep_at_startup(config_dir: &Path, adapters: &AgentAdapters) -> Vec<String> {
+    let logs = crate::failure_log::dir_in(config_dir);
+    sweep(&dir_in(&logs), adapters)
+}
+
 /// Delete the session of every record no running turn holds. Returns what to tell the person:
 /// a line per session deleted, or given up on.
 pub fn sweep(dir: &Path, adapters: &AgentAdapters) -> Vec<String> {
@@ -208,6 +216,50 @@ mod tests {
         assert_eq!(*asked.lock().unwrap_or_else(PoisonError::into_inner), [("agent-cli".into(), "ses_killed".into(), Some("studio".into()))]);
         assert_eq!(said.len(), 1, "{said:?}");
         assert_eq!(records(&dir), 0);
+    }
+
+    /// The desktop app's start-up sweep finds the records under its config folder's logs and
+    /// deletes what the previous process left behind; with no folder it says nothing.
+    #[test]
+    fn a_startup_sweep_deletes_leftovers_in_the_config_folder() {
+        let d = tempfile::tempdir().unwrap();
+        let (a, asked) = adapters(false);
+        assert!(sweep_at_startup(d.path(), &a).is_empty(), "nothing there yet");
+        let records_dir = dir_in(&crate::failure_log::dir_in(d.path()));
+        drop(Held::record(&records_dir, &Entry::new("test-sweep", "agent-cli", None, "ses_startup")).unwrap());
+        // A sweep can find the record still locked while another test's child runs, and count no
+        // try: sweep until the delete is asked for.
+        let mut said = Vec::new();
+        for _ in 0..100 {
+            said = sweep_at_startup(d.path(), &a);
+            if !said.is_empty() {
+                break;
+            }
+            assert_eq!(records(&records_dir), 1, "kept for the next sweep");
+        }
+        assert_eq!(*asked.lock().unwrap_or_else(PoisonError::into_inner), [("agent-cli".into(), "ses_startup".into(), None)]);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert_eq!(records(&records_dir), 0);
+    }
+
+    /// A delete that fails at start-up keeps its record for the next sweep, as any sweep does.
+    #[test]
+    fn a_startup_sweep_keeps_a_failed_delete_for_the_next_sweep() {
+        let d = tempfile::tempdir().unwrap();
+        let (a, asked) = adapters(true);
+        let records_dir = dir_in(&crate::failure_log::dir_in(d.path()));
+        drop(Held::record(&records_dir, &Entry::new("test-sweep", "agent-cli", None, "ses_stuck_startup")).unwrap());
+        for _ in 0..100 {
+            if sweep_at_startup(d.path(), &a).is_empty() {
+                let asked = asked.lock().unwrap_or_else(PoisonError::into_inner);
+                if asked.len() == 1 {
+                    break;
+                }
+            }
+            assert_eq!(records(&records_dir), 1, "kept for the next sweep");
+        }
+        assert_eq!(asked.lock().unwrap_or_else(PoisonError::into_inner).len(), 1, "one try isn't a give-up yet");
+        assert_eq!(records(&records_dir), 1, "kept for the next sweep");
     }
 
     #[test]

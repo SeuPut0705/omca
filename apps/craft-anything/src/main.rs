@@ -60,6 +60,22 @@ fn main() -> eframe::Result {
         Ok(false) => {}
         Err(e) => log::warn!("couldn't save the OpenCode Go session id: {e}"),
     }
+    // Sessions a turn left unfinished when Craft Anything was killed mid-turn (#1115): they are
+    // otherwise swept at the next agent turn or on uninstall, and the agent's own service can
+    // resume one in the meantime. Off this thread: a delete over SSH can wait on a host that's
+    // away, and a start must not wait for it.
+    let startup_config = config.clone();
+    // The built-in adapters alone: a fork's adapters register elsewhere, and records they own are
+    // kept and cleaned at the next turn.
+    if let Err(e) = std::thread::Builder::new().name("unfinished-sessions".into()).spawn(move || {
+        let said =
+            craft_anything_ai::cli_agents::unfinished::sweep_at_startup(&startup_config, &craft_anything_ai::cli_agents::adapters::AgentAdapters::built_in());
+        for text in said {
+            log::info!("{text}");
+        }
+    }) {
+        log::warn!("couldn't start the unfinished-session sweep: {e}");
+    }
     log::info!("engine and AI ready; opening the window");
 
     let viewport = eframe::egui::ViewportBuilder::default()

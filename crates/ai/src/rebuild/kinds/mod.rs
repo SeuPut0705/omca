@@ -172,7 +172,7 @@ pub struct CheckStop {
 
 impl CheckStop {
     /// A stop that also runs out at `until` (a round's time limit).
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn limited(until: Instant) -> CheckStop {
         CheckStop { stop: CancelToken::default(), until: Some(until) }
     }
