@@ -38,9 +38,9 @@
          .exe need an .exe icon identifier (ICE50), even when the source is an ICO. -->
     <Icon Id="CraftAnythingIcon.exe" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="CraftAnythingIcon.exe" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/SeuPut0705/omca" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/SeuPut0705/omca" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/SeuPut0705/omca/issues" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/seuput-inc/omca" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/seuput-inc/omca" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/seuput-inc/omca/issues" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="OMCA">

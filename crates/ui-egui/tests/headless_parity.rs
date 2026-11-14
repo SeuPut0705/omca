@@ -113,9 +113,11 @@ const ACTIONS: &[Action] = &[
     a("check_agent_connection", "check a selected local agent's executable and adapter sign-in", Cli("ai test <name>")),
     a("add_backend",         "connect an AI brain",                            Cli("ai add <name> --kind --model --base-url --ssh-host --key-env --key-stdin")),
     a("add_server",          "connect an AI server by its address",            Cli("ai add <name> --kind --base-url --key-env --key-stdin")),
+    a("save_backend_key",    "replace an API key saved in the app",            Cli("ai key <name> --key-env --key-stdin")),
+    a("remove_backend_key",  "forget an API key saved in the app",             Cli("ai key <name> --forget")),
     a("pick_model",          "list the models an AI can use",                  Cli("ai model <name>")),
     a("set_model",           "change the model an AI uses",                    Cli("ai model <name> <model>")),
-    a("set_effort",          "change how hard a Claude AI thinks",             Cli("ai effort <name> <level>")),
+    a("set_effort",          "change how hard an AI thinks",                   Cli("ai effort <name> <level>")),
     a("pick_agent_model",    "list an agent's visible models and thinking depths", Tool(&["ai_models_list"])),
     a("reload_agent_model",  "reload model-specific thinking choices",         Tool(&["ai_models_list"])),
     a("set_agent_model",     "choose an agent's model and thinking depth",     Tool(&["ai_model_set"])),
@@ -145,7 +147,9 @@ const ACTIONS: &[Action] = &[
 /// `CraftApp` methods that aren't person-facing actions: callbacks, polling, drawing, helpers.
 #[rustfmt::skip]
 const PLUMBING: &[(&str, &str)] = &[
+    ("show_update_outcome_on_start", "native startup queues the previous helper result for the first window frame; no document action"),
     ("load_agent_model_catalog", "worker dispatch shared by the model picker and its reload action"),
+    ("check_backend_keys", "a worker that fills the saved-key status rows"),
     ("stuck_banner", "draws what the lock watchdog found; `sync::problems` and its log are the headless side"),
     ("act", "runs a button's tool on a worker (play, preview, open folder)"),
     ("waiting_question", "finds the question an answer is for"),

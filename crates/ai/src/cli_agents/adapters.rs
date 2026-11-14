@@ -150,6 +150,11 @@ pub trait AgentAdapter: Send + Sync {
     fn plain_fallback(&self) -> bool {
         true
     }
+    /// When the flag check fails and there's no plain fallback: the error and its fix, if this
+    /// agent can't work without those flags (else the run tries anyway).
+    fn missing_flags_error(&self) -> Option<(&'static str, &'static str)> {
+        None
+    }
     /// The CLI writes one JSON event per line (else its output is the answer text).
     fn streams_json(&self) -> bool {
         true
@@ -203,7 +208,7 @@ pub trait AgentAdapter: Send + Sync {
     }
     /// An environment variable that hands a local native run our tool server, for an agent that
     /// takes it from its environment rather than its arguments.
-    fn mcp_env(&self, _mcp: &McpCommand) -> Result<Option<(&'static str, String)>, ToolError> {
+    fn mcp_env(&self, _mcp: &McpCommand, _access: Access) -> Result<Option<(&'static str, String)>, ToolError> {
         Ok(None)
     }
     /// Whether what a build needs on a remote SSH host is there, checked before a build starts.
@@ -213,7 +218,7 @@ pub trait AgentAdapter: Send + Sync {
     }
     /// Prepare this run's tool server on a remote SSH host (a config file there), returning the
     /// environment variable to set on the remote command. Default: the agent can't carry one.
-    fn remote_tool_server(&self, _host: &str, _mcp: &McpCommand) -> Result<Option<(&'static str, String)>, ToolError> {
+    fn remote_tool_server(&self, _host: &str, _mcp: &McpCommand, _access: Access) -> Result<Option<(&'static str, String)>, ToolError> {
         Ok(None)
     }
     /// The file in which this computer keeps the agent's saved session `id`, so the project can
@@ -302,6 +307,11 @@ impl AgentAdapters {
     pub fn register(&mut self, adapter: Arc<dyn AgentAdapter>) {
         self.adapters.retain(|a| !a.ids().iter().any(|id| adapter.ids().contains(id)));
         self.adapters.push(adapter);
+    }
+
+    /// Every registered adapter, in the order they were registered.
+    pub fn all(&self) -> &[Arc<dyn AgentAdapter>] {
+        &self.adapters
     }
 
     /// The adapter for an agent id; one it doesn't know gets the plain adapter.
@@ -595,9 +605,33 @@ impl AgentAdapter for ClaudeCode {
     }
 
     fn signed_in(&self, program: &str) -> Option<bool> {
-        let out = self.process(program).args(["auth", "status", "--json"]).timeout(Duration::from_secs(15)).stdout_cap(64 * 1024).run().ok()?;
-        let v: Value = serde_json::from_str(out.stdout_text().trim()).ok()?;
-        v.get("loggedIn").and_then(Value::as_bool)
+        let out = match self.process(program).args(["auth", "status", "--json"]).timeout(Duration::from_secs(15)).stdout_cap(64 * 1024).run() {
+            Ok(out) => out,
+            Err(e) => {
+                log::debug!("claude auth status --json didn't run: {e}");
+                return None;
+            }
+        };
+        // The status is the first JSON object printed: a certificate warning or a banner before it
+        // isn't a reason to call the person signed out (#1830).
+        let text = out.stdout_text();
+        let Some(json) = first_json_object(&text) else {
+            log::debug!("claude auth status --json: exit {:?}, {} bytes on stdout, no JSON object in it", out.code, text.len());
+            return None;
+        };
+        let v: Value = match serde_json::from_str(json) {
+            Ok(v) => v,
+            Err(e) => {
+                // The answer's wording, never its content: it names an account and a token mode.
+                log::debug!("claude auth status --json: exit {:?}, {} bytes on stdout, its JSON didn't parse: {e}", out.code, text.len());
+                return None;
+            }
+        };
+        let signed = v.get("loggedIn").and_then(Value::as_bool);
+        if signed != Some(true) {
+            log::debug!("claude auth status --json: exit {:?}, {} bytes on stdout, loggedIn: {signed:?}", out.code, text.len());
+        }
+        signed
     }
 
     /// The account its `.claude.json` names (`oauthAccount`), kept there while the sign-in itself
@@ -1050,10 +1084,61 @@ pub(super) fn remote_cli_path(host: &str) -> Option<String> {
     absolute_path_line(&out.stdout_text())
 }
 
+/// The first JSON object in `text`, to its closing brace. A CLI can print a warning (a certificate
+/// notice on Windows, a banner) before its answer, and the answer is still the object (#1830).
+fn first_json_object(text: &str) -> Option<&str> {
+    let start = text.find('{')?;
+    let rest = text.get(start..)?;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for (i, c) in rest.char_indices() {
+        if in_string {
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return rest.get(..i + c.len_utf8());
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// The first line of `text` when it is an absolute path; a shell function, alias or banner isn't.
 fn absolute_path_line(text: &str) -> Option<String> {
     let line = text.lines().map(str::trim).find(|line| !line.is_empty())?;
     line.starts_with('/').then(|| line.to_string())
+}
+
+#[cfg(test)]
+mod first_json_object_tests {
+    use super::first_json_object;
+
+    /// #1830: a warning printed before the status doesn't hide it, and braces inside text don't
+    /// end it early.
+    #[test]
+    fn the_first_json_object_is_taken_from_noisy_output() {
+        assert_eq!(first_json_object("{\"loggedIn\":true}"), Some("{\"loggedIn\":true}"));
+        let noisy = "(node:1) Warning: self-signed certificate\n{\n  \"loggedIn\": true,\n  \"note\": \"a } inside text\"\n}\n";
+        let json = first_json_object(noisy).expect("the object after the warning");
+        let parsed: serde_json::Value = serde_json::from_str(json).expect("balanced at the right brace");
+        assert_eq!(parsed["loggedIn"], true);
+        assert_eq!(first_json_object("nothing here"), None);
+        assert_eq!(first_json_object("{\"unfinished\": "), None);
+    }
 }
 
 #[cfg(test)]
@@ -1082,11 +1167,13 @@ fn remote_check(host: &str, stop: Option<&CancelToken>) -> Result<(), ToolError>
 
 /// Map the remote failure onto the fix, reusing the ssh failure wording other remote runs use.
 pub(super) fn remote_failure(host: &str, out: &craft_anything_platform::Output) -> ToolError {
-    if let Some(failure) = crate::ssh::diagnose(host, "craft-anything-cli", crate::ssh::is_git_server(host), out.code, out.stderr_text().as_str()) {
+    if let Some(failure) = crate::ssh::diagnose(host, "craft-anything-cli", crate::ssh::is_git_server(host), out.code, out.stderr_end_text().as_str()) {
         return ToolError::new(ErrorCode::EngineMissing, format!("OMCA can't set up its tools on {host}: {}.", failure.what)).with_remediation(failure.fix);
     }
-    let stderr = out.stderr_text();
-    let snippet: String = stderr.trim().chars().take(200).collect();
+    let end = out.end_text();
+    let trimmed = end.trim();
+    let n = trimmed.chars().count();
+    let snippet: String = trimmed.chars().skip(n.saturating_sub(200)).collect();
     let exit = out.code.map_or_else(|| "it was stopped".to_string(), |code| format!("exit {code}"));
     ToolError::new(ErrorCode::EngineMissing, format!("OMCA couldn't set up its tools on {host}: ssh didn't come back as expected ({exit}).")).with_remediation(
         if snippet.is_empty() {

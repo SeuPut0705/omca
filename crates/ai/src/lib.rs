@@ -27,9 +27,11 @@ pub mod prompt;
 pub mod providers;
 pub mod rebuild;
 pub mod ssh;
+pub mod window;
 
+pub use agent::FULL_TOOLS_BUDGET;
 pub use cli_agents::models::{AgentModel, ModelContext};
-pub use config::{AiConfig, BackendEntry, BackendOptions, Price};
+pub use config::{AiConfig, BackendEntry, BackendOptions, Price, ToolList};
 pub use failure::{FailureKind, TurnFailure};
 pub use keys::KeyStore;
 pub use model::Effort;
@@ -38,6 +40,7 @@ use crate::agent::{ApiConversation, EngineHost, LoopConfig, ModelSlot};
 use crate::model::{ChatModel, Delta, Msg, Stop, TurnRequest, TurnResult};
 use craft_anything_engine::{CancelToken, Engine, Settings};
 use craft_anything_evidence::{ErrorCode, ToolError};
+use craft_anything_platform::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -200,15 +203,37 @@ fn opencode_go_models_base(base: &str) -> String {
     }
 }
 
-/// The effort an AI thinks at, when it can be chosen (Settings → AI): the Claude API and Claude
-/// Code, which take every level in [`Effort::ALL`]. `None` for the others, which don't use it.
+/// The reasoning levels OpenAI's API takes, which OpenAI-compatible services follow.
+pub const OPENAI_EFFORTS: [Effort; 6] = [Effort::None, Effort::Minimal, Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh];
+
+/// The levels every Gemini model takes through its OpenAI-compatible API: `xhigh` is for one
+/// model only, and `none` can't turn reasoning off on 2.5 Pro, 3 or 4 (Google's OpenAI
+/// compatibility page). shortcut: not per model, so a model's extra level isn't offered;
+/// add a per-model table if someone needs `none` or `xhigh` on Gemini.
+pub const GEMINI_EFFORTS: [Effort; 4] = [Effort::Minimal, Effort::Low, Effort::Medium, Effort::High];
+
+/// The effort levels an AI can be set to (Settings → AI): every Claude level for the Claude API
+/// and Claude Code, OpenAI's for the OpenAI-style APIs (#1813), none for the others.
+pub fn effort_levels(config: &BackendConfig) -> &'static [Effort] {
+    match config.kind {
+        BackendKind::Anthropic => &Effort::ALL,
+        BackendKind::AgentCli if config.model == "claude-code" => &Effort::ALL,
+        BackendKind::Gemini => &GEMINI_EFFORTS,
+        BackendKind::Openai | BackendKind::Openrouter | BackendKind::OpenaiCompatible => &OPENAI_EFFORTS,
+        BackendKind::AgentCli => &[],
+    }
+}
+
+/// The effort an AI thinks at: for Claude, the chosen level or high; for an OpenAI-style API,
+/// the chosen level, since not every model there takes one, so nothing is sent until it's
+/// chosen. `None` when no level is sent.
 pub fn effort_in_use(config: &BackendConfig, options: Option<&BackendOptions>) -> Option<Effort> {
-    let claude = match config.kind {
-        BackendKind::Anthropic => true,
-        BackendKind::AgentCli => config.model == "claude-code",
-        _ => false,
-    };
-    claude.then(|| prompt::choose_effort(options.and_then(|o| o.effort)))
+    let chosen = options.and_then(|o| o.effort);
+    match effort_levels(config) {
+        [] => None,
+        levels if levels == Effort::ALL => Some(prompt::choose_effort(chosen)),
+        levels => chosen.filter(|e| levels.contains(e)),
+    }
 }
 
 /// The model an AI uses, when it can be chosen (Settings → AI, #123): an API's own, or the one
@@ -317,6 +342,9 @@ pub enum AgentEvent {
         /// Every prompt token, cached ones included, as agent apps report them.
         input_tokens: u64,
         output_tokens: u64,
+        /// The backend didn't report token counts attributable to this turn.
+        #[serde(default)]
+        tokens_unknown: bool,
         cost_usd: Option<f64>,
         /// `cost_usd` is the agent's own guess at API prices, not what a key was charged: a
         /// subscription may cover the whole of it.
@@ -404,6 +432,10 @@ impl ChatModel for Tunneled {
     fn model(&self) -> String {
         self.inner.model()
     }
+
+    fn context_window(&self) -> Option<window::Window> {
+        self.inner.context_window()
+    }
 }
 
 /// The tools this layer adds to the engine's (rebuild control), for
@@ -421,20 +453,30 @@ pub struct AiHub {
     pub engine: Arc<Engine>,
     settings_path: Option<PathBuf>,
     keys: KeyStore,
+    /// Serializes a backend's key and configuration changes, so a save can't land after a remove
+    /// has deleted the key and the backend. Held across a keychain call or a settings save, so a
+    /// waiter is a job, not a stuck lock.
+    backend_edits: Mutex<()>,
 }
 
 impl AiHub {
     pub fn new(engine: Arc<Engine>) -> Self {
-        AiHub { engine, settings_path: None, keys: KeyStore::system() }
+        AiHub { engine, settings_path: None, keys: KeyStore::system(), backend_edits: Mutex::new(()) }
     }
 
     /// A hub with explicit settings file and key store (tests, portable installs).
     pub fn with_stores(engine: Arc<Engine>, settings_path: PathBuf, keys: KeyStore) -> Self {
-        AiHub { engine, settings_path: Some(settings_path), keys }
+        AiHub { engine, settings_path: Some(settings_path), keys, backend_edits: Mutex::new(()) }
     }
 
     fn settings_path(&self) -> PathBuf {
         self.settings_path.clone().unwrap_or_else(Settings::path)
+    }
+
+    /// Where a failed model turn writes its log: `logs/` beside the settings file, as an agent
+    /// CLI's failures do (see [`failure_log`]).
+    fn failure_logs(&self) -> Option<PathBuf> {
+        self.settings_path().parent().map(failure_log::dir_in)
     }
 
     /// The current AI configuration. Never blocks on a running tool: if the session is busy the
@@ -694,6 +736,21 @@ impl AiHub {
         self.config().backends.into_iter().map(|b| (b.config.name, b.options)).collect()
     }
 
+    /// For each agent app on this computer whose saved program can't be used (an update moved it,
+    /// #721), the program that runs in its place. It looks at the disk and PATH: call it on a worker.
+    pub fn replaced_programs(&self) -> std::collections::BTreeMap<String, String> {
+        self.config()
+            .backends
+            .into_iter()
+            .filter(|b| b.config.kind == BackendKind::AgentCli && b.config.ssh_host.as_deref().is_none_or(|h| h.trim().is_empty()))
+            .filter_map(|b| {
+                let program = cli_agents::program_of(&b.config, &b.options).ok()?;
+                cli_agents::replaced_program(&b.options, &program)?;
+                Some((b.config.name, program))
+            })
+            .collect()
+    }
+
     /// The model a backend uses: an API's model, or the one its agent is asked for. Returns
     /// false when there was no such backend.
     pub fn set_model(&self, name: &str, model: &str) -> Result<bool, ToolError> {
@@ -721,13 +778,18 @@ impl AiHub {
         Ok(true)
     }
 
-    /// How hard a backend thinks (`None`: the usual level again). Only the Claude API and Claude
-    /// Code take one ([`effort_in_use`]). Returns false when there was no such backend.
+    /// How hard a backend thinks (`None`: the usual level again). Only the levels in
+    /// [`effort_levels`] are taken. Returns false when there was no such backend.
     pub fn set_effort(&self, name: &str, effort: Option<Effort>) -> Result<bool, ToolError> {
         let mut cfg = self.config_to_change()?;
         let Some(b) = cfg.backends.iter_mut().find(|b| b.config.name == name) else { return Ok(false) };
-        if effort.is_some() && effort_in_use(&b.config, Some(&b.options)).is_none() {
-            return Err(ToolError::invalid(format!("{name} doesn't take an effort level.")).with_remediation("Effort is for the Claude API and Claude Code."));
+        let levels = effort_levels(&b.config);
+        if let Some(e) = effort.filter(|e| !levels.contains(e)) {
+            let fix = match levels {
+                [] => "Effort is for the Claude API, Claude Code and OpenAI-style APIs.".to_string(),
+                levels => format!("Use one of: {}.", levels.iter().map(|l| l.as_str()).collect::<Vec<_>>().join(", ")),
+            };
+            return Err(ToolError::invalid(format!("{name} doesn't take the effort level {}.", e.as_str())).with_remediation(fix));
         }
         b.options.effort = effort;
         self.save_config(&cfg)?;
@@ -801,6 +863,8 @@ impl AiHub {
 
     /// Remove a backend and its stored key. Returns false when there was no such backend.
     pub fn remove_backend(&self, name: &str) -> Result<bool, ToolError> {
+        let edit = self.backend_edits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        edit.label("Backend key or removal");
         if self.config_to_change()?.get(name).is_none() {
             return Ok(false);
         }
@@ -854,6 +918,59 @@ impl AiHub {
             }
             !b.config.kind.needs_key() || self.keys.resolve(name, b.config.kind).is_some()
         })
+    }
+
+    /// Which backends have a key saved in the app, rather than only in the environment. The
+    /// keychain can be slow, so the app reads this on a worker.
+    pub fn stored_backend_keys(&self) -> std::collections::BTreeMap<String, bool> {
+        self.config()
+            .backends
+            .iter()
+            .filter(|b| b.config.kind != BackendKind::AgentCli)
+            .map(|b| (b.config.name.clone(), self.keys.get(&b.config.name).is_some()))
+            .collect()
+    }
+
+    /// Whether an API backend has a key saved in the app (not the environment); never the key.
+    pub fn saved_backend_key(&self, name: &str) -> Result<bool, ToolError> {
+        if self.entry(name)?.config.kind == BackendKind::AgentCli {
+            return Err(ToolError::invalid("A coding agent keeps its own sign-in; there is no saved key to report here."));
+        }
+        Ok(self.keys.get(name).is_some())
+    }
+
+    /// Replace the key saved for an API backend (#1358). The backend and its options stay as they
+    /// are; an older key in the system keychain must not keep winning, so the new one is read back.
+    pub fn set_backend_key(&self, name: &str, key: &str) -> Result<(), ToolError> {
+        let edit = self.backend_edits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        edit.label("Backend key or removal");
+        if self.entry(name)?.config.kind == BackendKind::AgentCli {
+            return Err(ToolError::invalid("A coding agent keeps its own sign-in; there is no key to save for it here."));
+        }
+        let key = key.trim();
+        if key.is_empty() {
+            return Err(ToolError::invalid("The key is empty."));
+        }
+        self.keys.set(name, key)?;
+        // A keychain that refused the write can leave the fallback file holding the new key while
+        // the keychain still wins with the old one. Reading back makes that a loud failure; trying
+        // again after unlocking the keychain is safe.
+        if self.keys.get(name).as_deref() != Some(key) {
+            return Err(ToolError::new(ErrorCode::NoPermission, format!("The new key for {name} wasn't used: the system keychain still has an older one."))
+                .with_remediation("Unlock the keychain, or delete this AI's entry in your keychain app, then save the key again."));
+        }
+        Ok(())
+    }
+
+    /// Forget the key saved for an API backend, so the one in the environment is used again. The
+    /// backend itself stays.
+    pub fn remove_backend_key(&self, name: &str) -> Result<(), ToolError> {
+        let edit = self.backend_edits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        edit.label("Backend key or removal");
+        if self.entry(name)?.config.kind == BackendKind::AgentCli {
+            return Err(ToolError::invalid("A coding agent keeps its own sign-in; there is no saved key to forget here."));
+        }
+        self.keys.delete(name)
     }
 
     /// This installation's OpenCode Go session id. A backend added before one was made, or found
@@ -914,8 +1031,10 @@ impl AiHub {
         // large context and a bill, as any other cloud API (#374).
         let local = c.kind == BackendKind::OpenaiCompatible && base.is_none_or(detect::on_this_network);
         let limit = stream_limit(&e.options);
+        let sends_effort = effort_in_use(c, Some(&e.options)).is_some();
         let with_limit = |mut o: openai::OpenAi| {
             o.stream_limit = limit;
+            o.sends_effort = sends_effort;
             Box::new(o) as Box<dyn ChatModel>
         };
         let model: Box<dyn ChatModel> = match c.kind {
@@ -933,6 +1052,8 @@ impl AiHub {
                 let key = self.keys.get(&c.name).or_else(|| go_env_key(base).or_else(|| providers::env_key(base)));
                 let mut o = compatible_client(&c.name, base, key, &c.model, &self.session_id());
                 o.react = e.options.react_fallback.unwrap_or(false);
+                o.asks_window = true;
+                o.on_this_network = local;
                 with_limit(o)
             }
             BackendKind::AgentCli => return Err(ToolError::invalid(format!("{} is an agent app, not an API backend.", c.name))),
@@ -952,6 +1073,7 @@ impl AiHub {
             effort: e.options.effort,
             max_turns: e.options.max_turns.unwrap_or(agent::DEFAULT_MAX_TURNS),
             context_tokens: e.options.context_tokens.unwrap_or(0),
+            tools: e.options.tools.unwrap_or_default(),
         })
     }
 
@@ -982,7 +1104,8 @@ impl AiHub {
             }
         }
         let host = Arc::new(EngineHost(self.engine.clone()));
-        let conv = ApiConversation::start(host, chain, LoopConfig { beginner, prices: cfg.prices.clone(), ..LoopConfig::default() })?;
+        let conv =
+            ApiConversation::start(host, chain, LoopConfig { beginner, prices: cfg.prices.clone(), logs: self.failure_logs(), ..LoopConfig::default() })?;
         Ok(Box::new(conv))
     }
 
@@ -1020,7 +1143,7 @@ impl AiHub {
         ApiConversation::start_with(
             host,
             vec![slot],
-            LoopConfig { beginner, prices: self.config().prices.clone(), transcript, deep, lean_for_local, ..LoopConfig::default() },
+            LoopConfig { beginner, prices: self.config().prices.clone(), transcript, deep, lean_for_local, logs: self.failure_logs(), ..LoopConfig::default() },
             toolsets.iter().copied().collect(),
         )
     }
@@ -1112,7 +1235,9 @@ impl AiHub {
             .name("ai-test".into())
             .spawn(move || {
                 let msgs = req_parts();
-                let r = slot.model.turn(&req_owned(&msgs), &mut |_| {}, &stop).map(|r| (r, slot.model.model()));
+                // The level the AI is set to, so the test sends what its conversations will.
+                let req = TurnRequest { effort: prompt::choose_effort(slot.effort), ..req_owned(&msgs) };
+                let r = slot.model.turn(&req, &mut |_| {}, &stop).map(|r| (r, slot.model.model()));
                 let _ = tx.send(r);
             })
             .map_err(|e| ToolError::internal(e.to_string()))?;

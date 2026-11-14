@@ -288,11 +288,11 @@ impl CraftApp {
         });
     }
 
-    /// How hard a Claude AI thinks from now on.
-    pub fn set_effort(&mut self, name: &str, effort: craft_anything_ai::Effort) {
+    /// How hard an AI thinks from now on (`None`: its usual level).
+    pub fn set_effort(&mut self, name: &str, effort: Option<craft_anything_ai::Effort>) {
         let (hub, name) = (self.hub.clone(), name.to_string());
         self.jobs.spawn(tr("Change how hard an AI thinks"), false, move |_| {
-            hub.set_effort(&name, Some(effort)).map_err(|e| e.message)?;
+            hub.set_effort(&name, effort).map_err(|e| e.message)?;
             Ok(crate::backends(&hub))
         });
     }

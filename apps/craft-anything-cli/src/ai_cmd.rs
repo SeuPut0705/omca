@@ -55,6 +55,19 @@ pub enum AiCommand {
     },
     /// Remove a backend.
     Remove { name: String },
+    /// Show, replace or forget the key saved in the app for an API backend (the key is never printed).
+    Key {
+        name: String,
+        /// Read the new key from this environment variable.
+        #[arg(long, conflicts_with_all = ["key_stdin", "forget"])]
+        key_env: Option<String>,
+        /// Read the new key from stdin.
+        #[arg(long, conflicts_with_all = ["key_env", "forget"])]
+        key_stdin: bool,
+        /// Forget the saved key; the backend stays and the environment key is used again.
+        #[arg(long, conflicts_with_all = ["key_env", "key_stdin"])]
+        forget: bool,
+    },
     /// Turn a backend on again.
     On { name: String },
     /// Turn a backend off: nothing uses it, and it keeps its settings and key.
@@ -78,8 +91,10 @@ pub enum AiCommand {
         #[arg(long, conflicts_with_all = ["model", "thinking"])]
         default: bool,
     },
-    /// Set how hard a Claude backend thinks (the Claude API or Claude Code): low, medium, high,
-    /// xhigh or max, or `default` for the usual level; leave it out to see the level and choices.
+    /// Set how hard a backend thinks: low, medium, high, xhigh or max for the Claude API or Claude
+    /// Code; none, minimal, low, medium, high or xhigh for an OpenAI-style API (Gemini: minimal
+    /// to high), which is sent no
+    /// level until one is set. `default` goes back to the usual; leave it out to see the choices.
     Effort { name: String, level: Option<String> },
     /// Send a tiny request and report latency.
     Test { name: String },
@@ -174,13 +189,14 @@ pub fn chat(cli: &Cli, a: &ChatArgs) -> u8 {
                         }
                     }
                 }
-                AgentEvent::TurnDone { backend, input_tokens, output_tokens, cost_usd, cost_is_estimate } => {
+                AgentEvent::TurnDone { backend, input_tokens, output_tokens, tokens_unknown, cost_usd, cost_is_estimate } => {
                     if !jsonl {
                         let cost = cost_usd
                             .map(|c| if *cost_is_estimate { format!(", about ${c:.4} at API prices (an estimate, not a bill)") } else { format!(", ${c:.4}") })
                             .unwrap_or_default();
                         write_raw("\n");
-                        eprintln!("[{backend}: {input_tokens} in / {output_tokens} out{cost}]");
+                        let usage = if *tokens_unknown { "token count unknown".into() } else { format!("{input_tokens} in / {output_tokens} out") };
+                        eprintln!("[{backend}: {usage}{cost}]");
                     }
                     done = true;
                 }
@@ -276,6 +292,38 @@ pub fn ai(cli: &Cli, c: &AiCommand, f: Format) -> u8 {
             }
             Err(e) => fail(&e, f),
         },
+        AiCommand::Key { name, key_env, key_stdin, forget } => {
+            if *forget {
+                return match hub.remove_backend_key(name) {
+                    Ok(()) => {
+                        emit(&json!({"name": name, "key_saved": false, "changed": "forgotten"}), f);
+                        0
+                    }
+                    Err(e) => fail(&e, f),
+                };
+            }
+            if key_env.is_some() || *key_stdin {
+                let key = match read_key(key_env, *key_stdin) {
+                    Ok(Some(k)) => k,
+                    Ok(None) => return crate::usage_error("--key-env or --key-stdin is needed to replace a key"),
+                    Err(m) => return crate::usage_error(&m),
+                };
+                return match hub.set_backend_key(name, &key) {
+                    Ok(()) => {
+                        emit(&json!({"name": name, "key_saved": true, "changed": "replaced"}), f);
+                        0
+                    }
+                    Err(e) => fail(&e, f),
+                };
+            }
+            match hub.saved_backend_key(name) {
+                Ok(saved) => {
+                    emit(&json!({"name": name, "key_saved": saved}), f);
+                    0
+                }
+                Err(e) => fail(&e, f),
+            }
+        }
         AiCommand::On { name } | AiCommand::Off { name } => {
             let on = matches!(c, AiCommand::On { .. });
             match hub.set_enabled(name, on) {
@@ -329,16 +377,18 @@ pub fn ai(cli: &Cli, c: &AiCommand, f: Format) -> u8 {
                 return fail(&ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `craft-anything-cli ai list`."), f);
             };
             let options = hub.options();
-            match craft_anything_ai::effort_in_use(&b, options.get(name)) {
-                Some(effort) => {
-                    let levels: Vec<&str> = Effort::ALL.iter().map(|e| e.as_str()).collect();
-                    emit(&json!({"name": name, "effort": effort.as_str(), "levels": levels}), f);
-                    0
-                }
-                None => fail(
-                    &ToolError::invalid(format!("{name} doesn't take an effort level.")).with_remediation("Effort is for the Claude API and Claude Code."),
+            match craft_anything_ai::effort_levels(&b) {
+                [] => fail(
+                    &ToolError::invalid(format!("{name} doesn't take an effort level."))
+                        .with_remediation("Effort is for the Claude API, Claude Code and OpenAI-style APIs."),
                     f,
                 ),
+                levels => {
+                    let effort = craft_anything_ai::effort_in_use(&b, options.get(name)).map_or("default", Effort::as_str);
+                    let levels: Vec<&str> = levels.iter().map(|e| e.as_str()).collect();
+                    emit(&json!({"name": name, "effort": effort, "levels": levels}), f);
+                    0
+                }
             }
         }
         AiCommand::Effort { name, level: Some(level) } => {
@@ -347,7 +397,8 @@ pub fn ai(cli: &Cli, c: &AiCommand, f: Format) -> u8 {
                 l => match Effort::parse(l) {
                     Some(e) => Some(e),
                     None => {
-                        let e = ToolError::invalid(format!("{l:?} isn't an effort level.")).with_remediation("Use low, medium, high, xhigh, max or default.");
+                        let e = ToolError::invalid(format!("{l:?} isn't an effort level."))
+                            .with_remediation("Use none, minimal, low, medium, high, xhigh, max or default.");
                         return fail(&e, f);
                     }
                 },

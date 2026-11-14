@@ -81,6 +81,20 @@ Windows MSI and portable zip.
 
 ## Upstream
 
+Integrated through upstream `8374ad7` (2026-11-14, Craft Anything 0.6.1), retaining
+OMCA's identity, storage, Korean/English interface and Mac/Windows release targets.
+OMCA 0.4.1 follows the locally installed 0.4.0 build; upstream version tags remain separate.
+
+The upstream changes include parser and archive safety fixes, builder/session recovery,
+settings-file preservation, website traffic recording and application update checks.
+
+Settings → Updates and Help → Check for Updates use the same `seuput-inc/omca` release check
+and recognize the existing `craft-anything-*` package names. Settings shows the installed version.
+On macOS, use the Releases link to install manually:
+the upstream installer only accepts the original app's bundle ID and signing team.
+OMCA does not bypass those signature checks.
+
+
 ```sh
 git config remote.upstream.tagOpt --no-tags   # once per clone: keep upstream's version tags out
 git fetch upstream
