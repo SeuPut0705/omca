@@ -40,6 +40,19 @@ texts are in the crate's `fonts/` folder.
 Made for OMCA; MIT OR Apache-2.0. It replaces the upstream raven icon, which is not licensed to
 forks. See `assets/app-icon/LICENSE.txt`.
 
+## README artwork (`assets/omca-hero.webp`)
+
+Generated for OMCA with OpenAI's image model, using OMCA's app icon as a brand reference.
+Distributed under MIT OR Apache-2.0 with the project.
+
+## Provider account runtime
+
+The bundled `omca-provider-runtime` depends on the public `@oh-my-pi/pi-ai` and
+`@oh-my-pi/pi-catalog` packages, pinned to 18.20.0, under MIT.
+Source: https://github.com/can1357/oh-my-pi.
+Each release carries `PROVIDER-RUNTIME-LICENSES.txt` for Bun and the bundled dependency notices.
+OMCA's bridge implementation is original; no desktop UI code or assets are reused.
+
 ## Optional build-time fonts
 
 Builds made with `CRAFT_FONTS_DIR` (craft-fonts), releases among them, also embed the fonts in

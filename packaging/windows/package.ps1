@@ -57,6 +57,10 @@ $Licences = $env:LICENCES_DIR
 if (-not $Licences -or -not (Test-Path (Join-Path $Licences 'THIRD-PARTY-LICENSES.html'))) {
   throw 'LICENCES_DIR must hold the staged licences: in bash, . packaging/env.sh; stage_licences <dir>'
 }
+$ProviderRuntime = $env:PROVIDER_RUNTIME_DIR
+if (-not $ProviderRuntime -or -not (Test-Path (Join-Path $ProviderRuntime 'omca-provider-runtime.exe'))) {
+  throw 'PROVIDER_RUNTIME_DIR must hold the bundled account runtime: in bash, . packaging/env.sh; build_provider_runtime bun-windows-x64'
+}
 
 if (-not $env:CRAFT_ANYTHING_BUILD_SHA) { $env:CRAFT_ANYTHING_BUILD_SHA = (git -C $Root rev-parse HEAD 2>$null) }
 if (-not $env:CRAFT_ANYTHING_BUILD_DATE) { $env:CRAFT_ANYTHING_BUILD_DATE = (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') }
@@ -98,10 +102,19 @@ foreach ($check in $checks) {
 $Stage = Join-Path $TargetDir "windows-package\$Arch"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-$Exes = $Bins | ForEach-Object { "$_.exe" }
-foreach ($exe in $Exes) { Copy-Item (Join-Path $Bin $exe) $Stage }
+$Exes = @($Bins | ForEach-Object { "$_.exe" }) + @('omca-provider-runtime.exe')
+foreach ($b in $Bins) { Copy-Item (Join-Path $Bin "$b.exe") $Stage }
+Copy-Item (Join-Path $ProviderRuntime 'omca-provider-runtime.exe') $Stage
+if (Test-Path (Join-Path $ProviderRuntime 'provider-runtime-assets')) {
+  Copy-Item -Recurse (Join-Path $ProviderRuntime 'provider-runtime-assets') $Stage
+}
 
-& (Join-Path $PSScriptRoot 'sign.ps1') @($Exes | ForEach-Object { Join-Path $Stage $_ })
+$SigningFiles = @($Exes | ForEach-Object { Join-Path $Stage $_ })
+$SigningFiles += @(Get-ChildItem (Join-Path $Stage 'provider-runtime-assets') -Recurse -File -Filter '*.node' | ForEach-Object { $_.FullName })
+& (Join-Path $PSScriptRoot 'sign.ps1') @SigningFiles
+Invoke-Native 'isolated provider runtime smoke' {
+  bun (Join-Path $Root 'provider-runtime\smoke.ts') (Join-Path $Stage 'omca-provider-runtime.exe') (Join-Path $Stage 'provider-artifact-smoke')
+}
 
 # ---- MSI ---------------------------------------------------------------------------------------
 # The setup wizard's art, drawn here from the app icon so the MSI shows OMCA rather than
@@ -159,7 +172,7 @@ $Decompiled = Join-Path $Stage 'msi-decompiled.wxs'
 Invoke-Native 'wix msi decompile' { wix msi decompile $Msi -o $Decompiled }
 # Source holds the cabinet's internal id; Name is the installed file name.
 $Installed = @(([xml](Get-Content -Raw $Decompiled)).SelectNodes("//*[local-name()='File']") | ForEach-Object { $_.GetAttribute('Name') })
-foreach ($f in 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md', 'LICENSE-lucide.txt', 'THIRD-PARTY-LICENSES.html') {
+foreach ($f in 'omca-provider-runtime.exe', 'pi_natives.win32-x64-baseline.node', 'PROVIDER-RUNTIME-LICENSES.txt', 'LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'ATTRIBUTION.md', 'LICENSE-lucide.txt', 'THIRD-PARTY-LICENSES.html') {
   if ($Installed -notcontains $f) { throw "$f is missing from the MSI (it installs: $($Installed -join ', '))" }
 }
 Write-Output "ok MSI installs the licences ($($Installed.Count) files)"
@@ -173,6 +186,11 @@ Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
 Copy-Item (Join-Path $Root 'README.md') $Portable
+if (Test-Path (Join-Path $Stage 'provider-runtime-assets')) {
+  Copy-Item -Recurse (Join-Path $Stage 'provider-runtime-assets') $Portable
+}
+New-Item -ItemType Directory -Force -Path (Join-Path $Portable 'assets') | Out-Null
+Copy-Item (Join-Path $Root 'assets/omca-hero.webp') (Join-Path $Portable 'assets')
 Copy-Item (Join-Path $Licences '*') $Portable
 # portable.txt beside craft-anything.exe switches on portable mode: settings, logs and the engine
 # store go to OMCAData\ next to the exe instead of %APPDATA% (crates/engine/src/settings.rs).

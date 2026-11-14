@@ -32,6 +32,11 @@ pub enum Block {
         tool_use_id: String,
         extra: Value,
     },
+    /// Opaque metadata required to replay this message to its originating provider.
+    ProviderData {
+        provider: String,
+        data: Value,
+    },
     ToolResult {
         tool_use_id: String,
         content: String,

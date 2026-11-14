@@ -1,12 +1,19 @@
 <p align="center">
-  <img src="assets/app-icon/craft-anything-1024.png" width="128" height="128" alt="OMCA icon">
+  <img src="assets/omca-hero.webp" width="960" alt="OMCA — inspect software and build your own">
 </p>
-
-<h1 align="center">OMCA</h1>
 
 <p align="center">
   See how any website, app or game works, then have a coding agent build your own version.<br>
   A modified version of <a href="https://github.com/storytold/craft-anything">Craft Anything</a>.
+</p>
+
+<p align="center">
+  <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.2/craft-anything-0.4.2-macos-aarch64.dmg"><img src="https://img.shields.io/badge/Install-macOS%20Apple%20silicon-111827?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="Install for macOS Apple silicon"></a>
+  <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.2/craft-anything-0.4.2-windows-x64.msi"><img src="https://img.shields.io/badge/Install-Windows%20x64-0078D4?style=for-the-badge" alt="Install for Windows x64"></a>
+</p>
+<p align="center">
+  Published release: <a href="https://github.com/seuput-inc/omca/releases/tag/v0.4.2">v0.4.2</a>
+  · <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.2/craft-anything-0.4.2-windows-x64-portable.zip">Windows portable ZIP</a>
 </p>
 
 ## What it is
@@ -38,20 +45,39 @@ The engine, workflow, Clean room / Deep modes and tool set come from upstream Cr
 - Internal crate and binary names (`craft_anything_*`, `craft-anything`, `craft-anything-cli`)
   and `CRAFT_ANYTHING_*` environment variables are unchanged, to keep upstream merges simple.
 
+Settings → Models & accounts groups connected providers and their accounts, with sign-in,
+account selection, model selection and provider-reported quota windows. The bundled provider
+runtime uses the public omp SDK; its credentials stay in OMCA's private provider store, separate
+from other apps. Provider-specific warnings and disabled-provider rules still apply.
+API keys use a separate connection form. Legacy command-line agents, local/custom endpoints
+and game assets are under Advanced.
+
 ## Platforms and languages
 
-Releases are built for **Apple silicon Macs** (`aarch64`) and **Windows x64** only. The
+Releases are built for **Apple silicon Macs with macOS 13 or newer** (`aarch64`) and **Windows x64** only. The
 interface is in **Korean** and **English**; release builds embed craft-fonts' Korean and symbol
 fonts (pinned in `packaging/env.sh`).
 
 ## Build
 
 Requires Rust 1.97 or newer.
+Packaged account connections also need Bun 1.4.4 or newer at build time. Release packages include
+the standalone helper, so users do not need Bun or an installed coding-agent runtime.
 
 ```sh
 cargo run --release -p craft-anything                # the desktop app
 cargo install --path apps/craft-anything-cli         # the CLI, as `craft-anything-cli`
 craft-anything-cli doctor
+```
+
+To build the account helper for a source checkout (macOS):
+
+```sh
+export CARGO_TARGET_DIR="$PWD/target"
+. packaging/env.sh
+build_provider_runtime bun-darwin-arm64
+export OMCA_PROVIDER_RUNTIME="$PROVIDER_RUNTIME_DIR/omca-provider-runtime"
+cargo run -p craft-anything
 ```
 
 Building with Claude Code needs `claude` on `PATH` (or in `~/.local/bin`) and signed in

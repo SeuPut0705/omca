@@ -375,7 +375,7 @@ pub fn built_by(app: &mut CraftApp, ui: &mut Ui) {
     ui.label(RichText::new(tr("Built by")).size(theme::BODY).color(t.text_dim));
     let mut pick = None;
     let r = egui::ComboBox::from_id_salt("built-by").icon(widgets::combo_icon).selected_text(shown).width(220.0).show_ui(ui, |ui| {
-        if ui.selectable_label(app.state.make.ai.is_none(), automatic).on_hover_text(tr("Whatever Settings → AI builds with.")).clicked() {
+        if ui.selectable_label(app.state.make.ai.is_none(), automatic).on_hover_text(tr("Whatever Settings → Models & accounts builds with.")).clicked() {
             pick = Some(None);
         }
         for c in &choices {

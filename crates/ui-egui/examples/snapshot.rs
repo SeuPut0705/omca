@@ -15,6 +15,7 @@ use craft_anything_engine::evidence::Confidence;
 use craft_anything_ui_egui::state::{FirstRunStep, Screen};
 use craft_anything_ui_egui::theme::{self, ThemeKind, Tokens, size, space};
 use craft_anything_ui_egui::{CraftApp, demo, icons, widgets};
+use egui_kittest::kittest::Queryable;
 use std::path::PathBuf;
 
 fn arg(args: &[String], name: &str) -> Option<String> {
@@ -38,6 +39,31 @@ fn render(out: &std::path::Path, name: &str, w: f32, h: f32, scale: f32, make: i
     // Let fonts, SVG icons and fades settle.
     for _ in 0..24 {
         harness.step();
+    }
+    match name {
+        "providers-search" | "providers-connect" => {
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Add account")).click();
+            harness.run_steps(3);
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Search providers")).click();
+            harness.run_steps(2);
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Search providers")).type_text("Other");
+            harness.run_steps(3);
+            if name == "providers-connect" {
+                harness.get_by_label(&craft_anything_ui_egui::i18n::tr("API key")).click();
+                harness.run_steps(3);
+            }
+        }
+        "providers-custom" => {
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Advanced AI settings")).click();
+            harness.run_steps(3);
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Custom server")).scroll_to_me();
+            harness.run_steps(3);
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Custom server")).click();
+            harness.run_steps(3);
+            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Server address"));
+        }
+        "providers-detail" => {}
+        _ => {}
     }
     match harness.render() {
         Ok(img) => {
@@ -375,6 +401,49 @@ fn main() {
     }
     if want("settings-ai-error") {
         render(&out, "settings-ai-error", w, h, scale, move || ai_app(true));
+    }
+    for scene in ["providers-empty", "providers-search", "providers-connect", "providers-custom"] {
+        if want(scene) {
+            render(&out, scene, w, h, scale, move || {
+                let mut a = engine_app(None, false);
+                a.state.settings_open = true;
+                a.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
+                a.backends.clear();
+                a.detected = Some(Vec::new());
+                demo::provider_accounts(&mut a);
+                a
+            });
+        }
+    }
+    if want("providers-list") {
+        render(&out, "providers-list", w, h, scale, move || {
+            let mut a = ai_app(false);
+            demo::provider_accounts(&mut a);
+            a
+        });
+    }
+    if want("providers-detail") {
+        render(&out, "providers-detail", w, h, scale, move || {
+            let mut a = ai_app(false);
+            demo::provider_accounts(&mut a);
+            a
+        });
+    }
+    for (scene, state) in [
+        ("providers-narrow-accounts", "accounts"),
+        ("providers-narrow-picker", "picker"),
+        ("providers-narrow-login", "login"),
+        ("providers-narrow-error", "error"),
+    ] {
+        if want(scene) {
+            render(&out, scene, 760.0, 520.0, scale, move || {
+                let mut a = engine_app(None, false);
+                a.state.settings_open = true;
+                a.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
+                demo::provider_account_scene(&mut a, state);
+                a
+            });
+        }
     }
     if want("engine-godot") {
         render(&out, "engine-godot", w, h, scale, move || engine_app(Some(craft_anything_engines::game::Builder::Godot), true));

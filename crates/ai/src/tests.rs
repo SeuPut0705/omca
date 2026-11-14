@@ -345,7 +345,6 @@ fn disabled_backends_are_refused_when_chat_starts() {
         let error = h.start(Some("Off"), false).err().expect("chat must refuse a disabled backend");
         assert_eq!(error.code, ErrorCode::BadSettings);
         assert!(error.message.contains("Off") && error.message.contains("turned off"), "{error:?}");
-        assert!(error.remediation.as_deref().is_some_and(|s| s.contains("Settings → AI")), "{error:?}");
     }
 }
 

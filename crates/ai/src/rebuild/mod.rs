@@ -829,7 +829,7 @@ impl Worker {
                 // A saved path that's gone (an update moved it) or would start the wrong app runs another program: say which (#721).
                 if let Some(saved) = crate::cli_agents::replaced_program(&entry.options, &program) {
                     self.emit(RunEvent::Agent(AgentEvent::Status {
-                        text: format!("Settings → AI names {saved}, but {program} runs instead. To use a different one, choose it in Settings → AI."),
+                        text: format!("Settings → Models & accounts names {saved}, but {program} runs instead. To use a different one, choose it in Settings → Models & accounts."),
                     }));
                 }
                 if adapter.signed_in(&program) == Some(false) {
@@ -1627,13 +1627,12 @@ pub fn replaced_builder_notice(saved: &str, used: &str) -> String {
 pub fn builder_backend(cfg: &crate::AiConfig, named: Option<&str>) -> Result<crate::BackendEntry, ToolError> {
     if let Some(n) = named {
         let Some(entry) = cfg.get(n) else {
-            return Err(
-                ToolError::invalid(format!("No AI backend named {n:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
-            );
+            return Err(ToolError::invalid(format!("No AI backend named {n:?}"))
+                .with_remediation("See `craft-anything-cli ai list`, or add one in Settings → Models & accounts."));
         };
         if !entry.config.enabled {
             return Err(ToolError::new(ErrorCode::BadSettings, format!("{} is turned off.", entry.config.name))
-                .with_remediation("Turn it on in Settings → AI, or choose another backend for this build."));
+                .with_remediation("Turn it on in Settings → Models & accounts, or choose another backend for this build."));
         }
         return Ok(entry.clone());
     }
@@ -1642,8 +1641,8 @@ pub fn builder_backend(cfg: &crate::AiConfig, named: Option<&str>) -> Result<cra
         .or_else(|| cfg.enabled().next())
         .cloned()
         .ok_or_else(|| {
-            ToolError::new(ErrorCode::BadSettings, "Building needs a coding agent (such as Claude Code) or an AI backend with an API key.")
-                .with_remediation("Install a coding agent or add an API key in Settings → AI, then try again.")
+            ToolError::new(ErrorCode::BadSettings, "Building needs a coding agent or a configured AI backend.")
+                .with_remediation("Install a coding agent or connect a provider in Settings → Models & accounts, then try again.")
         })
 }
 

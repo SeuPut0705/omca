@@ -29,8 +29,12 @@ done
 TARGETS=(aarch64-apple-darwin)
 
 # Keep in sync with LSMinimumSystemVersion in Info.plist.in.
-export MACOSX_DEPLOYMENT_TARGET=11.0
+export MACOSX_DEPLOYMENT_TARGET=13.0
 IDENTITY="${MACOS_SIGN_IDENTITY:--}"
+PROVIDER_ENTITLEMENTS="$HERE/provider-runtime-entitlements.plist"
+if [[ "$IDENTITY" = "-" ]]; then
+  PROVIDER_ENTITLEMENTS="$HERE/provider-runtime-adhoc-entitlements.plist"
+fi
 SHORT_VERSION="${VERSION%%-*}"
 WORK="$CARGO_TARGET_DIR/macos-package"
 APP="$WORK/OMCA.app"
@@ -47,6 +51,7 @@ else
 fi
 
 echo "==> OMCA $VERSION for macOS ($ARCH; ${BINS[*]}), identity: $IDENTITY, notarize: $NOTARIZE"
+build_provider_runtime bun-darwin-arm64
 
 # ---- build -------------------------------------------------------------------------------------
 if [[ "$SKIP_BUILD" = 0 ]]; then
@@ -104,6 +109,10 @@ cp "$WORK/bin/craft-anything" "$APP/Contents/MacOS/craft-anything"
 # The CLI goes beside it: the app starts it as the MCP server its coding agents use, and finds it
 # next to its own executable (`self_cli_path`). Without it every Claude Code build fails (#91).
 if [[ "$HAS_CLI" = 1 ]]; then cp "$WORK/bin/craft-anything-cli" "$APP/Contents/MacOS/craft-anything-cli"; fi
+cp "$PROVIDER_RUNTIME_DIR/omca-provider-runtime" "$APP/Contents/MacOS/"
+if [ -d "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" ]; then
+  cp -R "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" "$APP/Contents/Resources/"
+fi
 cp "$ICNS" "$APP/Contents/Resources/craft-anything.icns"
 # Every licence text the app must carry (packaging/env.sh), inside the bundle.
 stage_licences "$APP/Contents/Resources/Licenses"
@@ -118,6 +127,10 @@ printf 'APPL????' >"$APP/Contents/PkgInfo"
 # The CLI keeps the identifier its zip has.
 if [[ "$HAS_CLI" = 1 ]]; then
   sign --options runtime --identifier com.seuput.omca-cli "$APP/Contents/MacOS/craft-anything-cli"
+fi
+sign --options runtime --entitlements "$PROVIDER_ENTITLEMENTS" --identifier com.seuput.omca-provider-runtime "$APP/Contents/MacOS/omca-provider-runtime"
+if [ -d "$APP/Contents/Resources/provider-runtime-assets" ]; then
+  while IFS= read -r -d '' native; do sign --options runtime "$native"; done < <(find "$APP/Contents/Resources/provider-runtime-assets" -type f \( -name '*.node' -o -name '*.dylib' \) -print0)
 fi
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/craft-anything"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
@@ -174,7 +187,7 @@ if ! codesign --verify --strict --deep --verbose=2 "$MOUNT/OMCA.app"; then
   exit 1
 fi
 # The licences travel with the app as shipped, not only with the CLI zip.
-for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md LICENSE-lucide.txt THIRD-PARTY-LICENSES.html; do
+for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md LICENSE-lucide.txt THIRD-PARTY-LICENSES.html PROVIDER-RUNTIME-LICENSES.txt; do
   if [[ ! -s "$MOUNT/OMCA.app/Contents/Resources/Licenses/$f" ]]; then
     echo "error: $f is missing from OMCA.app in the DMG" >&2
     hdiutil_retry detach detach "$MOUNT" >/dev/null
@@ -183,6 +196,10 @@ for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md LICENSE-lucide.txt THI
 done
 if [[ "$HAS_CLI" = 1 ]] && ! "$MOUNT/OMCA.app/Contents/MacOS/craft-anything-cli" --version; then
   echo "error: the app in the DMG has no working craft-anything-cli beside its executable" >&2
+  hdiutil_retry detach detach "$MOUNT" >/dev/null || true
+  exit 1
+fi
+if ! bun "$ROOT/provider-runtime/smoke.ts" "$MOUNT/OMCA.app/Contents/MacOS/omca-provider-runtime" "$WORK/provider-artifact-smoke"; then
   hdiutil_retry detach detach "$MOUNT" >/dev/null || true
   exit 1
 fi
@@ -200,6 +217,12 @@ if [[ "$HAS_CLI" = 1 ]]; then
   CLI_DIR="$WORK/craft-anything-cli-$VERSION-macos-$ARCH"
   mkdir -p "$CLI_DIR"
   cp "$WORK/bin/craft-anything-cli" "$CLI_DIR/"
+  cp "$PROVIDER_RUNTIME_DIR/omca-provider-runtime" "$CLI_DIR/"
+  if [ -d "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" ]; then
+    cp -R "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" "$CLI_DIR/"
+    while IFS= read -r -d '' native; do sign --options runtime "$native"; done < <(find "$CLI_DIR/provider-runtime-assets" -type f \( -name '*.node' -o -name '*.dylib' \) -print0)
+  fi
+  sign --options runtime --entitlements "$PROVIDER_ENTITLEMENTS" --identifier com.seuput.omca-provider-runtime "$CLI_DIR/omca-provider-runtime"
   copy_docs "$CLI_DIR"
   # Same Developer ID and hardened runtime as the app, with an explicit reverse-DNS identifier
   # (codesign would otherwise use the bare file name).

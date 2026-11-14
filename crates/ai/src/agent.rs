@@ -961,7 +961,7 @@ impl ApiConversation {
     /// [`ApiConversation::start`] with these toolsets enabled from the start.
     pub fn start_with(host: Arc<dyn ToolHost>, chain: Vec<ModelSlot>, cfg: LoopConfig, enabled: BTreeSet<Toolset>) -> Result<ApiConversation, ToolError> {
         if chain.is_empty() {
-            return Err(ToolError::unavailable("No AI backend could be started.").with_remediation("Add one in Settings → AI."));
+            return Err(ToolError::unavailable("No AI backend could be started.").with_remediation("Add one in Settings → Models & accounts."));
         }
         let (etx, erx) = std::sync::mpsc::channel();
         let (wtx, wrx) = std::sync::mpsc::channel::<Option<String>>();

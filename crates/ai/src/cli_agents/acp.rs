@@ -417,7 +417,9 @@ impl AcpCore {
                 _ => FailureKind::Unknown,
             }));
             let fix = match kind {
-                Pending::Authenticate => Some(format!("{} refused the key: add a fresh one in Settings → AI for this backend.", self.agent_name)),
+                Pending::Authenticate => {
+                    Some(format!("{} refused the key: add a fresh one in Settings → Models & accounts for this backend.", self.agent_name))
+                }
                 Pending::Initialize | Pending::NewSession => {
                     // "Needs a stored key" guidance only for an agent that takes one, and only
                     // when the refusal is auth: the typed failure kind first, the agent's own
@@ -427,7 +429,7 @@ impl AcpCore {
                         || text_lower.contains("authenticat")
                         || text_lower.contains("api_key");
                     if key_auth_method(&self.agent).is_some() && auth_refusal {
-                        Some(format!("{} needs an API key for ACP sessions: add one in Settings → AI for this backend.", self.agent_name))
+                        Some(format!("{} needs an API key for ACP sessions: add one in Settings → Models & accounts for this backend.", self.agent_name))
                     } else {
                         Some(
                             self.sign_in_fix
@@ -903,7 +905,7 @@ impl AcpConversation {
                 }
             })
             .label(name.clone())
-            .remediation(format!("Install {name}, or choose its program in Settings → AI."))
+            .remediation(format!("Install {name}, or choose its program in Settings → Models & accounts."))
             .spawn()?;
         let stdin = proc.take_stdin();
         self.proc = Some(proc);

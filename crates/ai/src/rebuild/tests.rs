@@ -1471,8 +1471,16 @@ fn an_api_backend_builds_with_the_build_tools() {
 
 #[test]
 fn the_builder_is_an_agent_app_first_then_any_ai_backend() {
-    let none = crate::AiConfig::default();
-    assert!(builder_backend(&none, None).unwrap_err().message.contains("API key"));
+    let mut cfg = crate::AiConfig::default();
+    assert_eq!(builder_backend(&cfg, None).unwrap_err().code, ErrorCode::BadSettings);
+    let entry = |name: &str, kind| crate::BackendEntry {
+        config: crate::BackendConfig { name: name.into(), kind, model: "test".into(), base_url: None, ssh_host: None, enabled: true },
+        options: Default::default(),
+    };
+    cfg.upsert(entry("API", BackendKind::Anthropic));
+    assert_eq!(builder_backend(&cfg, None).unwrap().config.name, "API");
+    cfg.upsert(entry("Agent", BackendKind::AgentCli));
+    assert_eq!(builder_backend(&cfg, None).unwrap().config.name, "Agent");
 }
 
 #[test]

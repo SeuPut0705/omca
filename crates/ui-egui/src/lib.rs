@@ -33,6 +33,7 @@ pub mod paste;
 pub mod pins;
 pub mod project;
 pub mod prompt_box;
+pub(crate) mod provider_connect;
 pub mod report;
 pub mod schema_form;
 pub mod settings_ui;
@@ -258,6 +259,10 @@ pub enum Done {
         name: String,
         result: Result<(), ToolError>,
         /// `CraftApp::backend_choices` when the add started: a choice made since then stands.
+        choices: u64,
+    },
+    ManagedProvider {
+        result: Result<String, ToolError>,
         choices: u64,
     },
     /// The projects folder was listed.
@@ -497,6 +502,7 @@ pub struct CraftApp {
     /// Settings → AI's "Add an AI by its address" form. Not kept with the UI state: its key goes
     /// only to the keychain.
     pub server_form: ServerForm,
+    pub(crate) provider_accounts: provider_connect::AccountsState,
     /// Every project's rebuild in this window: working, waiting their turn, or finished.
     pub runs: craft_anything_ai::rebuild::RunSet,
     /// What was typed for each note still waiting for a builder, by note id, to put back in the
@@ -636,6 +642,7 @@ impl CraftApp {
             log: Vec::new(),
             key_inputs: Default::default(),
             server_form: ServerForm::default(),
+            provider_accounts: Default::default(),
             runs: craft_anything_ai::rebuild::RunSet::new(craft_anything_engine::settings::BuildSettings::default().parallel),
             drafts: Default::default(),
             pending_paste: None,
@@ -1332,14 +1339,14 @@ impl CraftApp {
         self.agent_connection_jobs.insert(job, name);
     }
 
-    pub fn add_backend(&mut self, config: BackendConfig, key: Option<String>) {
+    pub fn add_backend(&mut self, config: BackendConfig, key: Option<String>) -> u64 {
         let hub = self.hub.clone();
         let name = config.name.clone();
         let choices = self.backend_choices;
         self.jobs.spawn(i18n::trf("Connect {name}", &[("name", &name)]), true, move |_| {
             let result = hub.add_backend(config, key);
             Ok(Done::BackendAdded { name, result, choices })
-        });
+        })
     }
 
     pub fn choose_backend(&mut self, name: Option<String>) {
@@ -1725,20 +1732,34 @@ impl CraftApp {
                     self.toast(error.for_people(), true);
                 }
             }
-            Done::BackendAdded { name, result, choices } => match result {
-                Ok(()) => {
-                    if self.server_form.name.trim() == name {
-                        self.server_form = ServerForm::default();
+            Done::BackendAdded { name, result, choices } => {
+                match result {
+                    Ok(()) => {
+                        if self.server_form.name.trim() == name {
+                            self.server_form = ServerForm::default();
+                        }
+                        self.toast(i18n::trf("{name} is ready", &[("name", &name)]), false);
+                        // Picking another AI (or none) while this one connected wins.
+                        if choices == self.backend_choices {
+                            self.select_backend(Some(name));
+                        }
+                        self.refresh_backends();
                     }
-                    self.toast(i18n::trf("{name} is ready", &[("name", &name)]), false);
-                    // Picking another AI (or none) while this one connected wins.
+                    Err(e) if e.code == ErrorCode::Cancelled => self.toast(i18n::trf("Stopped adding {name}.", &[("name", &name)]), false),
+                    Err(e) => self.toast(e.for_people(), true),
+                }
+            }
+            Done::ManagedProvider { result, choices } => match result {
+                Ok(name) => {
                     if choices == self.backend_choices {
+                        if let Some(mut conversation) = self.conversation.take() {
+                            conversation.stop();
+                        }
                         self.select_backend(Some(name));
                     }
                     self.refresh_backends();
                 }
-                Err(e) if e.code == ErrorCode::Cancelled => self.toast(i18n::trf("Stopped adding {name}.", &[("name", &name)]), false),
-                Err(e) => self.toast(e.for_people(), true),
+                Err(error) => self.toast(error.for_people(), true),
             },
             Done::Picked { pick, path } => {
                 if let Some(path) = path {
@@ -2136,6 +2157,7 @@ pub(crate) fn backends(hub: &AiHub) -> Done {
 impl CraftApp {
     /// Act on every background job that has finished since the last frame.
     pub(crate) fn take_finished_jobs(&mut self) {
+        provider_connect::poll(self);
         for f in self.jobs.poll() {
             let (job, ok) = (f.job, f.result.is_ok());
             guard("job result", || self.handle_done(f));

@@ -104,6 +104,8 @@ impl ToolList {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BackendOptions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
     /// Thinking depth (`low`/`medium`/`high`/`xhigh`/`max`) for the Claude API and Claude Code;
     /// `high` unless set. A model without the level gets the nearest one below it. For an
     /// OpenAI-style API, `none` to `xhigh` (Gemini: `minimal` to `high`), sent as its reasoning

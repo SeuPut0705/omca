@@ -1,0 +1,20 @@
+{
+  "name": "omca-provider-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:macos-arm64": "bun build.ts --target bun-darwin-arm64",
+    "build:windows-x64": "bun build.ts --target bun-windows-x64",
+    "test": "bun test",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@oh-my-pi/pi-ai": "18.20.0",
+    "@oh-my-pi/pi-catalog": "18.20.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "5.9.3"
+  }
+}

@@ -148,7 +148,7 @@ fn job(ctx: &Ctx<'_>) -> Result<Job, ToolError> {
 
 fn no_key(provider: &str) -> ToolError {
     ToolError::new(ErrorCode::BadSettings, format!("No {provider} key is set up, so pictures and 3D models can't be generated.")).with_remediation(format!(
-        "Make these assets with simple shapes and colours instead, and tell the person they can add a {provider} key in Settings → AI for realistic ones."
+        "Make these assets with simple shapes and colours instead, and tell the person they can add a {provider} key in Settings → Models & accounts → Advanced → Game assets for realistic ones."
     ))
 }
 

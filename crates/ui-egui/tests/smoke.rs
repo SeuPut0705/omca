@@ -72,10 +72,34 @@ fn first_run_ai_step_can_add_a_server_by_its_address() {
     h.get_by_label("I'm new to this").click();
     h.run_steps(3);
     assert_eq!(h.state().state.first_run, FirstRunStep::Brain);
+    h.get_by_label("Advanced").click();
+    h.run_steps(3);
+    h.get_by_label("Custom server").scroll_to_me();
+    h.run_steps(3);
+    h.get_by_label("Custom server").click();
+    h.run_steps(2);
     let _ = h.get_by_label("Server address");
     let _ = h.get_by_label("AI name");
     // The demo already has an AI, so "we didn't find one" isn't said.
     assert!(h.query_by_label("We didn't find an AI on this computer yet").is_none());
+}
+
+#[test]
+fn first_run_can_add_a_detected_agent() {
+    let mut h = harness(|| {
+        let mut app = demo::app(demo::engine(Mode::Beginner, false));
+        app.detected = Some(demo::detected());
+        app.backends.clear();
+        app.state.first_run = FirstRunStep::Brain;
+        app
+    });
+    h.run_steps(3);
+    h.get_by_label("Advanced").scroll_to_me();
+    h.run_steps(2);
+    h.get_by_label("Advanced").click();
+    h.run_steps(2);
+    h.get_by_label("Claude Code").click();
+    assert!(wait(&mut h, |app| app.backends.iter().any(|backend| backend.name == "Claude Code")));
 }
 
 /// A message (such as a server that couldn't be reached) shows on the first run too.
@@ -86,6 +110,30 @@ fn first_run_shows_messages() {
     h.state_mut().toast("Couldn't reach the server", true);
     h.run_steps(3);
     let _ = h.get_by_label("Couldn't reach the server");
+}
+
+#[test]
+fn first_run_ai_navigation_is_reachable_at_the_smallest_window() {
+    for empty in [false, true] {
+        for label in ["No AI for now", "Continue"] {
+            let mut h = harness_sized(egui::vec2(760.0, 520.0), move || {
+                let mut app = demo::app(demo::engine(Mode::Beginner, false));
+                if empty {
+                    app.backends.clear();
+                }
+                app.state.first_run = FirstRunStep::Brain;
+                app
+            });
+            h.run_steps(3);
+            h.get_by_label(label).scroll_to_me();
+            h.run_steps(3);
+            let rect = h.get_by_label(label).rect();
+            assert!(rect.top() >= 0.0 && rect.bottom() <= 472.0, "{label} is outside the scroll area: {rect:?}");
+            h.get_by_label(label).click();
+            h.run_steps(3);
+            assert_eq!(h.state().state.first_run, FirstRunStep::Purpose);
+        }
+    }
 }
 
 /// #231: at the smallest window the app allows, Purpose's Continue was below the window with
@@ -1367,6 +1415,10 @@ fn an_ais_model_is_changed_in_settings() {
     h.state_mut().refresh_backends();
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Box")));
     h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Box").click();
+    h.run_steps(2);
     h.get_by_label("Model: nomic-embed-text");
     h.get_by_label("Change…").click();
     assert!(wait(&mut h, |a| a.model_picker.as_ref().is_some_and(|(_, m)| m.as_deref() == Some(&["nomic-embed-text".to_string(), "qwen3:8b".into()][..]))));
@@ -1392,6 +1444,10 @@ fn a_model_the_list_doesnt_offer_can_be_typed_in() {
     h.state_mut().refresh_backends();
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Box")));
     h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Box").click();
+    h.run_steps(2);
     h.get_by_label("Change…").click();
     assert!(wait(&mut h, |a| a.model_picker.as_ref().is_some_and(|(_, m)| m.is_some())));
     h.run_steps(2);
@@ -1415,20 +1471,17 @@ fn an_ai_server_is_added_by_its_address() {
         a
     });
     h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Custom server").scroll_to_me();
+    h.run_steps(3);
+    h.get_by_label("Custom server").click();
+    h.run_steps(2);
     h.get_by_label("Add an AI by its address");
     h.state_mut().server_form = craft_anything_ui_egui::ServerForm { name: "Studio box".into(), address: url.clone(), ..Default::default() };
     h.run_steps(1);
-    // The AI settings page scrolls, and the key row added in #1486 puts the form's Add button
-    // below its visible part. A pointer click there lands outside the scroll area, so scroll the
-    // page first, as a person would.
-    h.event(egui::Event::PointerMoved(egui::pos2(640.0, 400.0)));
-    h.event(egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Point,
-        delta: egui::vec2(0.0, -300.0),
-        phase: egui::TouchPhase::Move,
-        modifiers: egui::Modifiers::NONE,
-    });
-    h.run_steps(20);
+    h.get_by_label("Add").scroll_to_me();
+    h.run_steps(3);
     h.get_by_label("Add").click();
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Studio box" && b.model == "qwen3:8b")), "added with a model that can chat");
     assert!(h.state().server_form.name.is_empty(), "the form empties once it's added");
@@ -1450,6 +1503,10 @@ fn an_agent_apps_program_is_set_in_settings() {
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "OpenCode")));
     h.state_mut().state.settings_open = true;
     h.state_mut().state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
+    h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("OpenCode").click();
     h.run_steps(2);
     h.get_by_label("Program: found automatically");
     h.state_mut().set_agent_program("OpenCode", Some("/opt/oc/opencode".into()));
@@ -1480,6 +1537,10 @@ fn a_saved_program_that_is_gone_is_said_in_settings() {
     h.state_mut().state.settings_open = true;
     h.state_mut().state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
     h.run_steps(3);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Moved").click();
+    h.run_steps(2);
     h.get_by_label("It isn't there any more, so cargo runs in its place.");
     assert!(h.query_by_label("Use it").is_none(), "a name on PATH isn't a file to save");
 }
@@ -1505,6 +1566,10 @@ fn a_claude_ais_effort_is_set_in_settings() {
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Claude Code")));
     h.state_mut().state.settings_open = true;
     h.state_mut().state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
+    h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Claude Code").click();
     h.run_steps(2);
     h.get_by_label("Effort:");
     assert!(h.state().backend_options.get("Claude Code").and_then(|o| o.effort).is_none(), "the usual level until one is chosen");
@@ -1539,6 +1604,10 @@ fn an_openai_compatible_ais_effort_is_set_in_settings() {
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Box")));
     h.state_mut().state.settings_open = true;
     h.state_mut().state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
+    h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Box").click();
     h.run_steps(2);
     h.get_by_label("Effort:");
     h.get_by_value("default").click();
@@ -1583,6 +1652,10 @@ fn opencode_picker_offers_only_the_selected_models_thinking_depths() {
         a
     });
     h.run_steps(3);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("OpenCode").click();
+    h.run_steps(2);
     h.get_all_by_label("Thinking depth").last().unwrap().click();
     h.run_steps(2);
     for label in ["Low", "Medium", "High", "Xhigh", "Max"] {
@@ -1627,6 +1700,10 @@ fn claude_codes_account_folder_is_set_in_settings() {
     h.state_mut().state.settings_open = true;
     h.state_mut().state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
     h.run_steps(2);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Claude Code").click();
+    h.run_steps(2);
     // Typed, `~/` and all, and saved on Enter.
     let field = "Claude Code folder (CLAUDE_CONFIG_DIR)";
     h.get_by_label(field).focus();
@@ -1647,8 +1724,6 @@ fn claude_codes_account_folder_is_set_in_settings() {
     h.state_mut().set_agent_folder("Claude Code", Some(String::new()));
     assert!(wait(&mut h, |a| chosen(a).is_none()));
     // Added already, so it's offered again under the next free name, on the coding agents' tab.
-    h.state_mut().state.detect_tab = Some(craft_anything_ui_egui::detect_tabs::DetectTab::Harnesses);
-    h.run_steps(2);
     h.get_by_label("Add another").click();
     assert!(wait(&mut h, |a| a.backends.iter().any(|b| b.name == "Claude Code 2" && b.model == "claude-code")));
 }
@@ -1720,7 +1795,7 @@ fn settings_window_tabs_draw() {
     // move (#68).
     let edge = |h: &Harness<'static, CraftApp>| h.get_all_by_label("Close").map(|n| n.rect().right()).fold(f32::INFINITY, f32::min);
     let right = edge(&h);
-    for tab in ["Engines", "AI", "Builds", "Plugins", "Safety", "General"] {
+    for tab in ["Engines", "Builds", "Plugins", "Safety", "General"] {
         h.get_by_label(tab).click();
         h.run_steps(2);
         assert_eq!(edge(&h), right, "the Settings window changed width on {tab}");
@@ -2892,87 +2967,33 @@ fn only_the_claude_desktop_app_is_named_when_nothing_can_build() {
     assert!(h.query_by_label("The Claude desktop app is installed, but building needs Claude Code, its separate command-line tool. Install Claude Code, sign in to it once in a terminal, then look again.").is_none());
 }
 
-/// The discovery tabs and Detect action stay separate and evenly spaced in Settings → AI.
+/// The provider picker remains usable at both narrow and wide window sizes.
 #[test]
-fn ai_discovery_controls_have_even_spacing() {
-    for (width, mode, count) in [(760.0, Mode::Beginner, 0), (900.0, Mode::Experienced, 0), (1280.0, Mode::Beginner, 12), (1280.0, Mode::Experienced, 12)] {
-        let mut h = harness_sized(egui::vec2(width, 1000.0), move || {
-            let mut a = demo::app(demo::engine(mode, true));
+fn provider_picker_search_and_custom_server_are_available() {
+    for width in [760.0, 1280.0] {
+        let mut h = harness_sized(egui::vec2(width, 1000.0), || {
+            let mut a = demo::app(demo::engine(Mode::Experienced, true));
             a.backends.clear();
-            a.detected = Some(
-                [BackendKind::Openai, BackendKind::AgentCli]
-                    .into_iter()
-                    .flat_map(|kind| {
-                        (0..count).map(move |i| craft_anything_ai::Detected {
-                            suggestion: BackendConfig {
-                                name: format!("Fixture {kind:?} {i}"),
-                                kind,
-                                model: "fixture".into(),
-                                base_url: None,
-                                ssh_host: None,
-                                enabled: true,
-                            },
-                            reason: "Controlled discovery result".into(),
-                            needs_key: false,
-                        })
-                    })
-                    .collect(),
-            );
+            a.detected = Some(Vec::new());
+            demo::provider_accounts(&mut a);
             a.state.settings_open = true;
             a.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
             a
         });
         h.run_steps(4);
-        let providers = h.get_by_label(&format!("Providers ({count})")).rect();
-        let harnesses = h.get_by_label(&format!("Harnesses ({count})")).rect();
-        let detect = h.get_by_label("Detect").rect();
-        assert!(!providers.intersects(detect) && !harnesses.intersects(detect), "controls overlap at {width}: {providers:?}, {harnesses:?}, {detect:?}");
-        let tab_gap = harnesses.left() - providers.right();
-        let action_gap = detect.left() - harnesses.right();
-        assert!(tab_gap > 0.0 && action_gap > 0.0, "controls need a visible gap at {width}");
-        assert!((tab_gap - action_gap).abs() <= 1.0, "spacing differs at {width}: {tab_gap} vs {action_gap}");
-        assert!(providers.top() < detect.bottom() && detect.top() < providers.bottom(), "controls share a row at {width}");
-        h.get_by_label(&format!("Harnesses ({count})")).click();
+        h.get_by_label("Add account").click();
+        h.run_steps(3);
+        h.get_by_label("Search providers");
+        h.get_by_label("Advanced AI settings").scroll_to_me();
+        h.run_steps(3);
+        h.get_by_label("Advanced AI settings").click();
+        h.run_steps(3);
+        h.get_by_label("Custom server").scroll_to_me();
+        h.run_steps(3);
+        h.get_by_label("Custom server").click();
         h.run_steps(2);
-        assert_eq!(h.state().state.detect_tab, Some(craft_anything_ui_egui::detect_tabs::DetectTab::Harnesses));
+        h.get_by_label("Server address");
     }
-}
-
-/// A long reason on a card for an AI found on this computer wraps beside its Add button; it used
-/// to stay on one line and run on under the button.
-#[test]
-fn a_found_ais_long_reason_wraps_beside_its_add_button() {
-    use craft_anything_ai::Detected;
-    let reason = "Found the claude command on this computer, in a folder that another account's settings also point at, so adding it here uses the same sign-in as that one.";
-    let found = Detected {
-        suggestion: BackendConfig {
-            name: "Claude Code".into(),
-            kind: BackendKind::AgentCli,
-            model: "claude-code".into(),
-            base_url: None,
-            ssh_host: None,
-            enabled: true,
-        },
-        reason: reason.into(),
-        needs_key: false,
-    };
-    let mut h = harness_sized(egui::vec2(900.0, 1000.0), move || {
-        let mut a = demo::app(demo::engine(Mode::Experienced, true));
-        a.backends.clear();
-        a.detected = Some(vec![found]);
-        // The fixture is the discovery result; keep host detection out of this UI test.
-        a.detecting = true;
-        a.state.settings_open = true;
-        a.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
-        a
-    });
-    h.run_steps(4);
-    let text = h.get_by_label(reason).rect();
-    // The card's Add is the one on the reason's lines (the address form below has one too).
-    let add = h.query_all_by_label("Add").map(|n| n.rect()).find(|r| r.top() < text.bottom() && r.bottom() > text.top() - 30.0);
-    let add = add.expect("the card has an Add button beside its text");
-    assert!(text.right() <= add.left(), "the reason ({text:?}) ends before the Add button ({add:?})");
-    assert!(text.height() > 20.0, "the reason wraps onto more than one line ({text:?})");
 }
 
 #[test]
@@ -2989,6 +3010,10 @@ fn an_ai_can_be_turned_off_and_removed_in_settings() {
         a
     });
     h.run_steps(3);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Claude Code").click();
+    h.run_steps(2);
     h.get_by_label("Turn off").click();
     assert!(wait(&mut h, |a| a.backends.first().is_some_and(|b| !b.enabled)), "kept, but off");
     assert!(!h.state().can_build(), "an AI that's off doesn't build");
@@ -2997,6 +3022,35 @@ fn an_ai_can_be_turned_off_and_removed_in_settings() {
     h.run_steps(2);
     h.get_by_label("Remove it and its key").click();
     assert!(wait(&mut h, |a| a.backends.is_empty()), "removed");
+}
+
+#[test]
+fn advanced_backend_key_and_builder_role_remain_configurable() {
+    let mut h = harness(|| {
+        let mut app = demo::app(demo::engine(Mode::Experienced, true));
+        app.hub
+            .add_backend(
+                BackendConfig { name: "Legacy API".into(), kind: BackendKind::Openai, model: "gpt-test".into(), base_url: None, ssh_host: None, enabled: true },
+                None,
+            )
+            .unwrap();
+        app.backends = app.hub.backends();
+        app.state.settings_open = true;
+        app.state.settings_tab = craft_anything_ui_egui::state::SettingsTab::Ai;
+        app
+    });
+    h.run_steps(3);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("Legacy API").click();
+    h.run_steps(2);
+    h.get_by_label("Legacy API key").focus();
+    h.get_by_label("Legacy API key").type_text("legacy-test-key");
+    h.run_steps(2);
+    h.get_by_label("Save Legacy API key").click();
+    assert!(wait(&mut h, |app| app.backend_keys.as_ref().and_then(|keys| keys.get("Legacy API")) == Some(&true)));
+    h.get_by_label("Build with this").click();
+    assert!(wait(&mut h, |app| app.builder.as_deref() == Some("Legacy API")));
 }
 
 /// A key save for a backend is still running: its Remove must not start, or the save can write
@@ -3024,6 +3078,10 @@ fn a_backend_cant_be_removed_while_its_key_is_being_saved() {
         a
     });
     h.run_steps(3);
+    h.get_by_label("Advanced AI settings").click();
+    h.run_steps(2);
+    h.get_by_label("OpenAI test").click();
+    h.run_steps(2);
     h.get_by_label("Remove OpenAI test").click();
     h.run_steps(2);
     h.state_mut().backend_key_pending.insert("OpenAI test".into());

@@ -824,7 +824,10 @@ impl AgentAdapter for Codex {
     }
 
     fn sign_in_fix(&self) -> Option<String> {
-        Some("Run the selected Codex program with `login` in a terminal, choose Sign in with ChatGPT, then test it again in Settings → AI.".into())
+        Some(
+            "Run the selected Codex program with `login` in a terminal, choose Sign in with ChatGPT, then test it again in Settings → Models & accounts."
+                .into(),
+        )
     }
 
     /// `codex exec -` reads the message from stdin, so a long one can't pass Windows'

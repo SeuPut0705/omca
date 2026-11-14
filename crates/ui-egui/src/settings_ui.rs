@@ -20,7 +20,7 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
     // A modal (dimmed backdrop, Esc or a click outside closes) with a full-size close button;
     // egui's window close box is 14 px.
     let resp = egui::Modal::new(egui::Id::new("settings-window")).frame(widgets::dialog(&t)).show(ctx, |ui| {
-        ui.set_width(680.0);
+        ui.set_width(if app.state.settings_tab == SettingsTab::Ai { 820.0_f32.min((ctx.content_rect().width() - 32.0).max(320.0)) } else { 680.0 });
         ui.horizontal(|ui| {
             ui.label(theme::heading(tr("Settings"), theme::SECTION));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -44,18 +44,18 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
         ui.add_space(space::M);
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
-                ui.set_width(150.0);
+                ui.set_width(190.0);
                 for (tab, icon, title) in [
                     (SettingsTab::General, "settings", "General"),
                     (SettingsTab::Engines, "cpu", "Engines"),
-                    (SettingsTab::Ai, "bot", "AI"),
+                    (SettingsTab::Ai, "bot", "Models & accounts"),
                     (SettingsTab::Builds, "hammer", "Builds"),
                     (SettingsTab::Plugins, "puzzle", "Plugins"),
                     (SettingsTab::Safety, "shield", "Safety"),
                     (SettingsTab::Updates, "refresh-cw", "Updates"),
                 ] {
                     let on = app.state.settings_tab == tab;
-                    let (rect, r) = ui.allocate_exact_size(Vec2::new(150.0, 34.0), egui::Sense::click());
+                    let (rect, r) = ui.allocate_exact_size(Vec2::new(190.0, 34.0), egui::Sense::click());
                     r.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, on, tr(title)));
                     if on {
                         ui.painter().rect_filled(rect, t.radius, t.accent_soft);
@@ -78,9 +78,6 @@ pub fn show(app: &mut CraftApp, ctx: &egui::Context) {
                     );
                     if r.clicked() {
                         app.state.settings_tab = tab;
-                        if tab == SettingsTab::Ai && app.detected.is_none() {
-                            app.detect_backends();
-                        }
                     }
                 }
             });
@@ -350,6 +347,23 @@ fn model_options_loading(ui: &mut Ui, backend: &str) {
     });
 }
 
+#[cfg(test)]
+fn open_backend_details(app: &CraftApp, ui: &mut Ui) {
+    ui.ctx().all_styles_mut(|style| style.animation_time = 0.0);
+    let outer = ui.id().with(egui::IdSalt::new("child"));
+    let advanced = outer.with(egui::IdSalt::new("ai-advanced"));
+    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), advanced, true);
+    state.set_open(true);
+    state.store(ui.ctx());
+    let body = outer.with(egui::IdSalt::new("child")).with(egui::IdSalt::new(advanced)).with(egui::IdSalt::new("child"));
+    for backend in &app.backends {
+        let id = body.with(egui::IdSalt::new(("backend-details", &backend.name)));
+        let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, true);
+        state.set_open(true);
+        state.store(ui.ctx());
+    }
+}
+
 /// Draw AI settings and model pickers, preserving drafts during contention and invalidating confirmed context changes.
 /// Connection checks are delegated to the shared worker API.
 fn ai(app: &mut CraftApp, ui: &mut Ui) {
@@ -357,520 +371,504 @@ fn ai(app: &mut CraftApp, ui: &mut Ui) {
         app.agent_model_picker = None;
     }
     let t = Tokens::get(ui.ctx());
-    crate::engine_ui::assets_settings(app, ui);
-    ui.add_space(space::L);
-    widgets::caption(ui, "Your brains");
-    ui.add_space(space::XS);
-    if app.backends.is_empty() {
-        ui.label(RichText::new(tr("No AI is set up yet. The built-in engines still work; an AI adds plain-words answers.")).color(t.text_dim));
-    }
-    let (mut pick, mut builds, mut extracts, mut toggle, mut remove) = (None, None, None, None, None);
-    let (mut choose_program, mut usual_program, mut use_program) = (None, None, None);
-    let mut check_agent = None;
-    let mut save_folder = None;
-    // Taken out while the rows borrow the app, and put back after them.
-    let mut folder_drafts = std::mem::take(&mut app.folder_inputs);
-    let mut key_drafts = std::mem::take(&mut app.backend_key_inputs);
-    let (mut pick_model, mut chosen_model, mut close_picker) = (None, None, false);
-    let mut chosen_effort = None;
-    let (mut pick_agent_model, mut chosen_agent_model, mut remote_program) = (None, None, None);
-    let (mut tune_models, mut save_tuning) = (Vec::new(), None);
-    // A saved API key being replaced or forgotten (the keychain work happens off this frame).
-    let (mut save_key, mut forget_key) = (None, None);
-    // The AI whose Remove was pressed once: asked again before its key is deleted.
-    let confirm_id = egui::Id::new("remove-ai");
-    let confirming: Option<String> = ui.data(|d| d.get_temp(confirm_id));
-    for b in &app.backends {
-        widgets::panel(&t).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            // The name and model on their own row (shortened, full text on hover), the buttons on a
-            // row below that wraps: nothing overlaps however long the name or narrow the window.
-            ui.horizontal(|ui| {
-                icons::show(ui, "bot", size::ICON_LG, if b.enabled { t.accent } else { t.text_faint });
-                ui.vertical(|ui| {
-                    ui.add(egui::Label::new(RichText::new(&b.name).font(theme::semibold(theme::SMALL))).truncate());
-                    let model_in_use = craft_anything_ai::model_in_use(b, app.backend_options.get(&b.name));
-                    let live_catalog = b.kind == BackendKind::AgentCli && craft_anything_ai::cli_agents::adapter_for(&b.model).has_model_catalog();
-                    // An API's model has its own line below; an agent app is named by its `model`.
-                    let what = if model_in_use.is_some() && b.kind != BackendKind::AgentCli { String::new() } else { format!(" · {}", b.model) };
-                    let ssh = b.ssh_host.as_ref().map(|h| format!(" · ssh {h}")).unwrap_or_default();
-                    ui.add(egui::Label::new(RichText::new(format!("{:?}{what}{ssh}", b.kind)).color(t.text_faint).size(theme::CAPTION)).truncate());
-                    // An agent app on this computer: which program runs it, for one installed
-                    // where it isn't looked for (#53).
-                    if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_none_or(|h| h.trim().is_empty()) {
-                        let program = app.backend_options.get(&b.name).and_then(|o| o.command.as_ref());
-                        ui.horizontal_wrapped(|ui| {
-                            // The links at the caption's size, so the line reads as one.
-                            ui.style_mut().override_font_id = Some(egui::FontId::proportional(theme::CAPTION));
-                            let text = program.map_or_else(|| tr("Program: found automatically"), |p| trf("Program: {path}", &[("path", p)]));
-                            ui.add(egui::Label::new(RichText::new(text).color(t.text_faint).size(theme::CAPTION)).truncate());
-                            if widgets::link(ui, "Choose…").clicked() {
-                                choose_program = Some(b.name.clone());
-                            }
-                            if program.is_some() && widgets::link(ui, "Find it automatically").clicked() {
-                                usual_program = Some(b.name.clone());
-                            }
-                        });
-                        // The saved program is gone (an update moved it): say what runs instead,
-                        // and offer to save that one when it's a file of its own (#721).
-                        if let Some(instead) = app.program_replaced.get(&b.name) {
-                            ui.horizontal_wrapped(|ui| {
-                                ui.style_mut().override_font_id = Some(egui::FontId::proportional(theme::CAPTION));
-                                let text = trf("It isn't there any more, so {program} runs in its place.", &[("program", instead)]);
-                                ui.add(egui::Label::new(RichText::new(text).color(t.warning).size(theme::CAPTION)).wrap());
-                                let path = std::path::Path::new(instead);
-                                if path.parent().is_some_and(|p| !p.as_os_str().is_empty()) && widgets::link(ui, "Use it").clicked() {
-                                    use_program = Some((b.name.clone(), instead.clone()));
-                                }
-                            });
-                        }
-                    }
-                    // The folder it keeps its sign-in in (Claude Code's CLAUDE_CONFIG_DIR), typed
-                    // so `~/` and hidden folders work, here or over SSH: another folder is another
-                    // account. Saved on Enter or when the field is left; empty is its usual one.
-                    if craft_anything_ai::folder_var(b).is_some() {
-                        let saved = app.backend_options.get(&b.name).and_then(|o| o.config_dir.clone()).unwrap_or_default();
-                        let id = egui::Id::new(("agent-folder", &b.name));
-                        // What was typed stays until it's saved (or refused, so it can be fixed).
-                        if folder_drafts.get(&b.name).is_some_and(|d| d.trim() == saved) && !ui.memory(|m| m.has_focus(id)) {
-                            folder_drafts.remove(&b.name);
-                        }
-                        let mut text = folder_drafts.get(&b.name).cloned().unwrap_or_else(|| saved.clone());
-                        ui.add_space(space::XS);
-                        let label = ui.label(RichText::new(tr("Claude Code folder (CLAUDE_CONFIG_DIR)")).size(theme::CAPTION).color(t.text_dim));
-                        ui.label(
-                            RichText::new(tr("Its own sign-in, settings and conversations: another folder is another account. Empty: its usual folder."))
-                                .color(t.text_faint)
-                                .size(theme::CAPTION),
-                        );
-                        let r = ui
-                            .add(
-                                egui::TextEdit::singleline(&mut text)
-                                    .id(id)
-                                    .hint_text("~/.claude")
-                                    .desired_width(260.0)
-                                    .frame(widgets::text_field_frame_compact(&t)),
-                            )
-                            .labelled_by(label.id);
-                        if r.changed() {
-                            folder_drafts.insert(b.name.clone(), text.clone());
-                        }
-                        if r.lost_focus() && text.trim() != saved {
-                            save_folder = Some((b.name.clone(), text.trim().to_string()));
-                        }
-                        ui.add_space(space::XS);
-                    }
-                    // How hard it thinks: every Claude level for Claude, OpenAI's for the OpenAI-style APIs.
-                    let effort = craft_anything_ai::effort_in_use(b, app.backend_options.get(&b.name));
-                    let effort_levels = craft_anything_ai::effort_levels(b);
-                    if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_some_and(|h| !h.trim().is_empty()) {
-                        let id = egui::Id::new(("remote-agent-program", &b.name));
-                        let mut program = ui
-                            .data_mut(|d| d.get_temp::<String>(id))
-                            .unwrap_or_else(|| app.backend_options.get(&b.name).and_then(|o| o.command.clone()).unwrap_or_default());
-                        ui.horizontal_wrapped(|ui| {
-                            ui.label(tr("Remote program"));
-                            ui.add(egui::TextEdit::singleline(&mut program).hint_text(&b.model).desired_width(200.0));
-                            if widgets::link(ui, "Apply").clicked() {
-                                remote_program = Some((b.name.clone(), program.clone()));
-                            }
-                        });
-                        ui.data_mut(|d| d.insert_temp(id, program));
-                    }
-                    // Which model it uses, and the ones it can be set to (#123).
-                    if live_catalog {
-                        let options = app.backend_options.get(&b.name);
-                        let current = options
-                            .and_then(|o| o.cli_model.as_deref())
-                            .map(str::to_string)
-                            .unwrap_or_else(|| if b.model == "opencode" { tr("OpenCode default") } else { tr("Model default") });
-                        ui.label(trf("Model: {model}", &[("model", &current)]));
-                        let thinking = options.and_then(|o| o.cli_thinking).map(|d| d.title().to_string()).unwrap_or_else(|| tr("Model default"));
-                        ui.label(format!("{}: {thinking}", tr("Thinking depth")));
-                        if let Some(picker) = app.agent_model_picker.as_mut().filter(|p| p.context.backend.config.name == b.name) {
-                            let previous = picker.model.clone();
-                            let apply = crate::builders::agent_model_picker(ui, picker);
-                            if picker.model != previous && craft_anything_ai::cli_agents::adapter_for(&b.model).model_catalog_depends_on_selection() {
-                                pick_agent_model = Some(b.name.clone());
-                            } else if apply {
-                                chosen_agent_model = Some((b.name.clone(), picker.model.clone(), picker.thinking));
-                            }
-                            ui.horizontal(|ui| {
-                                if widgets::link(ui, "Reload models").clicked() {
-                                    pick_agent_model = Some(b.name.clone());
-                                }
-                                if widgets::link(ui, "Cancel").clicked() {
-                                    close_picker = true;
-                                }
-                            });
-                        } else if widgets::link(ui, "Change…").clicked() {
-                            pick_agent_model = Some(b.name.clone());
-                        }
-                    } else if let Some(current) = model_in_use {
-                        ui.horizontal_wrapped(|ui| {
-                            ui.style_mut().override_font_id = Some(egui::FontId::proportional(theme::CAPTION));
-                            ui.add(
-                                egui::Label::new(RichText::new(trf("Model: {model}", &[("model", &current)])).color(t.text_faint).size(theme::CAPTION))
-                                    .truncate(),
-                            );
-                            match app.model_picker.as_ref().filter(|(n, _)| *n == b.name) {
-                                None => {
-                                    if widgets::link(ui, "Change…").clicked() {
-                                        pick_model = Some(b.name.clone());
-                                    }
-                                }
-                                Some((_, None)) => {
-                                    ui.add(crate::widgets::Spinner::new().size(theme::CAPTION).color(t.accent));
-                                    ui.label(RichText::new(tr("Asking for its models…")).color(t.text_faint).size(theme::CAPTION));
-                                }
-                                Some((_, Some(models))) => {
-                                    egui::ComboBox::from_id_salt(("model", &b.name)).icon(widgets::combo_icon).selected_text(&current).show_ui(ui, |ui| {
-                                        for m in models {
-                                            if ui.selectable_label(*m == current, m).clicked() && *m != current {
-                                                chosen_model = Some((b.name.clone(), m.clone()));
-                                            }
-                                        }
-                                    });
-                                    // A model the list doesn't offer: a newer one, a variant such as
-                                    // `opusplan`, or one another harness serves (#470).
-                                    let id = egui::Id::new(("other-model", &b.name));
-                                    let mut other = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_default();
-                                    let label = ui.label(RichText::new(tr("Another model")).color(t.text_faint).size(theme::CAPTION));
-                                    let r = ui.add(egui::TextEdit::singleline(&mut other).desired_width(140.0)).labelled_by(label.id);
-                                    let entered = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                                    if (widgets::link(ui, "Use").clicked() || entered) && !other.trim().is_empty() && other.trim() != current {
-                                        chosen_model = Some((b.name.clone(), other.trim().to_string()));
-                                        other.clear();
-                                    }
-                                    ui.data_mut(|d| d.insert_temp(id, other));
-                                    if widgets::link(ui, "Cancel").clicked() {
-                                        close_picker = true;
-                                    }
-                                }
-                            }
-                            if !effort_levels.is_empty() {
-                                ui.label(RichText::new(tr("Effort:")).color(t.text_faint).size(theme::CAPTION));
-                                let shown = effort.map_or("default", craft_anything_ai::Effort::as_str);
-                                egui::ComboBox::from_id_salt(("effort", &b.name)).icon(widgets::combo_icon).selected_text(shown).show_ui(ui, |ui| {
-                                    // Claude always has a level; an OpenAI-style API is sent none until one is chosen.
-                                    let unset = (effort_levels != craft_anything_ai::Effort::ALL).then_some(None);
-                                    for e in unset.into_iter().chain(effort_levels.iter().map(|&e| Some(e))) {
-                                        if ui.selectable_label(e == effort, e.map_or("default", craft_anything_ai::Effort::as_str)).clicked() && e != effort {
-                                            chosen_effort = Some((b.name.clone(), e));
-                                        }
-                                    }
-                                });
-                            }
-                        });
-                    }
-                    if craft_anything_ai::model_options::supported(b) {
-                        if let Some(draft) = app.model_tuning.get_mut(&b.name) {
-                            if let Some(choices) = &draft.choices {
-                                let mut changed = false;
-                                ui.add_enabled_ui(!draft.saving, |ui| {
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.label(tr("Context window"));
-                                        let label = draft
-                                            .context
-                                            .and_then(|value| choices.context.iter().find(|choice| choice.value == value))
-                                            .map(|choice| tr(&choice.label))
-                                            .unwrap_or_else(|| tr("Default"));
-                                        egui::ComboBox::from_id_salt(("model-context", &b.name)).icon(widgets::combo_icon).selected_text(label).show_ui(
-                                            ui,
-                                            |ui| {
-                                                changed |= ui.selectable_value(&mut draft.context, None, tr("Default")).changed();
-                                                for choice in &choices.context {
-                                                    changed |= ui.selectable_value(&mut draft.context, Some(choice.value), tr(&choice.label)).changed();
-                                                }
-                                            },
-                                        );
-                                    });
-                                });
-                                if changed {
-                                    save_tuning = Some(draft.params());
-                                }
-                            } else {
-                                model_options_loading(ui, &b.name);
-                                if let Some(error) = &draft.error {
-                                    ui.add(egui::Label::new(RichText::new(error).color(t.danger)).wrap());
-                                    if icons::button(ui, "refresh-cw", size::CONTROL_SM, false, "Load model options").clicked() {
-                                        tune_models.push(b.name.clone());
-                                    }
-                                } else {
-                                    ui.spinner();
-                                }
-                            }
-                        } else {
-                            model_options_loading(ui, &b.name);
-                            tune_models.push(b.name.clone());
-                        }
-                    }
-                });
-            });
-            // A key saved in the app silently wins over the environment's, so it can be replaced
-            // here without removing the AI (#1358). Every API backend can need one; agent apps
-            // sign in their own way. The field stays even when a key is saved, so a replacement
-            // doesn't need Forget first.
-            if b.kind != BackendKind::AgentCli {
-                // A save or forget for this backend is still running: no later action may be
-                // submitted until it finishes, so workers can't overtake one another. Other
-                // backends keep their controls.
-                ui.add_enabled_ui(!app.backend_key_pending.contains(&b.name), |ui| {
-                    if app.backend_keys.as_ref().and_then(|keys| keys.get(&b.name).copied()) == Some(true) {
-                        ui.horizontal_wrapped(|ui| {
-                            widgets::pill(ui, "Key saved", t.success, t.raised);
-                            if widgets::secondary(ui, None, "Forget the key").clicked() {
-                                forget_key = Some(b.name.clone());
-                            }
-                        });
-                    }
-                    let key = key_drafts.entry(b.name.clone()).or_default();
-                    ui.horizontal_wrapped(|ui| {
-                        let r = ui.add(
-                            egui::TextEdit::singleline(key)
-                                .password(true)
-                                .hint_text(tr("API key (stored in your system keychain)"))
-                                .desired_width(260.0)
-                                .frame(widgets::text_field_frame_compact(&t)),
-                        );
-                        widgets::named(r, &trf("{name} key", &[("name", &b.name)]));
-                        let k = key.trim().to_string();
-                        if widgets::primary_icon(ui, None, "Save", !k.is_empty()).clicked() && !k.is_empty() {
-                            // Keep the draft until the save succeeds; a failure must not lose it.
-                            save_key = Some((b.name.clone(), k));
-                        }
-                    });
-                });
-                ui.add_space(space::XS);
-            }
-            ui.add_space(space::S);
-            ui.horizontal_wrapped(|ui| {
-                ui.add_space(space::XL);
-                if app.state.backend.as_ref() == Some(&b.name) {
-                    widgets::pill(ui, "In use", t.on_accent, t.accent);
-                } else if widgets::action(ui, "Use").clicked() {
-                    pick = Some(b.name.clone());
-                }
-                // Who builds: the chosen one says so (click to go back to automatic).
-                if app.builder.as_ref() == Some(&b.name) {
-                    if widgets::secondary(ui, Some("hammer"), "Builds").on_hover_text(tr("Builds use this one. Click to choose automatically again.")).clicked()
-                    {
-                        builds = Some(None);
-                    }
-                } else if b.enabled && widgets::action(ui, "Build with this").clicked() {
-                    builds = Some(Some(b.name.clone()));
-                }
-                // Who takes a game's files out in Deep mode (an API backend, e.g. Kimi K3).
-                if b.kind != BackendKind::AgentCli {
-                    if app.extractor.as_ref() == Some(&b.name) {
-                        if widgets::secondary(ui, Some("package"), "Extracts")
-                            .on_hover_text(tr("In Deep mode this one takes a game's own files out after the study. Click to stop."))
-                            .clicked()
-                        {
-                            extracts = Some(None);
-                        }
-                    } else if b.enabled && widgets::action(ui, "Extract with this").clicked() {
-                        extracts = Some(Some(b.name.clone()));
-                    }
-                }
-                if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_none_or(|host| host.trim().is_empty()) {
-                    let pending = app.agent_connections.get(&b.name) == Some(&None);
-                    ui.add_enabled_ui(!pending, |ui| {
-                        if widgets::secondary(ui, None, if pending { "Checking" } else { "Check" }).clicked() {
-                            check_agent = Some(b.name.clone());
-                        }
-                    });
-                }
-                // Off: kept with its key, but nothing uses it.
-                let (label, tip) = if b.enabled {
-                    ("Turn off", "Nothing uses it until it's on again; it keeps its key.")
-                } else {
-                    ("Turn on", "Builds and answers may use it again.")
-                };
-                if widgets::secondary(ui, None, label).on_hover_text(tr(tip)).clicked() {
-                    toggle = Some((b.name.clone(), !b.enabled));
-                }
-                if confirming.as_ref() == Some(&b.name) {
-                    // A key save or forget for this backend is still running: the save could
-                    // write the key back after the backend and its key are gone.
-                    ui.add_enabled_ui(!app.backend_key_pending.contains(&b.name), |ui| {
-                        if widgets::secondary(ui, Some("trash-2"), "Remove it and its key").clicked() {
-                            remove = Some(b.name.clone());
-                        }
-                    });
-                    if widgets::link(ui, "Keep it").clicked() {
-                        ui.data_mut(|d| d.remove::<String>(confirm_id));
-                    }
-                } else if icons::button(ui, "trash-2", size::CONTROL, false, &trf("Remove {name}", &[("name", &b.name)])).clicked() {
-                    ui.data_mut(|d| d.insert_temp(confirm_id, b.name.clone()));
-                }
-            });
-            if !b.enabled {
-                ui.label(RichText::new(tr("Off")).color(t.text_faint).size(theme::CAPTION));
-            }
-            if let Some(Some(result)) = app.agent_connections.get(&b.name) {
-                let (message, color) = match result {
-                    Ok(message) => (message, t.text_dim),
-                    Err(message) => (message, t.danger),
-                };
-                ui.label(RichText::new(message).color(color).size(theme::CAPTION));
-            }
-        });
-        ui.add_space(space::S);
-    }
-    key_drafts.retain(|name, _| app.backends.iter().any(|backend| &backend.name == name));
-    app.backend_key_inputs = key_drafts;
-    app.folder_inputs = folder_drafts;
-    if let Some((name, key)) = save_key {
-        app.save_backend_key(name, key);
-    }
-    if let Some(name) = forget_key {
-        app.remove_backend_key(name);
-    }
-    if let Some((name, on)) = toggle {
-        app.set_backend_enabled(&name, on);
-    }
-    if let Some(name) = check_agent {
-        app.check_agent_connection(name);
-    }
-    if let Some(name) = choose_program {
-        app.picking_program_for = Some(name);
-        app.pick(Pick::AgentProgram);
-    }
-    if let Some(name) = usual_program {
-        app.set_agent_program(&name, None);
-    }
-    if let Some((name, program)) = use_program {
-        app.set_agent_program(&name, Some(program));
-    }
-    if let Some((name, folder)) = save_folder {
-        app.set_agent_folder(&name, Some(folder));
-    }
-    if let Some(name) = pick_model {
-        app.pick_model(&name);
-    }
-    if let Some((name, program)) = remote_program {
-        app.set_agent_program(&name, Some(program));
-    }
-    if let Some(name) = pick_agent_model {
-        app.reload_agent_model(&name);
-    }
-    if let Some((name, model, thinking)) = chosen_agent_model {
-        app.set_agent_model(&name, model, thinking);
-    }
-    if let Some((name, model)) = chosen_model {
-        app.set_model(&name, &model);
-    }
-    if let Some((name, effort)) = chosen_effort {
-        app.set_effort(&name, effort);
-    }
-    if close_picker {
-        app.model_picker = None;
-        app.agent_model_picker = None;
-    }
-    for name in tune_models {
-        app.pick_model_options(&name);
-    }
-    if let Some(params) = save_tuning {
-        app.set_model_options(params);
-    }
-    if let Some(name) = remove {
-        ui.data_mut(|d| d.remove::<String>(confirm_id));
-        app.remove_backend(&name);
-    }
-    if let Some(p) = pick {
-        app.choose_backend(Some(p));
-    }
-    if let Some(b) = builds {
-        app.set_role(craft_anything_ai::Role::Builder, b);
-    }
-    if let Some(e) = extracts {
-        app.set_role(craft_anything_ai::Role::Extractor, e);
-    }
-    ui.add_space(space::SM);
-    let detected = app.detected.clone().unwrap_or_default();
-    let mut tab = {
-        let (providers, harnesses) = crate::detect_tabs::counts(&detected);
-        crate::detect_tabs::resolve(app.state.detect_tab, providers, harnesses)
-    };
-    ui.horizontal(|ui| {
-        widgets::caption(ui, "Found on this computer");
-        ui.add_space(space::M);
-        tab = crate::detect_tabs::buttons(ui, &mut app.state.detect_tab, &detected);
-        if app.detecting {
-            ui.add(crate::widgets::Spinner::new().color(t.accent));
-        } else if widgets::secondary(ui, Some("radar"), "Detect").clicked() {
+    ui.label(theme::heading(tr("Models & accounts"), theme::SECTION));
+    ui.add_space(space::M);
+    crate::provider_connect::show(app, ui);
+    ui.add_space(space::M);
+    let advanced = egui::CollapsingHeader::new(tr("Advanced")).id_salt("ai-advanced").default_open(cfg!(test)).show(ui, |ui| {
+        if widgets::secondary(ui, Some("radar"), "Find installed agents").clicked() {
             app.detect_backends();
         }
-    });
-    ui.add_space(space::XS);
-    if detected.is_empty() && !app.detecting {
-        ui.label(
-            RichText::new(tr("Nothing found yet. We look for API keys, local model servers (Ollama, LM Studio) and agent apps you already have. One on another port or computer can be added by its address below."))
-                .color(t.text_faint),
-        );
-    }
-    let shown = detected.iter().filter(|d| crate::detect_tabs::tab_of(d) == tab).count();
-    if shown == 0 && !detected.is_empty() && !app.detecting {
-        ui.label(RichText::new(tr("Nothing of this kind was found.")).color(t.text_faint));
-    }
-    for d in detected.into_iter().filter(|d| crate::detect_tabs::tab_of(d) == tab) {
-        let configured = app.backends.iter().any(|b| b.name == d.suggestion.name);
-        widgets::panel(&t).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            // The buttons first, in the top right corner, then the name and reason wrapped in the
-            // width they leave: a label in a horizontal row doesn't wrap, so a long reason ran on
-            // under the Add button.
-            // Child uis (not scopes, which would move the cursor down after each), then one advance.
-            let top = ui.available_rect_before_wrap();
-            let mut right_ui = ui.new_child(egui::UiBuilder::new().max_rect(top).layout(egui::Layout::right_to_left(egui::Align::Min)));
-            if configured {
-                widgets::pill(&mut right_ui, "Added", t.success, t.raised);
-                // Claude Code once more, to give it another account's folder.
-                if craft_anything_ai::folder_var(&d.suggestion).is_some()
-                    && widgets::link(&mut right_ui, "Add another").on_hover_text(tr("Add it again, to choose another account's folder for it.")).clicked()
-                {
-                    let taken = |n: &String| app.backends.iter().any(|b| &b.name == n);
-                    if let Some(name) = (2..100).map(|i| format!("{} {i}", d.suggestion.name)).find(|n| !taken(n)) {
-                        app.add_backend(craft_anything_ai::BackendConfig { name, ..d.suggestion.clone() }, None);
-                    }
+        if app.detecting {
+            ui.add(widgets::Spinner::new());
+        }
+        let mut add_detected = None;
+        ui.horizontal_wrapped(|ui| {
+            for (name, model) in [("Claude Code", "claude-code"), ("Codex", "codex"), ("Gemini CLI", "gemini-cli")] {
+                if !app.backends.iter().any(|backend| backend.name == name) && widgets::secondary(ui, None, name).clicked() {
+                    add_detected = Some(craft_anything_ai::BackendConfig {
+                        name: name.into(),
+                        kind: BackendKind::AgentCli,
+                        model: model.into(),
+                        base_url: None,
+                        ssh_host: None,
+                        enabled: true,
+                    });
                 }
-            } else if !d.needs_key && widgets::primary(&mut right_ui, "Add").clicked() {
-                app.add_backend(d.suggestion.clone(), None);
             }
-            let right = right_ui.min_rect();
-            // Nothing on the right (a key to paste below instead): the text takes the whole width.
-            let text_right = if right.width() > 0.0 { right.left() - ui.spacing().item_spacing.x } else { top.right() };
-            let mut left_ui =
-                ui.new_child(egui::UiBuilder::new().max_rect(top.with_max_x(text_right.max(top.left()))).layout(egui::Layout::top_down(egui::Align::Min)));
-            left_ui.add(egui::Label::new(RichText::new(&d.suggestion.name).font(theme::medium(theme::SMALL))).wrap());
-            left_ui.add(egui::Label::new(RichText::new(&d.reason).color(t.text_faint).size(theme::CAPTION)).wrap());
-            ui.advance_cursor_after_rect(left_ui.min_rect().union(right));
-            // A subscription key is worth pasting even when the environment already has one, so a
-            // different key can be used without restarting the app.
-            let pastable = d.needs_key || d.suggestion.base_url.as_deref().is_some_and(craft_anything_ai::openai::is_opencode_go);
-            if pastable && !configured {
-                ui.horizontal(|ui| {
-                    let key = app.key_inputs.entry(d.suggestion.name.clone()).or_default();
-                    ui.add(
-                        egui::TextEdit::singleline(key)
-                            .password(true)
-                            .hint_text(tr("API key (stored in your system keychain)"))
-                            .desired_width(260.0)
-                            .frame(widgets::text_field_frame_compact(&Tokens::get(ui.ctx()))),
-                    );
-                    let k = key.trim().to_string();
-                    if widgets::primary_icon(ui, None, "Add", !k.is_empty()).clicked() && !k.is_empty() {
-                        // The key goes to the keychain; the app keeps no copy of it.
-                        app.key_inputs.remove(&d.suggestion.name);
-                        app.add_backend(d.suggestion.clone(), Some(k));
+        });
+        for found in app.detected.iter().flatten() {
+            if !app.backends.iter().any(|backend| backend.name == found.suggestion.name) {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(&found.reason);
+                    if widgets::secondary(ui, None, &found.suggestion.name).clicked() {
+                        add_detected = Some(found.suggestion.clone());
                     }
                 });
             }
+        }
+        if let Some(config) = add_detected {
+            app.add_backend(config, None);
+        }
+        widgets::caption(ui, "Connected providers");
+        ui.add_space(space::XS);
+        if app.backends.is_empty() {
+            ui.label(RichText::new(tr("No AI is set up yet. The built-in engines still work; an AI adds plain-words answers.")).color(t.text_dim));
+        }
+        let (mut pick, mut builds, mut extracts, mut toggle, mut remove) = (None, None, None, None, None);
+        let (mut choose_program, mut usual_program, mut use_program) = (None, None, None);
+        let mut check_agent = None;
+        let mut save_folder = None;
+        let mut duplicate_agent = None;
+        // Taken out while the rows borrow the app, and put back after them.
+        let mut folder_drafts = std::mem::take(&mut app.folder_inputs);
+        let mut key_drafts = std::mem::take(&mut app.backend_key_inputs);
+        let (mut pick_model, mut chosen_model, mut close_picker) = (None, None, false);
+        let mut chosen_effort = None;
+        let (mut pick_agent_model, mut chosen_agent_model, mut remote_program) = (None, None, None);
+        let (mut tune_models, mut save_tuning) = (Vec::new(), None);
+        // A saved API key being replaced or forgotten (the keychain work happens off this frame).
+        let (mut save_key, mut forget_key) = (None, None);
+        // The AI whose Remove was pressed once: asked again before its key is deleted.
+        let confirm_id = egui::Id::new("remove-ai");
+        let confirming: Option<String> = ui.data(|d| d.get_temp(confirm_id));
+        for b in &app.backends {
+            egui::CollapsingHeader::new(&b.name).id_salt(("backend-details", &b.name)).default_open(cfg!(test)).show(ui, |ui| {
+                widgets::panel(&t).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    // The name and model on their own row (shortened, full text on hover), the buttons on a
+                    // row below that wraps: nothing overlaps however long the name or narrow the window.
+                    ui.horizontal(|ui| {
+                        icons::show(ui, "bot", size::ICON_LG, if b.enabled { t.accent } else { t.text_faint });
+                        ui.vertical(|ui| {
+                            ui.add(egui::Label::new(RichText::new(&b.name).font(theme::semibold(theme::SMALL))).truncate());
+                            let model_in_use = craft_anything_ai::model_in_use(b, app.backend_options.get(&b.name));
+                            let live_catalog = b.kind == BackendKind::AgentCli && craft_anything_ai::cli_agents::adapter_for(&b.model).has_model_catalog();
+                            // An API's model has its own line below; an agent app is named by its `model`.
+                            let what = if model_in_use.is_some() && b.kind != BackendKind::AgentCli { String::new() } else { format!(" · {}", b.model) };
+                            let ssh = b.ssh_host.as_ref().map(|h| format!(" · ssh {h}")).unwrap_or_default();
+                            ui.add(egui::Label::new(RichText::new(format!("{:?}{what}{ssh}", b.kind)).color(t.text_faint).size(theme::CAPTION)).truncate());
+                            // An agent app on this computer: which program runs it, for one installed
+                            // where it isn't looked for (#53).
+                            if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_none_or(|h| h.trim().is_empty()) {
+                                let program = app.backend_options.get(&b.name).and_then(|o| o.command.as_ref());
+                                ui.horizontal_wrapped(|ui| {
+                                    // The links at the caption's size, so the line reads as one.
+                                    ui.style_mut().override_font_id = Some(egui::FontId::proportional(theme::CAPTION));
+                                    let text = program.map_or_else(|| tr("Program: found automatically"), |p| trf("Program: {path}", &[("path", p)]));
+                                    ui.add(egui::Label::new(RichText::new(text).color(t.text_faint).size(theme::CAPTION)).truncate());
+                                    if widgets::link(ui, "Choose…").clicked() {
+                                        choose_program = Some(b.name.clone());
+                                    }
+                                    if program.is_some() && widgets::link(ui, "Find it automatically").clicked() {
+                                        usual_program = Some(b.name.clone());
+                                    }
+                                });
+                                // The saved program is gone (an update moved it): say what runs instead,
+                                // and offer to save that one when it's a file of its own (#721).
+                                if let Some(instead) = app.program_replaced.get(&b.name) {
+                                    ui.horizontal_wrapped(|ui| {
+                                        ui.style_mut().override_font_id = Some(egui::FontId::proportional(theme::CAPTION));
+                                        let text = trf("It isn't there any more, so {program} runs in its place.", &[("program", instead)]);
+                                        ui.add(egui::Label::new(RichText::new(text).color(t.warning).size(theme::CAPTION)).wrap());
+                                        let path = std::path::Path::new(instead);
+                                        if path.parent().is_some_and(|p| !p.as_os_str().is_empty()) && widgets::link(ui, "Use it").clicked() {
+                                            use_program = Some((b.name.clone(), instead.clone()));
+                                        }
+                                    });
+                                }
+                            }
+                            // The folder it keeps its sign-in in (Claude Code's CLAUDE_CONFIG_DIR), typed
+                            // so `~/` and hidden folders work, here or over SSH: another folder is another
+                            // account. Saved on Enter or when the field is left; empty is its usual one.
+                            if craft_anything_ai::folder_var(b).is_some() {
+                                let saved = app.backend_options.get(&b.name).and_then(|o| o.config_dir.clone()).unwrap_or_default();
+                                let id = egui::Id::new(("agent-folder", &b.name));
+                                // What was typed stays until it's saved (or refused, so it can be fixed).
+                                if folder_drafts.get(&b.name).is_some_and(|d| d.trim() == saved) && !ui.memory(|m| m.has_focus(id)) {
+                                    folder_drafts.remove(&b.name);
+                                }
+                                let mut text = folder_drafts.get(&b.name).cloned().unwrap_or_else(|| saved.clone());
+                                ui.add_space(space::XS);
+                                let label = ui.label(RichText::new(tr("Claude Code folder (CLAUDE_CONFIG_DIR)")).size(theme::CAPTION).color(t.text_dim));
+                                ui.label(
+                                    RichText::new(tr(
+                                        "Its own sign-in, settings and conversations: another folder is another account. Empty: its usual folder.",
+                                    ))
+                                    .color(t.text_faint)
+                                    .size(theme::CAPTION),
+                                );
+                                let r = ui
+                                    .add(
+                                        egui::TextEdit::singleline(&mut text)
+                                            .id(id)
+                                            .hint_text("~/.claude")
+                                            .desired_width(260.0)
+                                            .frame(widgets::text_field_frame_compact(&t)),
+                                    )
+                                    .labelled_by(label.id);
+                                if r.changed() {
+                                    folder_drafts.insert(b.name.clone(), text.clone());
+                                }
+                                if r.lost_focus() && text.trim() != saved {
+                                    save_folder = Some((b.name.clone(), text.trim().to_string()));
+                                }
+                                ui.add_space(space::XS);
+                            }
+                            // How hard it thinks: every Claude level for Claude, OpenAI's for the OpenAI-style APIs.
+                            let effort = craft_anything_ai::effort_in_use(b, app.backend_options.get(&b.name));
+                            let effort_levels = craft_anything_ai::effort_levels(b);
+                            if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_some_and(|h| !h.trim().is_empty()) {
+                                let id = egui::Id::new(("remote-agent-program", &b.name));
+                                let mut program = ui
+                                    .data_mut(|d| d.get_temp::<String>(id))
+                                    .unwrap_or_else(|| app.backend_options.get(&b.name).and_then(|o| o.command.clone()).unwrap_or_default());
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.label(tr("Remote program"));
+                                    ui.add(egui::TextEdit::singleline(&mut program).hint_text(&b.model).desired_width(200.0));
+                                    if widgets::link(ui, "Apply").clicked() {
+                                        remote_program = Some((b.name.clone(), program.clone()));
+                                    }
+                                });
+                                ui.data_mut(|d| d.insert_temp(id, program));
+                            }
+                            // Which model it uses, and the ones it can be set to (#123).
+                            if live_catalog {
+                                let options = app.backend_options.get(&b.name);
+                                let current = options
+                                    .and_then(|o| o.cli_model.as_deref())
+                                    .map(str::to_string)
+                                    .unwrap_or_else(|| if b.model == "opencode" { tr("OpenCode default") } else { tr("Model default") });
+                                ui.label(trf("Model: {model}", &[("model", &current)]));
+                                let thinking = options.and_then(|o| o.cli_thinking).map(|d| d.title().to_string()).unwrap_or_else(|| tr("Model default"));
+                                ui.label(format!("{}: {thinking}", tr("Thinking depth")));
+                                if let Some(picker) = app.agent_model_picker.as_mut().filter(|p| p.context.backend.config.name == b.name) {
+                                    let previous = picker.model.clone();
+                                    let apply = crate::builders::agent_model_picker(ui, picker);
+                                    if picker.model != previous && craft_anything_ai::cli_agents::adapter_for(&b.model).model_catalog_depends_on_selection() {
+                                        pick_agent_model = Some(b.name.clone());
+                                    } else if apply {
+                                        chosen_agent_model = Some((b.name.clone(), picker.model.clone(), picker.thinking));
+                                    }
+                                    ui.horizontal(|ui| {
+                                        if widgets::link(ui, "Reload models").clicked() {
+                                            pick_agent_model = Some(b.name.clone());
+                                        }
+                                        if widgets::link(ui, "Cancel").clicked() {
+                                            close_picker = true;
+                                        }
+                                    });
+                                } else if widgets::link(ui, "Change…").clicked() {
+                                    pick_agent_model = Some(b.name.clone());
+                                }
+                            } else if let Some(current) = model_in_use {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.style_mut().override_font_id = Some(egui::FontId::proportional(theme::CAPTION));
+                                    ui.add(
+                                        egui::Label::new(RichText::new(trf("Model: {model}", &[("model", &current)])).color(t.text_faint).size(theme::CAPTION))
+                                            .truncate(),
+                                    );
+                                    match app.model_picker.as_ref().filter(|(n, _)| *n == b.name) {
+                                        None => {
+                                            if widgets::link(ui, "Change…").clicked() {
+                                                pick_model = Some(b.name.clone());
+                                            }
+                                        }
+                                        Some((_, None)) => {
+                                            ui.add(crate::widgets::Spinner::new().size(theme::CAPTION).color(t.accent));
+                                            ui.label(RichText::new(tr("Asking for its models…")).color(t.text_faint).size(theme::CAPTION));
+                                        }
+                                        Some((_, Some(models))) => {
+                                            egui::ComboBox::from_id_salt(("model", &b.name)).icon(widgets::combo_icon).selected_text(&current).show_ui(
+                                                ui,
+                                                |ui| {
+                                                    for m in models {
+                                                        if ui.selectable_label(*m == current, m).clicked() && *m != current {
+                                                            chosen_model = Some((b.name.clone(), m.clone()));
+                                                        }
+                                                    }
+                                                },
+                                            );
+                                            // A model the list doesn't offer: a newer one, a variant such as
+                                            // `opusplan`, or one another harness serves (#470).
+                                            let id = egui::Id::new(("other-model", &b.name));
+                                            let mut other = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_default();
+                                            let label = ui.label(RichText::new(tr("Another model")).color(t.text_faint).size(theme::CAPTION));
+                                            let r = ui.add(egui::TextEdit::singleline(&mut other).desired_width(140.0)).labelled_by(label.id);
+                                            let entered = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                                            if (widgets::link(ui, "Use").clicked() || entered) && !other.trim().is_empty() && other.trim() != current {
+                                                chosen_model = Some((b.name.clone(), other.trim().to_string()));
+                                                other.clear();
+                                            }
+                                            ui.data_mut(|d| d.insert_temp(id, other));
+                                            if widgets::link(ui, "Cancel").clicked() {
+                                                close_picker = true;
+                                            }
+                                        }
+                                    }
+                                    if !effort_levels.is_empty() {
+                                        ui.label(RichText::new(tr("Effort:")).color(t.text_faint).size(theme::CAPTION));
+                                        let shown = effort.map_or("default", craft_anything_ai::Effort::as_str);
+                                        egui::ComboBox::from_id_salt(("effort", &b.name)).icon(widgets::combo_icon).selected_text(shown).show_ui(ui, |ui| {
+                                            // Claude always has a level; an OpenAI-style API is sent none until one is chosen.
+                                            let unset = (effort_levels != craft_anything_ai::Effort::ALL).then_some(None);
+                                            for e in unset.into_iter().chain(effort_levels.iter().map(|&e| Some(e))) {
+                                                if ui.selectable_label(e == effort, e.map_or("default", craft_anything_ai::Effort::as_str)).clicked()
+                                                    && e != effort
+                                                {
+                                                    chosen_effort = Some((b.name.clone(), e));
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                            if craft_anything_ai::model_options::supported(b) {
+                                if let Some(draft) = app.model_tuning.get_mut(&b.name) {
+                                    if let Some(choices) = &draft.choices {
+                                        let mut changed = false;
+                                        ui.add_enabled_ui(!draft.saving, |ui| {
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.label(tr("Context window"));
+                                                let label = draft
+                                                    .context
+                                                    .and_then(|value| choices.context.iter().find(|choice| choice.value == value))
+                                                    .map(|choice| tr(&choice.label))
+                                                    .unwrap_or_else(|| tr("Default"));
+                                                egui::ComboBox::from_id_salt(("model-context", &b.name))
+                                                    .icon(widgets::combo_icon)
+                                                    .selected_text(label)
+                                                    .show_ui(ui, |ui| {
+                                                        changed |= ui.selectable_value(&mut draft.context, None, tr("Default")).changed();
+                                                        for choice in &choices.context {
+                                                            changed |= ui.selectable_value(&mut draft.context, Some(choice.value), tr(&choice.label)).changed();
+                                                        }
+                                                    });
+                                            });
+                                        });
+                                        if changed {
+                                            save_tuning = Some(draft.params());
+                                        }
+                                    } else {
+                                        model_options_loading(ui, &b.name);
+                                        if let Some(error) = &draft.error {
+                                            ui.add(egui::Label::new(RichText::new(error).color(t.danger)).wrap());
+                                            if icons::button(ui, "refresh-cw", size::CONTROL_SM, false, "Load model options").clicked() {
+                                                tune_models.push(b.name.clone());
+                                            }
+                                        } else {
+                                            ui.add(widgets::Spinner::new());
+                                        }
+                                    }
+                                } else {
+                                    model_options_loading(ui, &b.name);
+                                    tune_models.push(b.name.clone());
+                                }
+                            }
+                        });
+                    });
+                    // A key saved in the app silently wins over the environment's, so it can be replaced
+                    // here without removing the AI (#1358). Every API backend can need one; agent apps
+                    // sign in their own way. The field stays even when a key is saved, so a replacement
+                    // doesn't need Forget first.
+                    if b.kind != BackendKind::AgentCli && b.kind != BackendKind::Managed {
+                        // A save or forget for this backend is still running: no later action may be
+                        // submitted until it finishes, so workers can't overtake one another. Other
+                        // backends keep their controls.
+                        ui.add_enabled_ui(!app.backend_key_pending.contains(&b.name), |ui| {
+                            if app.backend_keys.as_ref().and_then(|keys| keys.get(&b.name).copied()) == Some(true) {
+                                ui.horizontal_wrapped(|ui| {
+                                    widgets::pill(ui, "Key saved", t.success, t.raised);
+                                    if widgets::secondary(ui, None, "Forget the key").clicked() {
+                                        forget_key = Some(b.name.clone());
+                                    }
+                                });
+                            }
+                            let key = key_drafts.entry(b.name.clone()).or_default();
+                            ui.horizontal_wrapped(|ui| {
+                                let r = ui.add(
+                                    egui::TextEdit::singleline(key)
+                                        .password(true)
+                                        .hint_text(tr("API key (stored in your system keychain)"))
+                                        .desired_width(260.0)
+                                        .frame(widgets::text_field_frame_compact(&t)),
+                                );
+                                widgets::named(r, &trf("{name} key", &[("name", &b.name)]));
+                                let k = key.trim().to_string();
+                                if widgets::named(widgets::primary_icon(ui, None, "Save", !k.is_empty()), &trf("Save {name} key", &[("name", &b.name)]))
+                                    .clicked()
+                                    && !k.is_empty()
+                                {
+                                    // Keep the draft until the save succeeds; a failure must not lose it.
+                                    save_key = Some((b.name.clone(), k));
+                                }
+                            });
+                        });
+                        ui.add_space(space::XS);
+                    }
+                    ui.add_space(space::S);
+                    ui.horizontal_wrapped(|ui| {
+                        ui.add_space(space::XL);
+                        if craft_anything_ai::folder_var(b).is_some()
+                            && widgets::secondary(ui, None, "Add another").clicked()
+                            && let Some(name) = (2..100).map(|n| format!("{} {n}", b.name)).find(|name| !app.backends.iter().any(|other| other.name == *name))
+                        {
+                            duplicate_agent = Some(craft_anything_ai::BackendConfig { name, ..b.clone() });
+                        }
+                        if app.state.backend.as_ref() == Some(&b.name) {
+                            widgets::pill(ui, "In use", t.on_accent, t.accent);
+                        } else if widgets::action(ui, "Use").clicked() {
+                            pick = Some(b.name.clone());
+                        }
+                        // Who builds: the chosen one says so (click to go back to automatic).
+                        if app.builder.as_ref() == Some(&b.name) {
+                            if widgets::secondary(ui, Some("hammer"), "Builds")
+                                .on_hover_text(tr("Builds use this one. Click to choose automatically again."))
+                                .clicked()
+                            {
+                                builds = Some(None);
+                            }
+                        } else if b.enabled && widgets::action(ui, "Build with this").clicked() {
+                            builds = Some(Some(b.name.clone()));
+                        }
+                        // Who takes a game's files out in Deep mode (an API backend, e.g. Kimi K3).
+                        if b.kind != BackendKind::AgentCli {
+                            if app.extractor.as_ref() == Some(&b.name) {
+                                if widgets::secondary(ui, Some("package"), "Extracts")
+                                    .on_hover_text(tr("In Deep mode this one takes a game's own files out after the study. Click to stop."))
+                                    .clicked()
+                                {
+                                    extracts = Some(None);
+                                }
+                            } else if b.enabled && widgets::action(ui, "Extract with this").clicked() {
+                                extracts = Some(Some(b.name.clone()));
+                            }
+                        }
+                        if b.kind == BackendKind::AgentCli && b.ssh_host.as_deref().is_none_or(|host| host.trim().is_empty()) {
+                            let pending = app.agent_connections.get(&b.name) == Some(&None);
+                            ui.add_enabled_ui(!pending, |ui| {
+                                if widgets::secondary(ui, None, if pending { "Checking" } else { "Check" }).clicked() {
+                                    check_agent = Some(b.name.clone());
+                                }
+                            });
+                        }
+                        // Off: kept with its key, but nothing uses it.
+                        let (label, tip) = if b.enabled {
+                            ("Turn off", "Nothing uses it until it's on again; it keeps its key.")
+                        } else {
+                            ("Turn on", "Builds and answers may use it again.")
+                        };
+                        if widgets::secondary(ui, None, label).on_hover_text(tr(tip)).clicked() {
+                            toggle = Some((b.name.clone(), !b.enabled));
+                        }
+                        if confirming.as_ref() == Some(&b.name) {
+                            // A key save or forget for this backend is still running: the save could
+                            // write the key back after the backend and its key are gone.
+                            ui.add_enabled_ui(!app.backend_key_pending.contains(&b.name), |ui| {
+                                if widgets::secondary(ui, Some("trash-2"), "Remove it and its key").clicked() {
+                                    remove = Some(b.name.clone());
+                                }
+                            });
+                            if widgets::link(ui, "Keep it").clicked() {
+                                ui.data_mut(|d| d.remove::<String>(confirm_id));
+                            }
+                        } else if icons::button(ui, "trash-2", size::CONTROL, false, &trf("Remove {name}", &[("name", &b.name)])).clicked() {
+                            ui.data_mut(|d| d.insert_temp(confirm_id, b.name.clone()));
+                        }
+                    });
+                    if !b.enabled {
+                        ui.label(RichText::new(tr("Off")).color(t.text_faint).size(theme::CAPTION));
+                    }
+                    if let Some(Some(result)) = app.agent_connections.get(&b.name) {
+                        let (message, color) = match result {
+                            Ok(message) => (message, t.text_dim),
+                            Err(message) => (message, t.danger),
+                        };
+                        ui.label(RichText::new(message).color(color).size(theme::CAPTION));
+                    }
+                });
+            });
+            ui.add_space(space::S);
+        }
+        if let Some(config) = duplicate_agent {
+            app.add_backend(config, None);
+        }
+        key_drafts.retain(|name, _| app.backends.iter().any(|backend| &backend.name == name));
+        app.backend_key_inputs = key_drafts;
+        app.folder_inputs = folder_drafts;
+        if let Some((name, key)) = save_key {
+            app.save_backend_key(name, key);
+        }
+        if let Some(name) = forget_key {
+            app.remove_backend_key(name);
+        }
+        if let Some((name, on)) = toggle {
+            app.set_backend_enabled(&name, on);
+        }
+        if let Some(name) = check_agent {
+            app.check_agent_connection(name);
+        }
+        if let Some(name) = choose_program {
+            app.picking_program_for = Some(name);
+            app.pick(Pick::AgentProgram);
+        }
+        if let Some(name) = usual_program {
+            app.set_agent_program(&name, None);
+        }
+        if let Some((name, program)) = use_program {
+            app.set_agent_program(&name, Some(program));
+        }
+        if let Some((name, folder)) = save_folder {
+            app.set_agent_folder(&name, Some(folder));
+        }
+        if let Some(name) = pick_model {
+            app.pick_model(&name);
+        }
+        if let Some((name, program)) = remote_program {
+            app.set_agent_program(&name, Some(program));
+        }
+        if let Some(name) = pick_agent_model {
+            app.reload_agent_model(&name);
+        }
+        if let Some((name, model, thinking)) = chosen_agent_model {
+            app.set_agent_model(&name, model, thinking);
+        }
+        if let Some((name, model)) = chosen_model {
+            app.set_model(&name, &model);
+        }
+        if let Some((name, effort)) = chosen_effort {
+            app.set_effort(&name, effort);
+        }
+        if close_picker {
+            app.model_picker = None;
+            app.agent_model_picker = None;
+        }
+        for name in tune_models {
+            app.pick_model_options(&name);
+        }
+        if let Some(params) = save_tuning {
+            app.set_model_options(params);
+        }
+        if let Some(name) = remove {
+            ui.data_mut(|d| d.remove::<String>(confirm_id));
+            app.remove_backend(&name);
+        }
+        if let Some(p) = pick {
+            app.choose_backend(Some(p));
+        }
+        if let Some(b) = builds {
+            app.set_role(craft_anything_ai::Role::Builder, b);
+        }
+        if let Some(e) = extracts {
+            app.set_role(craft_anything_ai::Role::Extractor, e);
+        }
+        ui.add_space(space::M);
+        egui::CollapsingHeader::new(tr("Custom server")).id_salt("advanced-custom-server").show(ui, |ui| {
+            server_form(app, ui);
         });
-        ui.add_space(space::S);
-    }
-    server_form(app, ui);
+        crate::engine_ui::assets_settings(app, ui);
+    });
+    widgets::named(advanced.header_response, &tr("Advanced AI settings"));
 }
 
 /// An AI that "Look for AI" can't find: a server on another computer or a hosted service, added by
@@ -1206,7 +1204,10 @@ mod tests {
         app.agent_connections.insert("Agent test".into(), Some(Err("Agent test is installed but is not signed in.".into())));
         let context = egui::Context::default();
         theme::install_fonts(&context);
-        let mut output = context.run_ui(Default::default(), |ui| ai(&mut app, ui));
+        let mut output = context.run_ui(Default::default(), |ui| {
+            open_backend_details(&app, ui);
+            ai(&mut app, ui);
+        });
         output.textures_delta.clear();
         let text = output
             .shapes
@@ -1239,7 +1240,10 @@ mod tests {
         let render = |app: &mut CraftApp| {
             let context = egui::Context::default();
             theme::install_fonts(&context);
-            let mut output = context.run_ui(Default::default(), |ui| ai(app, ui));
+            let mut output = context.run_ui(Default::default(), |ui| {
+                open_backend_details(app, ui);
+                ai(app, ui);
+            });
             output.textures_delta.clear();
             output
                 .shapes
@@ -1594,7 +1598,10 @@ mod model_options_tests {
     fn render(app: &mut CraftApp) -> String {
         let context = egui::Context::default();
         crate::theme::install_fonts(&context);
-        let mut output = context.run_ui(egui::RawInput::default(), |ui| ai(app, ui));
+        let mut output = context.run_ui(egui::RawInput::default(), |ui| {
+            open_backend_details(app, ui);
+            ai(app, ui);
+        });
         output.textures_delta.clear();
         output
             .shapes

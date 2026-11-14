@@ -64,7 +64,7 @@ pub fn env_var(kind: BackendKind) -> Option<&'static str> {
         BackendKind::Openai => Some("OPENAI_API_KEY"),
         BackendKind::Openrouter => Some("OPENROUTER_API_KEY"),
         BackendKind::Gemini => Some("GEMINI_API_KEY"),
-        BackendKind::OpenaiCompatible | BackendKind::AgentCli => None,
+        BackendKind::OpenaiCompatible | BackendKind::AgentCli | BackendKind::Managed => None,
     }
 }
 

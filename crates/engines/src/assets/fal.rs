@@ -99,7 +99,7 @@ impl Fal {
         match status {
             200..=299 => serde_json::from_str(&text).map_err(|e| ToolError::new(ErrorCode::GarbledOutput, format!("fal.ai sent an unreadable answer: {e}"))),
             401 | 403 => Err(ToolError::new(ErrorCode::BadSettings, "fal.ai didn't accept the key.")
-                .with_remediation("Check the fal.ai key in Settings → AI → Game assets.")),
+                .with_remediation("Check the fal.ai key in Settings → Models & accounts → Advanced → Game assets.")),
             402 => Err(ToolError::new(ErrorCode::OverLimit, "The fal.ai account is out of credit.").with_remediation("Add credit at fal.ai, then try again.")),
             _ => Err(ToolError::new(ErrorCode::EngineMissing, format!("fal.ai answered {status}: {}", text.chars().take(300).collect::<String>()))),
         }

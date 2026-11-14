@@ -136,7 +136,7 @@ pub fn message_json(m: &Msg) -> Value {
                 Block::Thinking { thinking, signature } => json!({"type": "thinking", "thinking": thinking, "signature": signature}),
                 Block::RedactedThinking { data } => json!({"type": "redacted_thinking", "data": data}),
                 Block::ToolUse { id, name, input } => json!({"type": "tool_use", "id": id, "name": name, "input": input}),
-                Block::ToolExtra { .. } => return None,
+                Block::ToolExtra { .. } | Block::ProviderData { .. } => return None,
                 Block::ToolResult { tool_use_id, content, is_error } => {
                     json!({"type": "tool_result", "tool_use_id": tool_use_id, "content": content, "is_error": is_error})
                 }

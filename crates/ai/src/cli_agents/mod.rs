@@ -459,7 +459,7 @@ pub(crate) fn claude_code_failure_in(why: &str, folder: Option<&Path>) -> (Strin
         return (
             format!("Claude Code is too old for the model it was asked to use ({}).", why.chars().take(200).collect::<String>()),
             Some(
-                "Update the `claude` command-line tool, which is installed and updated apart from the Claude desktop app: open a terminal and run `claude update`, then try again. Or choose another model for Claude Code in Settings → AI."
+                "Update the `claude` command-line tool, which is installed and updated apart from the Claude desktop app: open a terminal and run `claude update`, then try again. Or choose another model for Claude Code in Settings → Models & accounts."
                     .into(),
             ),
         );
@@ -1124,7 +1124,7 @@ fn run_cli(spec: &CliSpec, text: &str, retry: bool, tx: &Sender<AgentEvent>, sto
                 let _ = tx_err.send(AgentEvent::Output { text: l.to_string() });
             }
         })
-        .remediation(format!("Install {}, or choose its program in Settings → AI.", display_for(&agent)));
+        .remediation(format!("Install {}, or choose its program in Settings → Models & accounts.", display_for(&agent)));
     if let Some(p) = spec.project.as_ref().filter(|_| remote.is_none()) {
         proc = proc.cwd(p);
     }
@@ -2188,7 +2188,7 @@ mod tests {
         let (message, fix) = claude_code_failure(raw);
         assert!(message.starts_with("Claude Code is too old for the model it was asked to use") && message.contains("2.1.81"), "{message}");
         let fix = fix.unwrap_or_default();
-        assert!(fix.contains("claude update") && fix.contains("desktop app") && fix.contains("Settings → AI"), "{fix}");
+        assert!(fix.contains("claude update") && fix.contains("desktop app"), "{fix}");
         assert_eq!(claude_code_failure("rate limited"), ("Claude Code stopped: rate limited".to_string(), None));
     }
 

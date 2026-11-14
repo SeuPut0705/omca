@@ -222,7 +222,7 @@ fn missing(what: &str, id: &str, known: &[&str]) -> ToolError {
     let remediation = if known.is_empty() {
         "The asset table lists none; generate assets with simple shapes and colours instead.".to_string()
     } else {
-        format!("Choose one of: {} (Settings → AI → Game assets, or [assets] in config.toml).", known.join(", "))
+        format!("Choose one of: {} (Settings → Models & accounts → Advanced → Game assets, or [assets] in config.toml).", known.join(", "))
     };
     ToolError::new(ErrorCode::BadSettings, format!("There is no {what} called \"{id}\" in the asset table.")).with_remediation(remediation)
 }
