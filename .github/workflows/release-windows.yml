@@ -64,6 +64,27 @@ jobs:
       - name: Package
         shell: pwsh
         run: pwsh packaging/windows/package.ps1
+      - name: Verify installed MSI and portable payloads
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = (Get-ChildItem dist/release/*.msi).FullName
+          $log = Join-Path $env:RUNNER_TEMP 'omca-install.log'
+          $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
+          if ($install.ExitCode -notin @(0, 3010)) {
+            Get-Content $log -Tail 80
+            throw "MSI installation failed: $($install.ExitCode)"
+          }
+          $zip = Get-Item dist/release/*-portable.zip
+          $expanded = Join-Path $env:RUNNER_TEMP 'omca-portable'
+          Expand-Archive $zip.FullName $expanded
+          $roots = @((Join-Path $env:ProgramFiles 'OMCA'), (Join-Path $expanded $zip.BaseName))
+          foreach ($root in $roots) {
+            & (Join-Path $root 'craft-anything-cli.exe') --version | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Installed CLI failed: $root" }
+            bun provider-runtime/smoke.ts (Join-Path $root 'omca-provider-runtime.exe') (Join-Path $env:RUNNER_TEMP 'omca-installed-provider-smoke')
+            if ($LASTEXITCODE -ne 0) { throw "Installed provider runtime failed: $root" }
+          }
       - name: Attach to the release
         if: inputs.publish
         shell: pwsh
