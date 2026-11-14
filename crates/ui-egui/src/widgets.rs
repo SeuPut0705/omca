@@ -123,6 +123,66 @@ pub fn named(resp: Response, name: &str) -> Response {
     resp
 }
 
+pub(crate) fn provider_mark(ui: &mut Ui, name: &str) {
+    let t = Tokens::get(ui.ctx());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size::TILE), Sense::hover());
+    ui.painter().rect(rect, t.r_sm(), t.raised, theme::hairline(t.card_border), egui::StrokeKind::Inside);
+    let mark = name.chars().next().unwrap_or('?').to_uppercase().to_string();
+    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, mark, theme::semibold(theme::CARD), t.text_dim);
+    response.on_hover_text(name);
+}
+
+pub(crate) fn model_option(ui: &mut Ui, name: &str, selected: bool, active: bool) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), size::ROW_LG), Sense::click());
+    if response.hovered() || response.has_focus() || active {
+        ui.painter().rect_filled(rect, t.r_sm(), t.hover);
+    }
+    let text_rect = rect.shrink2(Vec2::new(space::SM, 0.0));
+    let text = egui::WidgetText::from(RichText::new(name).size(theme::SMALL)).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Truncate),
+        (text_rect.width() - size::ICON - space::M).max(0.0),
+        egui::FontSelection::Default,
+    );
+    ui.painter().galley(egui::pos2(text_rect.left(), text_rect.center().y - text.size().y / 2.0), text, t.text);
+    if selected {
+        icons::paint(
+            ui,
+            egui::Rect::from_center_size(egui::pos2(text_rect.right() - size::ICON / 2.0, text_rect.center().y), Vec2::splat(size::ICON)),
+            "check",
+            size::ICON,
+            t.accent_ink,
+        );
+    }
+    focus_ring(ui, &response, rect);
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, ui.is_enabled(), selected, name));
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+pub(crate) fn quota_badge(ui: &mut Ui, text: &str, fraction: Option<f64>) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let fraction = fraction.filter(|f| f.is_finite()).map(|f| f.clamp(0.0, 1.0) as f32);
+    let color = if fraction.is_some_and(|f| f >= 0.9) {
+        t.danger
+    } else if fraction.is_some_and(|f| f >= 0.75) {
+        t.warning
+    } else {
+        t.text_dim
+    };
+    let galley = label_galley(ui, text, theme::SMALL, t.text);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(galley.size().x + space::L, size::CONTROL), Sense::hover());
+    ui.painter().rect_filled(rect, t.r_sm(), t.raised);
+    if let Some(fraction) = fraction {
+        let fill = egui::Rect::from_min_size(rect.min, Vec2::new(rect.width() * fraction, rect.height()));
+        ui.painter().with_clip_rect(fill).rect_filled(rect, t.r_sm(), theme::mix(t.raised, color, 0.22));
+    }
+    ui.painter().rect_stroke(rect, t.r_sm(), theme::hairline(t.card_border), egui::StrokeKind::Inside);
+    ui.painter().galley(egui::pos2(rect.left() + space::SM, rect.center().y - galley.size().y / 2.0), galley, t.text);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, text));
+    response
+}
+
 /// A suggestion: a sentence in a hairline box that fills in a field when clicked. Wraps when
 /// it's wider than the space it has; fills the width in a justified layout (a tidy list).
 pub fn suggestion(ui: &mut Ui, text: &str) -> Response {

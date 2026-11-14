@@ -456,6 +456,8 @@ pub fn tools() -> Vec<craft_anything_engine::ToolSpec> {
     v
 }
 
+struct ManagedExecution;
+
 /// Entry point for the UI and CLI.
 pub struct AiHub {
     pub engine: Arc<Engine>,
@@ -465,16 +467,61 @@ pub struct AiHub {
     /// has deleted the key and the backend. Held across a keychain call or a settings save, so a
     /// waiter is a job, not a stuck lock.
     backend_edits: Mutex<()>,
+    managed_only: bool,
 }
 
 impl AiHub {
     pub fn new(engine: Arc<Engine>) -> Self {
-        AiHub { engine, settings_path: None, keys: KeyStore::system(), backend_edits: Mutex::new(()) }
+        AiHub { engine, settings_path: None, keys: KeyStore::system(), backend_edits: Mutex::new(()), managed_only: false }
     }
 
     /// A hub with explicit settings file and key store (tests, portable installs).
     pub fn with_stores(engine: Arc<Engine>, settings_path: PathBuf, keys: KeyStore) -> Self {
-        AiHub { engine, settings_path: Some(settings_path), keys, backend_edits: Mutex::new(()) }
+        AiHub { engine, settings_path: Some(settings_path), keys, backend_edits: Mutex::new(()), managed_only: false }
+    }
+
+    /// Restrict reads and execution to providers connected directly in the app.
+    /// Configuration editing remains unfiltered; use `config_to_change` before `save_config`.
+    pub fn managed_only(mut self) -> Self {
+        self.managed_only = true;
+        self.engine.session().ext.insert(Arc::new(ManagedExecution));
+        self
+    }
+
+    fn scoped_config(&self, mut cfg: AiConfig) -> AiConfig {
+        if self.managed_only {
+            cfg.backends.retain(|b| b.config.kind == BackendKind::Managed);
+            cfg.roles.retain(|_, name| cfg.backends.iter().any(|b| &b.config.name == name));
+            cfg.fallback_chain.retain(|name| cfg.backends.iter().any(|b| &b.config.name == name));
+        }
+        cfg
+    }
+
+    fn require_managed(&self, entry: &BackendEntry) -> Result<(), ToolError> {
+        if self.managed_only && entry.config.kind != BackendKind::Managed {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("{} is not an app-connected provider.", entry.config.name))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
+        Ok(())
+    }
+
+    fn selected_backend(&self, cfg: &AiConfig, ws: &craft_anything_engine::workspace::Workspace, explicit: Option<&str>) -> Result<BackendEntry, ToolError> {
+        let named = explicit.or_else(|| {
+            if self.managed_only { ws.manifest.builder.as_deref().map(str::trim).filter(|s| !s.is_empty()) } else { rebuild::project_builder(cfg, ws) }
+        });
+        if self.managed_only
+            && named.is_none()
+            && let Some(name) = self.config_to_change()?.roles.get(config::role_key(Role::Builder))
+            && cfg.get(name).is_none_or(|entry| !entry.config.enabled)
+        {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
+        if self.managed_only && named.is_some_and(|name| cfg.get(name).is_none()) {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {:?} is not connected in the app.", named.unwrap_or_default()))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
+        rebuild::builder_backend(cfg, named)
     }
 
     fn settings_path(&self) -> PathBuf {
@@ -524,15 +571,16 @@ impl AiHub {
     /// The current AI configuration. Never blocks on a running tool: if the session is busy the
     /// saved settings file is read instead.
     pub fn config(&self) -> AiConfig {
-        match self.engine.try_session() {
+        let cfg = match self.engine.try_session() {
             Some(s) => AiConfig::from_settings(&s.settings),
             None => AiConfig::from_settings(&Settings::load_from(&self.settings_path())),
-        }
+        };
+        self.scoped_config(cfg)
     }
 
     /// The configuration to change and save back. An [ai] section that can't be read is an error
     /// here, never the empty default, so a change can't save over it (#261).
-    fn config_to_change(&self) -> Result<AiConfig, ToolError> {
+    pub fn config_to_change(&self) -> Result<AiConfig, ToolError> {
         match self.engine.try_session() {
             Some(s) => AiConfig::from_table(&s.settings.ai),
             None => AiConfig::from_table(&Settings::load_from(&self.settings_path()).ai),
@@ -559,11 +607,17 @@ impl AiHub {
     /// Look for keys, local servers and agent CLIs (runs quickly; network probes are bounded).
     /// Things already configured (by name) are left out.
     pub fn detect(&self) -> Vec<Detected> {
+        if self.managed_only {
+            return Vec::new();
+        }
         leave_out_set_up(detect::detect_all(), &self.backends())
     }
 
     /// Why a coding agent people expect may not be found (only the Claude desktop app, say).
     pub fn detect_hints(&self) -> Vec<detect::DetectHint> {
+        if self.managed_only {
+            return Vec::new();
+        }
         detect::hints()
     }
 
@@ -857,6 +911,7 @@ impl AiHub {
         // and a concurrent settings change must not produce a mixed snapshot.
         let session = self.engine.try_session().ok_or_else(|| ToolError::invalid("The app is busy with another task. Try again in a moment."))?;
         let config = AiConfig::from_table(&session.settings.ai)?;
+        let config = self.scoped_config(config);
         let backend = config.get(name).cloned().ok_or_else(|| {
             ToolError::invalid(format!("No AI backend named {name:?}"))
                 .with_remediation("See `craft-anything-cli ai list`, or add one in Settings → Models & accounts.")
@@ -866,6 +921,10 @@ impl AiHub {
 
     /// Model metadata from an agent's own instance; no API-provider catalogue is substituted.
     pub fn agent_models(&self, context: &ModelContext) -> Result<Vec<AgentModel>, ToolError> {
+        if self.managed_only {
+            return Err(ToolError::new(ErrorCode::BadSettings, "Agent CLI discovery is unavailable in managed-only mode.")
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
         let e = &context.backend;
         cli_agents::adapter_for(&e.config.model).model_catalog(&e.config, &e.options, context.directory.as_deref(), &Stop::default())
     }
@@ -879,6 +938,10 @@ impl AiHub {
 
     /// Commit a picker selection only if its captured settings and project are still current.
     pub fn set_agent_selection(&self, context: &ModelContext, model: Option<&str>, thinking: Option<Effort>) -> Result<bool, ToolError> {
+        if self.managed_only {
+            return Err(ToolError::new(ErrorCode::BadSettings, "Agent CLI discovery is unavailable in managed-only mode.")
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
         let options = cli_agents::models::select(context, model, thinking)?;
         // Re-read and compare under the same lock as the save. A long catalogue lookup must
         // not overwrite another settings change that finished while it was running.
@@ -944,7 +1007,7 @@ impl AiHub {
 
     /// The provider's key is stored or in its environment variable.
     pub fn has_asset_key(&self, providers: &craft_anything_engines::assets::AssetProviders, provider: &str) -> bool {
-        providers.get(provider).is_some_and(|p| keys::asset_key(&self.keys, p.as_ref()).is_some())
+        providers.get(provider).is_some_and(|p| keys::asset_key_scoped(&self.keys, p.as_ref(), self.managed_only).is_some())
     }
 
     /// True when a key is stored or in the environment (keys themselves are never returned).
@@ -1049,6 +1112,7 @@ impl AiHub {
 
     /// Build the model for an API backend (not agent CLIs).
     pub fn build_model(&self, e: &BackendEntry) -> Result<ModelSlot, ToolError> {
+        self.require_managed(e)?;
         let c = &e.config;
         let base = c.base_url.as_deref().filter(|b| !b.trim().is_empty());
         let mut tunnel = None;
@@ -1128,6 +1192,20 @@ impl AiHub {
 
     /// Start a conversation with the lead backend (or the named one, while it is enabled).
     pub fn start(&self, backend: Option<&str>, beginner: bool) -> Result<Box<dyn Conversation>, ToolError> {
+        if self.managed_only {
+            if let Some(name) = backend {
+                if self.config().get(name).is_none() {
+                    return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                        .with_remediation("Choose a connected model in Settings → Models & accounts."));
+                }
+            } else if let Ok(raw) = self.config_to_change()
+                && let Some(name) = raw.roles.get(config::role_key(Role::Lead))
+                && self.config().get(name).is_none_or(|entry| !entry.config.enabled)
+            {
+                return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                    .with_remediation("Choose a connected model in Settings → Models & accounts."));
+            }
+        }
         let cfg = self.config();
         let first = match backend {
             Some(n) => self.entry(n)?,
@@ -1199,6 +1277,13 @@ impl AiHub {
 
     /// Start a conversation with whichever backend fills `role` in the crew.
     pub fn start_role(&self, role: Role, beginner: bool) -> Result<Box<dyn Conversation>, ToolError> {
+        if self.managed_only
+            && let Some(name) = self.config_to_change()?.roles.get(config::role_key(role))
+            && self.config().get(name).is_none_or(|entry| !entry.config.enabled)
+        {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
         let cfg = self.config();
         let e = cfg.backend_for(role).ok_or_else(|| {
             ToolError::unavailable(format!("No backend is set for the {} role.", config::role_key(role)))

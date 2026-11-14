@@ -156,43 +156,9 @@ pub enum Done {
         path: PathBuf,
         result: Result<Value, ToolError>,
     },
-    /// What a scan found, and why an expected coding agent may be missing.
-    Detected(Vec<Detected>, Vec<craft_anything_ai::detect::DetectHint>),
-    AgentConnection(String, Result<String, String>),
     /// The configured backends, the ones chosen to build with and to extract with, and each one's
     /// options.
-    Backends(
-        Vec<BackendConfig>,
-        Option<String>,
-        Option<String>,
-        std::collections::BTreeMap<String, craft_anything_ai::BackendOptions>,
-        /// `AiHub::replaced_programs`: saved programs that are gone, and what runs instead.
-        std::collections::BTreeMap<String, String>,
-    ),
-    /// The models an AI can be set to (Settings → AI's model picker).
-    ModelChoices {
-        name: String,
-        result: Result<Vec<String>, ToolError>,
-    },
-    AgentModelChoices {
-        request: u64,
-        context: craft_anything_ai::ModelContext,
-        result: Result<Vec<craft_anything_ai::AgentModel>, ToolError>,
-    },
-    ModelTuning {
-        name: String,
-        cli_model: Option<String>,
-        result: Result<craft_anything_ai::model_options::ModelTuning, ToolError>,
-    },
-    ModelChanged {
-        name: String,
-        model: String,
-        result: Result<craft_anything_ai::BackendOptions, ToolError>,
-    },
-    ModelOptionsSaved {
-        params: craft_anything_ai::model_options::SetModelOptions,
-        result: Result<(), ToolError>,
-    },
+    Backends(Vec<BackendConfig>, Option<String>, Option<String>, std::collections::BTreeMap<String, craft_anything_ai::BackendOptions>),
     Picked {
         pick: Pick,
         path: Option<PathBuf>,
@@ -255,12 +221,6 @@ pub enum Done {
         what: String,
         path: Option<PathBuf>,
     },
-    BackendAdded {
-        name: String,
-        result: Result<(), ToolError>,
-        /// `CraftApp::backend_choices` when the add started: a choice made since then stands.
-        choices: u64,
-    },
     ManagedProvider {
         result: Result<String, ToolError>,
         choices: u64,
@@ -301,20 +261,6 @@ pub enum Done {
     Nothing,
 }
 
-/// An AI server added by its address (Settings → AI): another computer's Ollama or LM Studio, or a
-/// service that speaks the OpenAI API.
-#[derive(Debug, Clone, Default)]
-pub struct ServerForm {
-    pub name: String,
-    pub address: String,
-    /// Empty: the first model it lists that can chat.
-    pub model: String,
-    pub key: String,
-    /// The server being asked for its models (the job, its name, when it started); the form says
-    /// it's connecting and for how long (#1429).
-    pub connecting: Option<(u64, String, Instant)>,
-}
-
 /// What a file dialog was for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pick {
@@ -339,8 +285,6 @@ pub enum Pick {
     GameFolder,
     /// Where to save a picture from a game.
     SavePicture,
-    /// The program an agent app runs ([`CraftApp::picking_program_for`] says which).
-    AgentProgram,
 }
 
 /// One open target, as the UI shows it.
@@ -352,32 +296,6 @@ pub struct TargetInfo {
     pub path: PathBuf,
     pub sha256: String,
     pub bytes: Arc<[u8]>,
-}
-
-/// Cached choices and editable values for one backend/model. Changes save immediately; controls
-/// stay in place while discovery or a save is pending, and failures retain a retryable state.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct ModelTuningDraft {
-    pub backend: String,
-    pub cli_model: Option<String>,
-    pub choices: Option<craft_anything_ai::model_options::ModelTuning>,
-    pub context: Option<craft_anything_ai::config::CliContext>,
-    #[serde(default)]
-    pub saving: bool,
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
-impl ModelTuningDraft {
-    /// Drop an override the selected model does not advertise before presenting its controls.
-    pub fn set_choices(&mut self, choices: craft_anything_ai::model_options::ModelTuning) {
-        self.context = self.context.filter(|value| choices.context.iter().any(|choice| choice.value == *value));
-        self.choices = Some(choices);
-    }
-
-    pub fn params(&self) -> craft_anything_ai::model_options::SetModelOptions {
-        craft_anything_ai::model_options::SetModelOptions { backend: self.backend.clone(), expected_cli_model: self.cli_model.clone(), context: self.context }
-    }
 }
 
 /// The last snapshot of the session, refreshed whenever the lock is free and something changed.
@@ -471,37 +389,15 @@ pub struct CraftApp {
     pub backends: Vec<BackendConfig>,
     /// Each backend's options (an agent app's program and model), by name (Settings → AI).
     pub backend_options: std::collections::BTreeMap<String, craft_anything_ai::BackendOptions>,
-    /// Agent apps whose saved program is gone, and the program that runs in its place (#721).
-    pub program_replaced: std::collections::BTreeMap<String, String>,
-    /// The AI whose model is being chosen in Settings → AI, and the models it offers once they've
-    /// come (`None`: still asking).
-    pub model_picker: Option<(String, Option<Vec<String>>)>,
-    pub agent_model_picker: Option<builders::AgentModelPicker>,
-    model_request: u64,
-    pub model_tuning: std::collections::BTreeMap<String, ModelTuningDraft>,
-    /// The agent app whose program the file dialog is choosing.
-    pub picking_program_for: Option<String>,
-    /// Claude Code folders being typed in Settings → AI, by AI, until they're saved.
-    pub folder_inputs: std::collections::BTreeMap<String, String>,
     /// The backend the person chose to build with (Settings → AI), if any.
     pub builder: Option<String>,
     /// The backend chosen to take a game's files out in Deep mode, if any.
     pub extractor: Option<String>,
     pub detected: Option<Vec<Detected>>,
-    /// Why an expected coding agent may be missing, from the last scan.
-    pub detect_hints: Vec<craft_anything_ai::detect::DetectHint>,
-    pub detecting: bool,
-    /// Local agent checks: None while the worker runs, then a credential-free status or error.
-    pub agent_connections: std::collections::BTreeMap<String, Option<Result<String, String>>>,
-    /// Which agent owns each pending check, including failures before the worker body starts.
-    pub(crate) agent_connection_jobs: std::collections::BTreeMap<u64, String>,
     /// Counts AI choices, so an add that finishes later doesn't undo one made meanwhile.
     pub backend_choices: u64,
     pub log: Vec<LogLine>,
     pub key_inputs: std::collections::BTreeMap<String, String>,
-    /// Settings → AI's "Add an AI by its address" form. Not kept with the UI state: its key goes
-    /// only to the keychain.
-    pub server_form: ServerForm,
     pub(crate) provider_accounts: provider_connect::AccountsState,
     /// Every project's rebuild in this window: working, waiting their turn, or finished.
     pub runs: craft_anything_ai::rebuild::RunSet,
@@ -624,24 +520,12 @@ impl CraftApp {
             conversation: None,
             backends: Vec::new(),
             backend_options: Default::default(),
-            program_replaced: Default::default(),
-            model_picker: None,
-            agent_model_picker: None,
-            model_request: 0,
-            model_tuning: Default::default(),
-            picking_program_for: None,
-            folder_inputs: Default::default(),
             builder: None,
             extractor: None,
             detected: None,
-            detect_hints: Vec::new(),
-            detecting: false,
-            agent_connections: Default::default(),
-            agent_connection_jobs: Default::default(),
             backend_choices: 0,
             log: Vec::new(),
             key_inputs: Default::default(),
-            server_form: ServerForm::default(),
             provider_accounts: Default::default(),
             runs: craft_anything_ai::rebuild::RunSet::new(craft_anything_engine::settings::BuildSettings::default().parallel),
             drafts: Default::default(),
@@ -1190,7 +1074,6 @@ impl CraftApp {
                 Pick::ExtraProjectsDir => pollster::block_on(d.set_title(tr("Pick a folder with projects in it")).pick_folder()),
                 Pick::GameFolder => pollster::block_on(d.set_title(tr("Pick the game's folder")).pick_folder()),
                 Pick::SavePicture => pollster::block_on(d.set_title(tr("Save the picture")).add_filter("PNG", &["png"]).set_file_name(&suggested).save_file()),
-                Pick::AgentProgram => pollster::block_on(d.set_title(tr("Where is the program?")).pick_file()),
                 Pick::Pictures | Pick::Attach => None,
             };
             Ok(Done::Picked { pick, path: handle.map(|h| h.path().to_path_buf()) })
@@ -1306,49 +1189,6 @@ impl CraftApp {
         });
     }
 
-    /// Choose the backend that builds or extracts (`None`: its default).
-    pub fn set_role(&mut self, role: craft_anything_ai::Role, name: Option<String>) {
-        let hub = self.hub.clone();
-        self.jobs.spawn(tr("Choose an AI's job"), true, move |_| {
-            hub.set_role(role, name.as_deref()).map_err(|e| e.message)?;
-            Ok(backends(&hub))
-        });
-    }
-
-    pub fn detect_backends(&mut self) {
-        if self.detecting {
-            return;
-        }
-        self.detecting = true;
-        let hub = self.hub.clone();
-        self.jobs.spawn("Look for AI on this computer", true, move |_| Ok(Done::Detected(hub.detect(), hub.detect_hints())));
-    }
-
-    /// Check a selected local agent through the headless API without blocking the UI.
-    pub fn check_agent_connection(&mut self, name: String) {
-        if self.agent_connections.get(&name) == Some(&None) {
-            return;
-        }
-        self.agent_connections.insert(name.clone(), None);
-        let hub = self.hub.clone();
-        let agent = name.clone();
-        let job = self.jobs.spawn("Check", true, move |_| {
-            let status = hub.test_backend(&agent).map(|report| report.reply).map_err(|error| error.for_people());
-            Ok(Done::AgentConnection(agent, status))
-        });
-        self.agent_connection_jobs.insert(job, name);
-    }
-
-    pub fn add_backend(&mut self, config: BackendConfig, key: Option<String>) -> u64 {
-        let hub = self.hub.clone();
-        let name = config.name.clone();
-        let choices = self.backend_choices;
-        self.jobs.spawn(i18n::trf("Connect {name}", &[("name", &name)]), true, move |_| {
-            let result = hub.add_backend(config, key);
-            Ok(Done::BackendAdded { name, result, choices })
-        })
-    }
-
     pub fn choose_backend(&mut self, name: Option<String>) {
         self.backend_choices = self.backend_choices.wrapping_add(1);
         self.select_backend(name);
@@ -1366,6 +1206,9 @@ impl CraftApp {
 
     /// Send a question: to the AI when one is set up, otherwise answered by the built-in engines.
     pub fn send(&mut self, text: &str) {
+        if provider_connect::model_pending(self) {
+            return;
+        }
         let text = text.trim().to_string();
         if text.is_empty() {
             return;
@@ -1424,7 +1267,12 @@ impl CraftApp {
     }
 
     pub fn busy(&self) -> bool {
-        self.conversation.as_ref().is_some_and(|c| c.is_busy()) || self.jobs.busy() || self.runs.any_busy()
+        self.conversation.as_ref().is_some_and(|c| c.is_busy())
+            || self.jobs.busy()
+            || self.runs.any_busy()
+            || !self.send_after_checks.is_empty()
+            || self.pending_paste.as_ref().is_some_and(|p| p.send)
+            || self.start_after_pictures.is_some()
     }
 
     fn poll_conversation(&mut self) {
@@ -1521,24 +1369,17 @@ impl CraftApp {
     /// Apply a completed background job, reporting failures and accepting picker results only for matching requests.
     fn handle_done(&mut self, done: jobs::Finished<Done>) {
         let job = done.job;
-        let checked_agent = self.agent_connection_jobs.remove(&job);
         if self.saving == Some(job) {
             self.saving = None;
         }
         if self.creating == Some(job) {
             self.creating = None;
         }
-        if self.server_form.connecting.as_ref().is_some_and(|(id, ..)| *id == job) {
-            self.server_form.connecting = None;
-        }
         self.chat_jobs.retain(|id| *id != job);
         let done = match done.result {
             Ok(d) => d,
             Err(e) => {
-                if let Some(agent) = checked_agent {
-                    self.agent_connections.insert(agent, Some(Err(e.clone())));
-                }
-                self.detecting = false;
+                provider_connect::failed_job(self, job, &e);
                 self.facts_read(job, None);
                 // A failed or cancelled engine download frees the button to try again.
                 if self.engine_flow.job.is_some_and(|(_, id)| id == job) {
@@ -1606,28 +1447,11 @@ impl CraftApp {
                     self.toast(e.for_people(), true);
                 }
             },
-            Done::Detected(d, hints) => {
-                self.detect_hints = hints;
-                self.detecting = false;
-                self.log(false, format!("Found {} AI option(s) on this computer", d.len()));
-                self.detected = Some(d);
-            }
-            Done::AgentConnection(name, result) => {
-                self.agent_connections.insert(name, Some(result));
-            }
-            Done::Backends(b, builder, extractor, options, replaced) => {
-                if self.state.backend.as_ref().is_some_and(|n| !b.iter().any(|c| &c.name == n)) {
-                    self.state.backend = None;
-                }
+            Done::Backends(b, builder, extractor, options) => {
                 self.backends = b;
                 self.builder = builder;
                 self.extractor = extractor;
                 self.backend_options = options;
-                self.program_replaced = replaced;
-                self.model_tuning.retain(|name, state| {
-                    self.backends.iter().any(|backend| backend.name == *name && craft_anything_ai::model_options::supported(backend))
-                        && self.backend_options.get(name).and_then(|options| options.cli_model.as_ref()) == state.cli_model.as_ref()
-                });
                 // Settings shows which backends have a saved key; the list may have changed (added,
                 // removed, or read again after a save).
                 self.check_backend_keys();
@@ -1657,110 +1481,21 @@ impl CraftApp {
                     self.toast(error, true);
                 }
             }
-            Done::ModelChoices { name, result } => match result {
-                // Kept only while the picker is still open for that AI.
-                Ok(models) if self.model_picker.as_ref().is_some_and(|(n, _)| *n == name) => self.model_picker = Some((name, Some(models))),
-                Ok(_) => {}
-                Err(e) => {
-                    self.model_picker = None;
-                    self.toast(e.for_people(), true);
+            Done::ManagedProvider { result, choices } => {
+                if !provider_connect::completed(self, job, &result) {
+                    return;
                 }
-            },
-            Done::AgentModelChoices { request, context, result } => {
-                // Keep a matching result even while the engine is busy. Settings invalidates
-                // changed contexts once it can read the session again; saving rechecks too.
-                if let Some(picker) = self.agent_model_picker.as_mut().filter(|p| p.request == request && p.context == context) {
-                    picker.result = Some(result.map_err(|e| e.for_people()));
-                }
-            }
-            Done::ModelTuning { name, cli_model, result } => {
-                let current = self.backend_options.get(&name).and_then(|options| options.cli_model.clone());
-                if self.model_tuning.get(&name).is_some_and(|state| state.cli_model == cli_model) {
-                    if current != cli_model {
-                        self.model_tuning.remove(&name);
-                    } else {
-                        match result {
-                            Ok(choices) => {
-                                if let Some(draft) = self.model_tuning.get_mut(&name) {
-                                    draft.set_choices(choices);
-                                }
-                            }
-                            Err(error) => {
-                                if let Some(state) = self.model_tuning.get_mut(&name) {
-                                    state.error = Some(error.for_people());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            Done::ModelChanged { name, model, result } => match result {
-                Ok(options) => {
-                    if let Some(backend) = self.backends.iter_mut().find(|backend| backend.name == name) {
-                        if backend.kind != craft_anything_ai::BackendKind::AgentCli {
-                            backend.model = model;
-                        }
-                        self.backend_options.insert(name.clone(), options);
-                    }
-                    self.model_tuning.remove(&name);
-                }
-                Err(error) => {
-                    if let Some(state) = self.model_tuning.get_mut(&name) {
-                        state.saving = false;
-                    }
-                    self.toast(error.for_people(), true);
-                }
-            },
-            Done::ModelOptionsSaved { params, result } => {
-                let current = self.backend_options.get(&params.backend).and_then(|options| options.cli_model.clone());
-                if current == params.expected_cli_model {
-                    if result.is_ok()
-                        && let Some(options) = self.backend_options.get_mut(&params.backend)
-                    {
-                        options.cli_context = params.context;
-                    }
-                    if let Some(state) = self.model_tuning.get_mut(&params.backend) {
-                        state.saving = false;
-                        if result.is_err()
-                            && let Some(options) = self.backend_options.get(&params.backend)
-                        {
-                            state.context = options.cli_context;
-                        }
-                    }
-                }
-                if let Err(error) = result {
-                    self.toast(error.for_people(), true);
-                }
-            }
-            Done::BackendAdded { name, result, choices } => {
                 match result {
-                    Ok(()) => {
-                        if self.server_form.name.trim() == name {
-                            self.server_form = ServerForm::default();
-                        }
-                        self.toast(i18n::trf("{name} is ready", &[("name", &name)]), false);
-                        // Picking another AI (or none) while this one connected wins.
+                    Ok(name) => {
                         if choices == self.backend_choices {
+                            self.conversation.take();
                             self.select_backend(Some(name));
                         }
                         self.refresh_backends();
                     }
-                    Err(e) if e.code == ErrorCode::Cancelled => self.toast(i18n::trf("Stopped adding {name}.", &[("name", &name)]), false),
-                    Err(e) => self.toast(e.for_people(), true),
+                    Err(error) => self.toast(error.for_people(), true),
                 }
             }
-            Done::ManagedProvider { result, choices } => match result {
-                Ok(name) => {
-                    if choices == self.backend_choices {
-                        if let Some(mut conversation) = self.conversation.take() {
-                            conversation.stop();
-                        }
-                        self.select_backend(Some(name));
-                    }
-                    self.refresh_backends();
-                }
-                Err(error) => self.toast(error.for_people(), true),
-            },
             Done::Picked { pick, path } => {
                 if let Some(path) = path {
                     match pick {
@@ -1786,11 +1521,6 @@ impl CraftApp {
                         Pick::ExtraProjectsDir => self.add_project_folder(path),
                         Pick::GameFolder => game_files::folder_picked(self, path),
                         Pick::SavePicture => game_files::save_to(self, path),
-                        Pick::AgentProgram => {
-                            if let Some(name) = self.picking_program_for.take() {
-                                self.set_agent_program(&name, Some(path.display().to_string()));
-                            }
-                        } // Several files: these come back as Done::Pictures / Done::ToAttach.
                         Pick::Pictures | Pick::Attach => {}
                     }
                 }
@@ -1891,9 +1621,6 @@ impl CraftApp {
                 self.refresh_projects();
                 self.refresh_game_engines();
                 self.check_asset_keys();
-                if !self.settings.first_run_done {
-                    self.detect_backends();
-                }
             }
         }
         let want = (self.theme_kind(), self.beginner());
@@ -2145,13 +1872,7 @@ pub fn app_icon(size: f32) -> egui::Image<'static> {
 /// Run an action; a panic is logged and swallowed so one bad action never takes the app down.
 /// The configured backends and the ones chosen to build and to extract (read off the UI thread).
 pub(crate) fn backends(hub: &AiHub) -> Done {
-    Done::Backends(
-        hub.backends(),
-        hub.chosen(craft_anything_ai::Role::Builder),
-        hub.chosen(craft_anything_ai::Role::Extractor),
-        hub.options(),
-        hub.replaced_programs(),
-    )
+    Done::Backends(hub.backends(), hub.chosen(craft_anything_ai::Role::Builder), hub.chosen(craft_anything_ai::Role::Extractor), hub.options())
 }
 
 impl CraftApp {
@@ -2291,5 +2012,40 @@ pub mod updates;
 impl Drop for CraftApp {
     fn drop(&mut self) {
         self.updates.finish();
+    }
+}
+
+#[cfg(test)]
+mod managed_commit_tests {
+    use super::*;
+
+    #[test]
+    fn pending_model_commit_blocks_send_and_worker_failure_releases_it() {
+        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Beginner, true));
+        app.state.input = "draft".into();
+        let choices = app.backend_choices;
+        let chat_count = app.state.chat.len();
+        provider_connect::set_pending_for_test(&mut app, 41);
+        app.send("suggestion");
+        assert_eq!(app.state.input, "draft");
+        assert_eq!(app.state.chat.len(), chat_count);
+        assert_eq!(app.backend_choices, choices);
+        app.handle_done(jobs::Finished { job: 42, result: Err("unrelated".into()) });
+        assert!(provider_connect::model_pending(&app));
+        app.handle_done(jobs::Finished { job: 41, result: Err("worker failed".into()) });
+        assert!(!provider_connect::model_pending(&app));
+    }
+
+    #[test]
+    fn attachment_preflight_keeps_the_selected_model_until_send_finishes() {
+        let mut app = demo::app(demo::engine(craft_anything_engine::Mode::Beginner, true));
+        demo::composer_scene(&mut app, false);
+        let selected = app.state.backend.clone();
+        let jobs = app.jobs.list.len();
+        app.send_after_checks.insert(std::path::PathBuf::from("pending-project"));
+        provider_connect::commit(&mut app, "other".into(), "different-model".into());
+        assert_eq!(app.state.backend, selected);
+        assert_eq!(app.jobs.list.len(), jobs);
+        assert!(!provider_connect::model_pending(&app));
     }
 }

@@ -287,7 +287,6 @@ fn history(app: &mut CraftApp, ui: &mut Ui, dense: bool, pad: f32, max_w: f32) {
                         ChatAction::AddBrain => {
                             app.state.settings_open = true;
                             app.state.settings_tab = crate::state::SettingsTab::Ai;
-                            app.detect_backends();
                         }
                     }
                 }
@@ -323,16 +322,17 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, dense: bool) {
     let answering = app.answering();
     let hint = if dense { tr("Ask the agent…") } else { tr("Ask anything, e.g. \"What does this program do?\"") };
     ui.allocate_ui(Vec2::new(width, 0.0), |ui| {
+        let chat = std::mem::take(&mut app.state.chat);
         let history = || {
-            app.state
-                .chat
-                .iter()
+            chat.iter()
                 .filter_map(|i| if let ChatItem::User(text) = i { Some(crate::prompt_box::Prompt { text: text.clone(), pictures: Vec::new() }) } else { None })
                 .collect()
         };
-        let out = crate::prompt_box::show(
+        let mut input = std::mem::take(&mut app.state.input);
+        let enabled = crate::provider_connect::selection_ready(app);
+        let out = crate::prompt_box::show_with_footer(
             ui,
-            &mut app.state.input,
+            &mut input,
             &[],
             crate::prompt_box::PromptBox {
                 name: "Ask a question",
@@ -345,14 +345,18 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, dense: bool) {
                 send: !answering,
                 recall: false,
                 history: Some(&history),
-                font_size: if dense { 14.0 } else { 16.0 },
+                font_size: theme::CARD,
             },
+            enabled,
+            |ui| crate::provider_connect::composer(app, ui),
         );
+        app.state.chat = chat;
+        app.state.input = input;
         if out.stop {
             app.stop();
         }
         // One answer at a time; what's typed meanwhile stays in the box.
-        if out.send && !answering {
+        if out.send && !answering && crate::provider_connect::selection_ready(app) {
             let text = std::mem::take(&mut app.state.input);
             app.send(&text);
         }

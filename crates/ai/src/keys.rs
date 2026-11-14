@@ -32,13 +32,29 @@ pub fn asset_key_name(provider: &str) -> String {
 
 /// An asset provider's key: stored, else the provider's own environment variable.
 pub fn asset_key(store: &KeyStore, provider: &dyn AssetProvider) -> Option<String> {
-    store.get(&asset_key_name(provider.id())).or_else(|| provider.key_env().and_then(|v| std::env::var(v).ok())).filter(|k| !k.trim().is_empty())
+    asset_key_scoped(store, provider, false)
+}
+
+pub(crate) fn asset_key_scoped(store: &KeyStore, provider: &dyn AssetProvider, managed_only: bool) -> Option<String> {
+    store
+        .get(&asset_key_name(provider.id()))
+        .or_else(|| (!managed_only).then(|| provider.key_env().and_then(|v| std::env::var(v).ok())).flatten())
+        .filter(|k| !k.trim().is_empty())
 }
 
 /// Every provider's key that is set up, for the builder's tool server.
 pub fn asset_keys(store: &KeyStore, providers: &AssetProviders) -> AssetKeys {
+    asset_keys_scoped(store, providers, false)
+}
+
+pub(crate) fn asset_keys_scoped(store: &KeyStore, providers: &AssetProviders, managed_only: bool) -> AssetKeys {
     AssetKeys(
-        providers.ids().into_iter().filter_map(|id| providers.get(id)).filter_map(|p| asset_key(store, p.as_ref()).map(|k| (p.id().to_string(), k))).collect(),
+        providers
+            .ids()
+            .into_iter()
+            .filter_map(|id| providers.get(id))
+            .filter_map(|p| asset_key_scoped(store, p.as_ref(), managed_only).map(|k| (p.id().to_string(), k)))
+            .collect(),
     )
 }
 
@@ -48,7 +64,8 @@ pub fn asset_keys(store: &KeyStore, providers: &AssetProviders) -> AssetKeys {
 pub fn refresh_loaded(session: &mut craft_anything_engine::Session, store: &KeyStore) {
     if session.ext.get::<AssetKeys>().is_some() {
         let providers = session.ext.get::<AssetProviders>().map(|p| p.as_ref().clone()).unwrap_or_default();
-        session.ext.insert(std::sync::Arc::new(asset_keys(store, &providers)));
+        let managed_only = session.ext.get::<crate::ManagedExecution>().is_some();
+        session.ext.insert(std::sync::Arc::new(asset_keys_scoped(store, &providers, managed_only)));
     }
 }
 
@@ -394,6 +411,47 @@ mod tests {
         s.delete(&asset_key_name("other")).unwrap();
         assert_eq!(asset_keys(&s, &providers).get("other"), None);
         assert_eq!(fal_key(&s).as_deref(), Some("f-1"));
+    }
+
+    #[test]
+    fn managed_asset_status_and_loaded_keys_ignore_ambient_credentials() {
+        struct AmbientProvider;
+        impl AssetProvider for AmbientProvider {
+            fn id(&self) -> &'static str {
+                "fal"
+            }
+            fn name(&self) -> &'static str {
+                "Test"
+            }
+            fn key_env(&self) -> Option<&'static str> {
+                Some("PATH")
+            }
+            fn generate(&self, _: &str, _: &craft_anything_engines::assets::AssetRequest) -> Result<craft_anything_engines::assets::Generated, ToolError> {
+                panic!("status must not generate assets")
+            }
+        }
+        assert!(std::env::var("PATH").is_ok_and(|value| !value.trim().is_empty()));
+        let d = tempfile::tempdir().unwrap();
+        let store = KeyStore::file_only(d.path().join("keys.toml"));
+        let mut providers = AssetProviders::built_in();
+        providers.register(std::sync::Arc::new(AmbientProvider));
+        assert!(asset_key(&store, providers.get("fal").unwrap().as_ref()).is_some());
+        let engine = std::sync::Arc::new(craft_anything_engine::Engine::new(craft_anything_engine::testing::session()));
+        let hub = crate::AiHub::with_stores(engine.clone(), d.path().join("settings.toml"), store.clone()).managed_only();
+        assert!(!hub.has_asset_key(&providers, "fal"));
+        assert!(asset_keys_scoped(&store, &providers, true).get("fal").is_none());
+        {
+            let mut session = engine.session();
+            session.ext.insert(std::sync::Arc::new(providers.clone()));
+            session.ext.insert(std::sync::Arc::new(AssetKeys::default()));
+            refresh_loaded(&mut session, &store);
+            assert!(session.ext.get::<AssetKeys>().unwrap().get("fal").is_none());
+        }
+        store.set(&asset_key_name("fal"), "explicit-test-key").unwrap();
+        assert!(hub.has_asset_key(&providers, "fal"));
+        let mut session = engine.session();
+        refresh_loaded(&mut session, &store);
+        assert_eq!(session.ext.get::<AssetKeys>().unwrap().get("fal"), Some("explicit-test-key"));
     }
 
     /// #923: a key removed in Settings must stop being spent, in a run that already loaded it too.

@@ -376,10 +376,8 @@ pub enum Modal {
     DeepMode,
     /// The folder picked for a new project has files: the app itself, or material to start from?
     ExistingFiles,
-    /// Nothing can build yet: set something up (`start`: then start the project on Make).
-    NeedBuilder {
-        start: bool,
-    },
+    /// Nothing can build yet: set up a managed account.
+    NeedBuilder,
     /// A new name for the project in this folder.
     Rename(PathBuf),
     /// Delete the project in this folder? (Asked, since it can't be undone.)

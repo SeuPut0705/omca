@@ -7,6 +7,57 @@ mod note_progress;
 #[path = "stall_tests.rs"]
 mod stall;
 
+#[test]
+fn managed_scope_preserves_legacy_settings_and_refuses_project_cli() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut session = craft_anything_engine::testing::session();
+    session.settings.ai = toml::from_str(
+        r#"
+fallback_chain = ["Gemini", "Codex"]
+[roles]
+lead = "Codex"
+builder = "Codex"
+[[backends]]
+name = "Codex"
+kind = "managed"
+model = "chosen-model"
+provider_id = "openai"
+[[backends]]
+name = "Gemini"
+kind = "agent_cli"
+model = "gemini-cli"
+"#,
+    )
+    .unwrap();
+    let engine = Arc::new(Engine::new(session));
+    let hub = AiHub::with_stores(engine.clone(), dir.path().join("config.toml"), crate::KeyStore::file_only(dir.path().join("keys.toml"))).managed_only();
+    let cfg = hub.config();
+    assert_eq!(cfg.backends.len(), 1);
+    assert_eq!(cfg.backends[0].config.model, "chosen-model");
+    assert_eq!(cfg.fallback_chain, ["Codex"]);
+    assert_eq!(hub.config_to_change().unwrap().backends.len(), 2);
+    assert!(hub.detect().is_empty());
+    let stale = hub.config_to_change().unwrap().get("Gemini").unwrap().clone();
+    assert_eq!(hub.start_builder(&stale, false, None, false).err().unwrap().code, ErrorCode::BadSettings);
+    assert_eq!(hub.build_model(&stale).err().unwrap().code, ErrorCode::BadSettings);
+    assert_eq!(hub.start(Some("Gemini"), false).err().unwrap().code, ErrorCode::BadSettings);
+    let slot = hub.build_model(cfg.get("Codex").unwrap()).unwrap();
+    assert_eq!(slot.model.model(), "chosen-model");
+
+    let mut ws = Workspace::create(dir.path(), "managed-boundary", "Build a thing", TargetRef::None).unwrap();
+    ws.set_person(|m| m.builder = Some("Gemini".into())).unwrap();
+    assert_eq!(hub.selected_backend(&cfg, &ws, Some("Codex")).unwrap().config.model, "chosen-model");
+    assert_eq!(RebuildRun::start(&hub, ws.clone(), RunOptions::default()).err().unwrap().code, ErrorCode::BadSettings);
+    let mut runs = RunSet::new(1);
+    assert_eq!(runs.start(&hub, ws.clone(), RunOptions::default()).err().unwrap().code, ErrorCode::BadSettings);
+    let settings = engine.session().settings.clone();
+    assert_eq!(question::ask(&hub, &settings, None, &ws, "Where is it?", &CancelToken::default(), None).unwrap_err().code, ErrorCode::BadSettings);
+    assert_eq!(Workspace::open(&ws.root).unwrap().manifest.builder.as_deref(), Some("Gemini"));
+    assert_eq!(hub.config_to_change().unwrap().get("Gemini").unwrap(), &stale);
+    let plain = AiHub::with_stores(engine, dir.path().join("config.toml"), crate::KeyStore::file_only(dir.path().join("keys.toml")));
+    assert!(plain.config().get("Gemini").is_some());
+}
+
 // Helpers that take a built-in kind's id, so each test reads as one line.
 fn kind(id: &str) -> Arc<dyn TargetKind> {
     KindRegistry::built_in().get(id).unwrap()
@@ -1035,9 +1086,9 @@ mod typed_retries {
     }
 
     #[cfg(unix)]
-    /// A plain CLI's non-zero exit is retried by resuming the session it saved.
+    /// An unclassified CLI exit is not retried, even if the CLI saved a session.
     #[test]
-    fn a_plain_nonzero_cli_exit_resumes_its_saved_session() {
+    fn a_plain_nonzero_cli_exit_does_not_resume_its_saved_session() {
         let dir = tempfile::tempdir().unwrap();
         let mut ws = Workspace::create(dir.path(), "x", "Build a thing", TargetRef::None).unwrap();
         let mut worker = check_worker(&ws, false);
@@ -1059,14 +1110,14 @@ mod typed_retries {
             waits.push(seconds);
             Ok(())
         });
-        assert_eq!(std::fs::read_to_string(ws.root.join("attempts")).unwrap(), "attempt\nattempt\n", "a plain nonzero exit must resume the reported session");
-        assert_eq!(result.unwrap(), "Built after the interruption");
-        assert_eq!(waits, [30]);
-        assert_eq!(std::fs::read_to_string(ws.root.join("prompts")).unwrap(), format!("Make a notes app\n{}\n", crate::failure::CONTINUE_TURN));
+        assert_eq!(std::fs::read_to_string(ws.root.join("attempts")).unwrap(), "attempt\n");
+        assert!(result.is_err());
+        assert!(waits.is_empty());
+        assert_eq!(std::fs::read_to_string(ws.root.join("prompts")).unwrap(), "Make a notes app\n");
         assert_eq!(cli.session_id().as_deref(), Some("interrupted-session"));
-        assert!(cli.last_failure().is_none(), "successful recovery clears the process failure");
+        assert_eq!(cli.last_failure().unwrap().kind, FailureKind::Unknown);
         assert!(!cli.is_busy());
-        assert_eq!(rx.try_iter().filter(|e| matches!(e, RunEvent::Agent(AgentEvent::TurnDone { .. }))).count(), 2);
+        assert_eq!(rx.try_iter().filter(|e| matches!(e, RunEvent::Agent(AgentEvent::TurnDone { .. }))).count(), 1);
     }
 
     #[cfg(unix)]
@@ -1130,9 +1181,9 @@ mod typed_retries {
     }
 
     #[cfg(unix)]
-    /// An untyped OpenCode exit keeps its error and stops at the three-retry cap.
+    /// An untyped OpenCode exit keeps its error and is not retried.
     #[test]
-    fn an_untyped_opencode_exit_keeps_its_error_and_the_three_retry_cap() {
+    fn an_untyped_opencode_exit_keeps_its_error_without_retry() {
         let dir = tempfile::tempdir().unwrap();
         let mut ws = Workspace::create(dir.path(), "x", "Build a thing", TargetRef::None).unwrap();
         let mut worker = check_worker(&ws, false);
@@ -1149,10 +1200,10 @@ mod typed_retries {
             })
             .unwrap_err();
         assert!(error.message.contains("Unknown option"), "{error:?}");
-        assert_eq!(cli.last_failure().unwrap().kind, FailureKind::Transient);
+        assert_eq!(cli.last_failure().unwrap().kind, FailureKind::Unknown);
         assert!(!cli.is_busy());
-        assert_eq!(waits, [2, 2, 2], "the display wait hint affects only the delay after a retryable exit");
-        assert_eq!(std::fs::read_to_string(ws.root.join("attempts")).unwrap(), "attempt\nattempt\nattempt\nattempt\n");
+        assert!(waits.is_empty());
+        assert_eq!(std::fs::read_to_string(ws.root.join("attempts")).unwrap(), "attempt\n");
     }
 }
 
@@ -2165,8 +2216,7 @@ mod picking_up_a_build {
         let ws = worked_on(&b);
         let nested = (0..65).fold(ws.app_dir().join("nested"), |p, _| p.join("d"));
         std::fs::create_dir_all(nested).unwrap();
-        // Authentication is a typed provider failure. A plain exit 1 is transient, regardless
-        // of the English words it prints, and is covered by the retry-policy tests.
+        // Authentication is a typed provider failure, independent of the words it prints.
         let mut config = b.hub.config();
         let mut entry = config.get("Stand-in").unwrap().clone();
         entry.config.model = "opencode".into();
@@ -4226,7 +4276,7 @@ fn a_question_names_a_replaced_saved_builder() {
     .unwrap();
     let mut ws = Workspace::create(d.path(), "Notes", "A notes app", TargetRef::None).unwrap();
     ws.set_person(|m| m.builder = Some("Off".into())).unwrap();
-    let answered = super::question::ask(&hub, &settings, None, &ws, "where is it?", &CancelToken::default()).unwrap();
+    let answered = super::question::ask(&hub, &settings, None, &ws, "where is it?", &CancelToken::default(), None).unwrap();
     assert_eq!(answered.backend, "Claude");
     let notice = answered.builder_notice.as_deref().unwrap_or_default();
     assert!(notice.contains("Off") && notice.contains("Claude"), "{notice}");

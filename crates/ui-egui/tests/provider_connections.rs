@@ -66,7 +66,7 @@ printf '{"id":"1","kind":"result","data":%s}\n' "$data"
         CraftApp::setup_context(&cc.egui_ctx);
         let engine = demo::engine(Mode::Experienced, true);
         let mut app = demo::app(engine.clone());
-        app.hub = Arc::new(AiHub::with_stores(engine, path.join("config.toml"), KeyStore::file_only(path.join("keys.toml"))));
+        app.hub = Arc::new(AiHub::with_stores(engine, path.join("config.toml"), KeyStore::file_only(path.join("keys.toml"))).managed_only());
         app.backends.clear();
         app.state.settings_open = true;
         app.state.settings_tab = SettingsTab::Ai;
@@ -92,6 +92,8 @@ printf '{"id":"1","kind":"result","data":%s}\n' "$data"
     h.get_by_label("Enter API key").type_text("good-key");
     h.run_steps(2);
     h.get_by_label("Save API key").click();
+    wait(&mut h, |h| h.query_by_label("Fake account").is_some());
+    h.get_by_label_contains("Settings model").click();
     wait(&mut h, |h| h.query_by_label("Fake model").is_some());
     h.get_by_label("Fake model").click();
     wait(&mut h, |h| h.state().backends.iter().any(|b| b.model == "fake-model"));
@@ -103,7 +105,7 @@ printf '{"id":"1","kind":"result","data":%s}\n' "$data"
             .iter()
             .any(|item| matches!(item, craft_anything_ui_egui::state::ChatItem::Assistant { text, .. } if text.contains("Original model answered")))
     });
-    h.get_by_label("Choose model").click();
+    h.get_by_label_contains("Settings model").click();
     wait(&mut h, |h| h.query_by_label("Fake next model").is_some());
     h.get_by_label("Fake next model").click();
     wait(&mut h, |h| h.state().backends.iter().any(|b| b.model == "fake-next"));

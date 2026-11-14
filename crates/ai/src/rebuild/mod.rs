@@ -272,7 +272,7 @@ impl RebuildRun {
         // everything below, the worker's saves included, works from this copy.
         let mut ws = Workspace::open(&ws.root).unwrap_or(ws);
         let cfg = hub.config();
-        let entry = builder_backend(&cfg, opts.backend.as_deref().or_else(|| project_builder(&cfg, &ws)))?;
+        let entry = hub.selected_backend(&cfg, &ws, opts.backend.as_deref())?;
         // The person's choice of mode is a session setting. A run that waited its turn uses the mode
         // now, not the one when it was queued; a tool holds the session while it starts a run, so it
         // passes the mode instead, and the saved settings are the last fallback.
@@ -678,7 +678,8 @@ impl Worker {
         let mut session = self.engine.session();
         session.label("Load the asset keys");
         let providers = session.ext.get::<craft_anything_engines::assets::AssetProviders>().map(|p| p.as_ref().clone()).unwrap_or_default();
-        let keys = crate::keys::asset_keys(store, &providers);
+        let managed_only = session.ext.get::<crate::ManagedExecution>().is_some();
+        let keys = crate::keys::asset_keys_scoped(store, &providers, managed_only);
         // The brief offers the built-in models, so a key for another provider doesn't count.
         self.assets = craft_anything_engines::assets::AssetProviders::built_in().ids().into_iter().any(|id| keys.get(id).is_some());
         session.ext.insert(Arc::new(keys));

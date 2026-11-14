@@ -51,7 +51,13 @@ The bundled `omca-provider-runtime` depends on the public `@oh-my-pi/pi-ai` and
 `@oh-my-pi/pi-catalog` packages, pinned to 18.20.0, under MIT.
 Source: https://github.com/can1357/oh-my-pi.
 Each release carries `PROVIDER-RUNTIME-LICENSES.txt` for Bun and the bundled dependency notices.
-OMCA's bridge implementation is original; no desktop UI code or assets are reused.
+OMCA's bridge and native desktop UI are original implementations.
+
+## Desktop interface reference
+
+The composer model selector, provider-account layout, and spacing use OMPdesk's source as a
+design reference. OMPdesk is copyright 2026 SeuPut, licensed under Apache-2.0. No React source,
+provider-logo artwork, or private application credentials are bundled from OMPdesk.
 
 ## Optional build-time fonts
 

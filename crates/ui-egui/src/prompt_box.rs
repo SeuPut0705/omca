@@ -132,12 +132,16 @@ pub struct PromptOut {
 }
 
 pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBox) -> PromptOut {
+    show_with_footer(ui, text, attachments, b, true, |_| {})
+}
+
+pub fn show_with_footer(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBox, enabled: bool, footer: impl FnOnce(&mut Ui)) -> PromptOut {
     let t = Tokens::get(ui.ctx());
     let mut out = PromptOut::default();
     let id = ui.make_persistent_id(("prompt-box", b.name));
     let focused = ui.memory(|m| m.has_focus(id));
     let stroke = theme::hairline(if focused { t.text_faint } else { t.field_border });
-    let frame = widgets::pane(t.card, theme::pad_sides(space::L, space::M, space::L, space::M)).stroke(stroke).corner_radius(t.r_lg()).shadow(egui::Shadow {
+    let frame = widgets::pane(t.field, theme::pad_sides(space::L, space::M, space::L, space::M)).stroke(stroke).corner_radius(t.r_lg()).shadow(egui::Shadow {
         offset: [0, 2],
         blur: 12,
         spread: 0,
@@ -239,7 +243,7 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
                         }),
                 );
                 widgets::named(r.clone(), b.name);
-                if r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift) && !text.trim().is_empty() {
+                if enabled && r.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.shift) && !text.trim().is_empty() {
                     out.send = true;
                 }
             });
@@ -255,28 +259,29 @@ pub fn show(ui: &mut Ui, text: &mut String, attachments: &[PathBuf], b: PromptBo
             }
             ui.add_space(space::XS);
             ui.horizontal(|ui| {
+                if b.send {
+                    let ready = enabled && !text.trim().is_empty();
+                    if send_button(ui, ready).clicked() && ready {
+                        out.send = true;
+                    }
+                }
+                if let Some(name) = b.stop_button {
+                    let label = if b.stopping { "Pausing…" } else { name };
+                    if widgets::secondary(ui, Some("circle-stop"), label).clicked() && !b.stopping {
+                        out.stop = true;
+                    }
+                }
                 if let Some(tip) = b.attach
                     && icons::button(ui, "paperclip", size::CONTROL_LG, false, tip).clicked()
                 {
                     out.attach = true;
                 }
-                ui.label(RichText::new(tr("Enter to send · Shift+Enter for a new line")).size(theme::CAPTION).color(t.text_faint));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if b.send {
-                        let ready = !text.trim().is_empty();
-                        if send_button(ui, ready).clicked() && ready {
-                            out.send = true;
-                        }
-                    }
-                    // Named, not a bare icon: the hint says "press Pause", so the button says Pause.
-                    if let Some(name) = b.stop_button {
-                        let label = if b.stopping { "Pausing…" } else { name };
-                        if widgets::secondary(ui, Some("circle-stop"), label).clicked() && !b.stopping {
-                            out.stop = true;
-                        }
-                    }
-                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), footer);
             });
+            ui.label(RichText::new(tr("Enter to send · Shift+Enter for a new line")).size(theme::CAPTION).color(t.text_faint));
+            if !enabled {
+                ui.label(RichText::new(tr("Choose a connected model to send.")).size(theme::CAPTION).color(t.warning));
+            }
         })
     });
     out

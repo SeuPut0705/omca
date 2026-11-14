@@ -44,6 +44,7 @@ pub struct RunSet {
     starter: Starter,
     /// A [`keep_queue_moving`] thread is looking after the queue.
     watched: bool,
+    managed_only: bool,
 }
 
 /// Whether this run's tools would run in the app's session: its Builder is an API backend, or the
@@ -66,7 +67,15 @@ impl std::fmt::Debug for RunSet {
 impl RunSet {
     /// At most `limit` runs work at once (at least one).
     pub fn new(limit: usize) -> RunSet {
-        RunSet { limit: limit.max(1), runs: HashMap::new(), queue: VecDeque::new(), alone: None, starter: Box::new(RebuildRun::start), watched: false }
+        RunSet {
+            limit: limit.max(1),
+            runs: HashMap::new(),
+            queue: VecDeque::new(),
+            alone: None,
+            starter: Box::new(RebuildRun::start),
+            watched: false,
+            managed_only: false,
+        }
     }
 
     /// A run may start now: there's a place, and neither it nor anyone working needs to be alone.
@@ -94,6 +103,13 @@ impl RunSet {
     /// alone. Nothing overtakes the queue, so one waiting to be alone gets its turn. A project that
     /// is working or queued is refused.
     pub fn start(&mut self, hub: &AiHub, ws: Workspace, opts: RunOptions) -> Result<Started, ToolError> {
+        self.managed_only |= hub.managed_only;
+        let mut scoped = AiHub::with_stores(hub.engine.clone(), hub.settings_path(), hub.keys.clone());
+        scoped.managed_only = self.managed_only;
+        let hub = if self.managed_only { &scoped } else { hub };
+        if hub.managed_only {
+            hub.selected_backend(&hub.config(), &ws, opts.backend.as_deref())?;
+        }
         if self.is_running(&ws.root) || self.position(&ws.root).is_some() {
             return Err(
                 ToolError::new(ErrorCode::BadInput, "This project is already building.").with_remediation("Add to it while it works, or stop it first.")
@@ -107,9 +123,9 @@ impl RunSet {
             self.runs.insert(root, run);
             return Ok(Started::Running);
         }
-        // Fail now, not when its turn comes, when no coding agent is set up.
-        let cfg = hub.config();
-        builder_backend(&cfg, opts.backend.as_deref().or_else(|| super::project_builder(&cfg, &ws)))?;
+        if !hub.managed_only {
+            hub.selected_backend(&hub.config(), &ws, opts.backend.as_deref())?;
+        }
         self.queue.push_back((ws, opts, alone));
         Ok(Started::Queued { position: self.queue.len() })
     }
@@ -117,6 +133,10 @@ impl RunSet {
     /// Every run's new events, by project folder, then start queued runs in the places that came
     /// free. A queued run that can't start gives a `Finished { ok: false }` with the reason.
     pub fn poll(&mut self, hub: &AiHub) -> Vec<(PathBuf, RunEvent)> {
+        self.managed_only |= hub.managed_only;
+        let mut scoped = AiHub::with_stores(hub.engine.clone(), hub.settings_path(), hub.keys.clone());
+        scoped.managed_only = self.managed_only;
+        let hub = if self.managed_only { &scoped } else { hub };
         let mut out: Vec<(PathBuf, RunEvent)> = Vec::new();
         for (root, run) in &mut self.runs {
             out.extend(run.poll().into_iter().map(|e| (root.clone(), e)));
@@ -134,14 +154,17 @@ impl RunSet {
             }
             let root = ws.root.clone();
             let mut keep = ws.clone();
-            match (self.starter)(hub, ws, opts) {
+            let allowed = if hub.managed_only { hub.selected_backend(&hub.config(), &ws, opts.backend.as_deref()).map(|_| ()) } else { Ok(()) };
+            match allowed.and_then(|()| (self.starter)(hub, ws, opts)) {
                 Ok(run) => {
                     self.alone = alone.then(|| root.clone());
                     self.runs.insert(root, run);
                 }
                 Err(e) => {
                     let message = e.for_people();
-                    let _ = keep.set_status(Status::NeedsYou, message.clone());
+                    if !(hub.managed_only && e.code == ErrorCode::BadSettings) {
+                        let _ = keep.set_status(Status::NeedsYou, message.clone());
+                    }
                     out.push((root, RunEvent::Finished { ok: false, message, paused: false }));
                 }
             }
@@ -270,6 +293,30 @@ mod tests {
         s.settings.ai = toml::from_str("[[backends]]\nname = \"Agent\"\nkind = \"agent_cli\"\nmodel = \"claude-code\"\n").unwrap();
         assert!(builder_backend(&crate::AiConfig::from_settings(&s.settings), None).is_ok());
         AiHub::new(Arc::new(Engine::new(s)))
+    }
+
+    #[test]
+    fn queued_managed_run_cannot_be_downgraded_by_a_reconstructed_hub() {
+        let d = tempfile::tempdir().unwrap();
+        let mut session = craft_anything_engine::testing::session();
+        session.settings.ai = toml::from_str(
+            "[[backends]]\nname='Codex'\nkind='managed'\nmodel='chosen'\nprovider_id='openai'\n[[backends]]\nname='Gemini'\nkind='agent_cli'\nmodel='gemini-cli'\n",
+        ).unwrap();
+        let engine = Arc::new(Engine::new(session));
+        let hub = AiHub::new(engine.clone()).managed_only();
+        let unscoped = AiHub::new(engine);
+        let a = Workspace::create(d.path(), "A", "A game", TargetRef::None).unwrap();
+        let mut b = Workspace::create(d.path(), "B", "A game", TargetRef::None).unwrap();
+        let fake = StandIns::new();
+        let mut set = RunSet::new(1).with_starter(fake.starter());
+        assert_eq!(set.start(&hub, a.clone(), RunOptions::default()).unwrap(), Started::Running);
+        assert_eq!(set.start(&hub, b.clone(), RunOptions::default()).unwrap(), Started::Queued { position: 1 });
+        b.set_person(|m| m.builder = Some("Gemini".into())).unwrap();
+        fake.finish(&a.root);
+        let events = set.poll(&unscoped);
+        assert_eq!(fake.started(), [a.root]);
+        assert!(events.iter().any(|(root, event)| *root == b.root && matches!(event, RunEvent::Finished { ok: false, .. })));
+        assert_eq!(Workspace::open(&b.root).unwrap().manifest.builder.as_deref(), Some("Gemini"));
     }
 
     #[test]

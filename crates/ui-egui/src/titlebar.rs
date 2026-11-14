@@ -232,7 +232,6 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
                 app.set_mode(if i == 0 { Mode::Beginner } else { Mode::Experienced });
             }
             rule(ui);
-            backend_picker(app, ui);
             deep_toggle(app, ui);
             usage_pill(app, ui);
             if app.jobs.busy() {
@@ -328,51 +327,5 @@ fn deep_toggle(app: &mut CraftApp, ui: &mut Ui) {
     });
     if resp.clicked() {
         app.set_deep(!deep);
-    }
-}
-
-/// AI backend picker: configured brains, "No AI", "Set up…".
-fn backend_picker(app: &mut CraftApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let current = format!("{} · {}", tr("AI"), app.state.backend.clone().unwrap_or_else(|| tr("None")));
-    let mut choice: Option<Option<String>> = None;
-    let mut setup = false;
-    ui.scope(|ui| {
-        let s = scale(ui.ctx());
-        let spacing = ui.spacing_mut();
-        spacing.interact_size.y = CONTROL * s;
-        // The box takes its padding from the style, which zooms; keep it the bar's size too.
-        spacing.button_padding *= s;
-        spacing.icon_width *= s;
-        spacing.icon_spacing *= s;
-        egui::ComboBox::from_id_salt("backend-picker")
-            .selected_text(theme::label_text(&current, label(theme::SMALL, s)).color(if app.state.backend.is_some() { t.text } else { t.text_dim }))
-            .icon(move |ui, rect, _, _| icons::paint(ui, rect.expand(2.0 * s), "chevron-down", size::ICON_SM * s, Tokens::get(ui.ctx()).icon))
-            .width(190.0 * s)
-            .show_ui(ui, |ui| {
-                for b in &app.backends {
-                    let on = app.state.backend.as_ref() == Some(&b.name);
-                    if ui.selectable_label(on, &b.name).on_hover_text(format!("{:?} · {}", b.kind, b.model)).clicked() {
-                        choice = Some(Some(b.name.clone()));
-                    }
-                }
-                if ui.selectable_label(app.state.backend.is_none(), tr("No AI (built-in engines only)")).clicked() {
-                    choice = Some(None);
-                }
-                ui.separator();
-                if ui.selectable_label(false, tr("Set up a brain…")).clicked() {
-                    setup = true;
-                }
-            })
-            .response
-            .on_hover_text(tr("Which AI answers your questions"));
-    });
-    if let Some(c) = choice {
-        app.choose_backend(c);
-    }
-    if setup {
-        app.state.settings_open = true;
-        app.state.settings_tab = crate::state::SettingsTab::Ai;
-        app.detect_backends();
     }
 }

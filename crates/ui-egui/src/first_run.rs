@@ -94,11 +94,7 @@ fn header(ui: &mut Ui, title: &str, sub: &str) {
 
 fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
     let t = Tokens::get(ui.ctx());
-    header(
-        ui,
-        "Who builds what you make",
-        "A coding agent such as Claude Code builds it, and an AI answers your questions in plain words. Change this any time in Settings → Models & accounts.",
-    );
+    header(ui, "Who builds what you make", "Connect an account in OMCA to choose a model for building and questions.");
     // Whether something can build yet, in one line: the same rule Make and Start use.
     match app.default_builder() {
         Some(b) => {
@@ -110,25 +106,13 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
         None => {
             ui.horizontal_wrapped(|ui| {
                 icons::show(ui, "triangle-alert", size::ICON, t.warning);
-                ui.label(
-                    RichText::new(tr("Nothing can build yet: install Claude Code (and sign in to it once), or add an AI with an API key below."))
-                        .color(t.text_dim),
-                );
+                ui.label(RichText::new(tr("Choose model")).color(t.text_dim));
             });
         }
     }
     ui.add_space(space::M);
     ui.set_width(width);
-    let mut selected_backend = None;
-    for b in &app.backends {
-        let selected = app.state.backend.as_ref() == Some(&b.name);
-        if ui.selectable_label(selected, &b.name).clicked() {
-            selected_backend = Some(b.name.clone());
-        }
-    }
-    if let Some(name) = selected_backend {
-        app.choose_backend(Some(name));
-    }
+    crate::provider_connect::composer(app, ui);
     // "No AI for now"
     let none_on = app.state.backend.is_none();
     let r = option_row(ui, "circle-stop", "No AI for now", "The built-in engines still show you everything they find.", none_on);
@@ -140,37 +124,12 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
     ui.add_space(space::L);
     ui.horizontal(|ui| {
         ui.add_space(((ui.available_width() - 240.0) / 2.0).max(0.0));
-        if widgets::secondary(ui, Some("refresh-cw"), "Look again").clicked() {
-            app.detect_backends();
-        }
         if widgets::primary(ui, "Continue").clicked() {
             app.state.first_run = FirstRunStep::Purpose;
         }
     });
     ui.add_space(space::M);
     crate::provider_connect::show(app, ui);
-    egui::CollapsingHeader::new(tr("Advanced")).id_salt("first-run-ai-advanced").show(ui, |ui| {
-        if app.detecting {
-            ui.add(widgets::Spinner::new());
-        }
-        let mut add = None;
-        for found in app.detected.iter().flatten().filter(|found| found.suggestion.kind == craft_anything_ai::BackendKind::AgentCli && !found.needs_key) {
-            if !app.backends.iter().any(|backend| backend.name == found.suggestion.name) {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(&found.reason);
-                    if widgets::secondary(ui, None, &found.suggestion.name).clicked() {
-                        add = Some(found.suggestion.clone());
-                    }
-                });
-            }
-        }
-        if let Some(config) = add {
-            app.add_backend(config, None);
-        }
-        egui::CollapsingHeader::new(tr("Custom server")).id_salt("first-run-custom-server").show(ui, |ui| {
-            crate::settings_ui::server_form(app, ui);
-        });
-    });
 }
 
 fn option_row(ui: &mut Ui, icon: &str, title: &str, sub: &str, on: bool) -> egui::Response {
