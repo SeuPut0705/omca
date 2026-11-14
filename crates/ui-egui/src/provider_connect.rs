@@ -336,17 +336,17 @@ fn composer_control(app: &mut CraftApp, ui: &mut Ui, accessible_name: &str) {
     widgets::named(menu.response, &format!("{} · {label}", tr(accessible_name)))
         .on_hover_text(&label)
         .on_disabled_hover_text(tr("Wait for active work to finish before changing the model."));
-    if state.task.is_none() && state.model_provider.is_none() {
-        if let Some(provider) = state
+    if state.task.is_none()
+        && state.model_provider.is_none()
+        && let Some(provider) = state
             .snapshot
             .as_ref()
             .and_then(|s| s.providers.iter().find(|p| p.authenticated && !p.accounts.is_empty() && !state.loaded_models.contains(&p.id)))
             .map(|p| p.id.clone())
-        {
-            state.loaded_models.insert(provider.clone());
-            state.model_provider = Some(provider.clone());
-            start(app, &mut state, Action::Models { provider_id: provider });
-        }
+    {
+        state.loaded_models.insert(provider.clone());
+        state.model_provider = Some(provider.clone());
+        start(app, &mut state, Action::Models { provider_id: provider });
     }
     app.provider_accounts = state;
     if let Some((provider, model)) = selected {

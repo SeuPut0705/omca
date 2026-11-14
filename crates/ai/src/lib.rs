@@ -509,13 +509,13 @@ impl AiHub {
         let named = explicit.or_else(|| {
             if self.managed_only { ws.manifest.builder.as_deref().map(str::trim).filter(|s| !s.is_empty()) } else { rebuild::project_builder(cfg, ws) }
         });
-        if self.managed_only && named.is_none() {
-            if let Some(name) = self.config_to_change()?.roles.get(config::role_key(Role::Builder)) {
-                if cfg.get(name).is_none_or(|entry| !entry.config.enabled) {
-                    return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
-                        .with_remediation("Choose a connected model in Settings → Models & accounts."));
-                }
-            }
+        if self.managed_only
+            && named.is_none()
+            && let Some(name) = self.config_to_change()?.roles.get(config::role_key(Role::Builder))
+            && cfg.get(name).is_none_or(|entry| !entry.config.enabled)
+        {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
         }
         if self.managed_only && named.is_some_and(|name| cfg.get(name).is_none()) {
             return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {:?} is not connected in the app.", named.unwrap_or_default()))
@@ -1198,13 +1198,12 @@ impl AiHub {
                     return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
                         .with_remediation("Choose a connected model in Settings → Models & accounts."));
                 }
-            } else if let Ok(raw) = self.config_to_change() {
-                if let Some(name) = raw.roles.get(config::role_key(Role::Lead)) {
-                    if self.config().get(name).is_none_or(|entry| !entry.config.enabled) {
-                        return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
-                            .with_remediation("Choose a connected model in Settings → Models & accounts."));
-                    }
-                }
+            } else if let Ok(raw) = self.config_to_change()
+                && let Some(name) = raw.roles.get(config::role_key(Role::Lead))
+                && self.config().get(name).is_none_or(|entry| !entry.config.enabled)
+            {
+                return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                    .with_remediation("Choose a connected model in Settings → Models & accounts."));
             }
         }
         let cfg = self.config();
@@ -1278,13 +1277,12 @@ impl AiHub {
 
     /// Start a conversation with whichever backend fills `role` in the crew.
     pub fn start_role(&self, role: Role, beginner: bool) -> Result<Box<dyn Conversation>, ToolError> {
-        if self.managed_only {
-            if let Some(name) = self.config_to_change()?.roles.get(config::role_key(role)) {
-                if self.config().get(name).is_none_or(|entry| !entry.config.enabled) {
-                    return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
-                        .with_remediation("Choose a connected model in Settings → Models & accounts."));
-                }
-            }
+        if self.managed_only
+            && let Some(name) = self.config_to_change()?.roles.get(config::role_key(role))
+            && self.config().get(name).is_none_or(|entry| !entry.config.enabled)
+        {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
         }
         let cfg = self.config();
         let e = cfg.backend_for(role).ok_or_else(|| {

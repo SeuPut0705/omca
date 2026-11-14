@@ -392,11 +392,11 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
     let raw = crate::AiConfig::from_settings(&ctx.session.settings);
     let cfg = hub.scoped_config(raw.clone());
     if hub.managed_only && p.backend.is_none() && p.project.is_none() && !p.project_folder.as_deref().is_some_and(project::has_project) {
-        if let Some(name) = raw.roles.get(crate::config::role_key(Role::Builder)) {
-            if cfg.get(name).is_none_or(|entry| !entry.config.enabled) {
-                return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
-                    .with_remediation("Choose a connected model in Settings → Models & accounts."));
-            }
+        if let Some(name) = raw.roles.get(crate::config::role_key(Role::Builder))
+            && cfg.get(name).is_none_or(|entry| !entry.config.enabled)
+        {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
         }
         builder_backend(&cfg, None)?;
     }
@@ -422,8 +422,8 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
         }
         None if p.resume => return Err(ToolError::invalid("resume is for an existing project.").with_remediation("Pass its folder as `project`.")),
         None => {
-            let attached = p.project_folder.as_deref().is_some_and(project::has_project);
-            if attached {
+            let attached = p.project_folder.as_deref().filter(|dir| project::has_project(dir));
+            if attached.is_some() {
                 if p.existing.is_some() {
                     return Err(ToolError::invalid("This folder already holds a project; pass it as `project` to continue it."));
                 }
@@ -436,8 +436,8 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
                     );
                 }
             }
-            if attached {
-                let ws = open(p.project_folder.as_deref().unwrap())?;
+            if let Some(dir) = attached {
+                let ws = open(dir)?;
                 hub.selected_backend(&cfg, &ws, p.backend.as_deref())?;
             }
             let target = p.target.as_deref().unwrap_or("-");
@@ -451,7 +451,7 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
             if p.project_folder.is_some() || matches!(place, project::Place::At(..)) {
                 ctx.session.remember_project(&ws.root)?;
             }
-            (ws, project::attached_request(attached, &p.request))
+            (ws, project::attached_request(attached.is_some(), &p.request))
         }
     };
     if !p.pictures.is_empty() {

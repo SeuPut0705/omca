@@ -93,13 +93,14 @@ pub fn ask(
     }
     let raw = crate::AiConfig::from_settings(settings);
     let cfg = hub.scoped_config(raw.clone());
-    if hub.managed_only && backend.is_none() && ws.manifest.builder.as_deref().is_none_or(|s| s.trim().is_empty()) {
-        if let Some(name) = raw.roles.get(crate::config::role_key(Role::Builder)) {
-            if cfg.get(name).is_none_or(|entry| !entry.config.enabled) {
-                return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
-                    .with_remediation("Choose a connected model in Settings → Models & accounts."));
-            }
-        }
+    if hub.managed_only
+        && backend.is_none()
+        && ws.manifest.builder.as_deref().is_none_or(|s| s.trim().is_empty())
+        && let Some(name) = raw.roles.get(crate::config::role_key(Role::Builder))
+        && cfg.get(name).is_none_or(|entry| !entry.config.enabled)
+    {
+        return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+            .with_remediation("Choose a connected model in Settings → Models & accounts."));
     }
     let builder_notice = if hub.managed_only || backend.is_some() {
         None
