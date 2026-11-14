@@ -20,6 +20,8 @@ pub const ROUTES_FILE: &str = "routes.json";
 /// desktop width; [`phone_states_dir`] holds them at the phone width (a menu button often only
 /// shows there).
 pub const STATES_DIR: &str = "states";
+/// What a new site's builder is told to leave for running it outside OMCA.
+pub const HOW_TO_RUN: &str = "OMCA serves your built folder itself, so the site needs no dev or start script here. For anyone running it without OMCA, write app/README.md saying how: the commands that build it (such as `npm install` and `npm run build`, or none for plain files) and the folder to serve with any static web server (for example `npx serve dist`), since opening index.html straight from the disk may not work.";
 
 /// The folder for the states opened at a phone `width`: `states-390`.
 pub fn phone_states_dir(width: u32) -> String {
@@ -213,6 +215,10 @@ impl TargetKind for WebsiteKind {
                 "Its menus, pop-ups and tabs were opened one at a time and photographed in capture/ (on a computer, and on a phone where its controls differ, such as a menu button): {}. Make them open and look the same way at each width.",
                 states.join(", ")
             ));
+        }
+        // Craft Anything serves the built folder itself, so outside it there was nothing to run (#1590).
+        if !cx.ws.manifest.own_project() {
+            out.push(HOW_TO_RUN.into());
         }
         out
     }

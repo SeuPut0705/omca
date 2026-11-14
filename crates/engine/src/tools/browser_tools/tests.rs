@@ -995,3 +995,52 @@ fn same_origin_loopback_source_maps_are_fetched() {
     assert!(other_seen.lock().unwrap().is_empty());
     assert_eq!(seen.lock().unwrap().len(), 2);
 }
+
+/// #1811: a JSON response with no outline is said to be unread, not taken as a response with no
+/// body; when every JSON response got one there is nothing to say.
+#[test]
+fn a_missing_json_outline_is_said_in_the_evidence() {
+    // Each reason a JSON response got no outline is named with its own count, so a response whose
+    // body couldn't be read isn't said to be past the cap.
+    let partial = json!({"network": {"json_outlines": {
+        "json_responses": 60, "json_outlines": 39,
+        "json_outlines_past_cap": 0, "json_outlines_after_deadline": 0, "json_outlines_unreadable": 21,
+    }}});
+    let limitation = super::json_outline_limitation(&partial).expect("39 of 60 went unread");
+    assert_eq!(limitation.code, "json_outlines_partial");
+    assert!(limitation.message.contains("39 of 60"), "{}", limitation.message);
+    assert!(limitation.message.contains("21 whose body couldn't be read as JSON"), "{}", limitation.message);
+    assert!(!limitation.message.contains("past the first"), "{}", limitation.message);
+    let mixed = json!({"network": {"json_outlines": {
+        "json_responses": 250, "json_outlines": 150,
+        "json_outlines_past_cap": 50, "json_outlines_after_deadline": 0, "json_outlines_unreadable": 50,
+    }}});
+    let limitation = super::json_outline_limitation(&mixed).expect("150 of 250");
+    assert!(limitation.message.contains("past the first 200 JSON responses") && limitation.message.contains("and 50 whose"), "{}", limitation.message);
+    let all = json!({"network": {"json_outlines": {"json_responses": 39, "json_outlines": 39}}});
+    assert!(super::json_outline_limitation(&all).is_none());
+    // Outlines weren't asked for at all: nothing to report.
+    assert!(super::json_outline_limitation(&json!({"network": {"request_count": 3}})).is_none());
+}
+
+/// #1838: a recording written from the requests and answers a browser run kept is one a stand-in
+/// backend can be built from, with the ids in its paths read as templates.
+#[test]
+fn a_recording_written_from_a_run_builds_a_stand_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let har = dir.path().join("original.har");
+    let requests = [
+        json!({"method": "GET", "url": "https://api.example.test/v1/items/42", "status": 200, "mime_type": "application/json",
+               "response_body": {"state": "captured", "bytes": 11, "text": "{\"title\":1}"}}),
+        json!({"method": "GET", "url": "https://api.example.test/v1/items/77", "status": 200, "mime_type": "application/json",
+               "response_body": {"state": "captured", "bytes": 11, "text": "{\"title\":2}"}}),
+    ];
+    super::write_recording(&requests, &har).unwrap();
+    let written = std::fs::read_to_string(&har).unwrap();
+    assert!(written.contains("\"version\": \"1.2\"") && written.contains("/v1/items/42"), "{written}");
+    let e = Engine::new(crate::testing::session());
+    let out = call(&e, "web_standin_build", json!({"path": har, "output_dir": dir.path().join("standin")})).unwrap();
+    let routes = out["result"]["routes"].as_array().unwrap();
+    assert!(routes.iter().any(|r| r["template"] == "/v1/items/{id}"), "{}", out["result"]);
+    assert_eq!(out["result"]["routes_total"], 1, "{}", out["result"]);
+}

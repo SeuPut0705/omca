@@ -156,6 +156,19 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
             app.state.screen = Screen::Home;
         }
         ui.label(theme::label_text("OMCA", label(theme::SMALL, s)).color(t.text).strong());
+        #[cfg(not(target_arch = "wasm32"))]
+        ui.scope(|ui| {
+            ui.style_mut().override_font_id = Some(theme::medium(theme::SMALL * s));
+            ui.spacing_mut().interact_size.y = CONTROL * s;
+            ui.spacing_mut().button_padding *= s;
+            ui.menu_button(tr("Help"), |ui| {
+                ui.set_style(ctx.global_style());
+                if ui.button(tr("Check for Updates…")).clicked() {
+                    app.updates.check(ui.ctx());
+                    ui.close();
+                }
+            });
+        });
         let in_project = app.state.screen == Screen::Project;
         let project = if in_project { app.workspace.as_ref().map(|w| w.manifest.name.clone()) } else { app.view.project.clone() };
         let target = if in_project { None } else { app.view.active_target().map(|t| (t.name.clone(), t.kind)) };
@@ -239,7 +252,7 @@ fn usage_pill(app: &CraftApp, ui: &mut Ui) {
         return;
     }
     let t = Tokens::get(ui.ctx());
-    let text = if u.priced { crate::usage::cost_short(u) } else { crate::usage::tokens_words(u.tokens()) };
+    let text = if u.priced { crate::usage::cost_short(u) } else { crate::usage::token_total(u, true) };
     let r = widgets::pill_sized(ui, &text, t.text_dim, t.raised, label(theme::CAPTION, scale(ui.ctx())));
     r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &text));
     r.on_hover_ui(|ui| {

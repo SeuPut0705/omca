@@ -101,10 +101,30 @@ ensure_craft_fonts() {
   export CRAFT_FONTS_DIR CRAFT_FONTS_REQUIRED=1
 }
 
+# Build the pinned account runtime outside the checkout; release artifacts need no installed Bun.
+build_provider_runtime() {
+  local target="$1" work="$CARGO_TARGET_DIR/provider-runtime-build-$1" name=omca-provider-runtime
+  case "$target" in
+    bun-darwin-arm64) ;;
+    bun-windows-x64) name="$name.exe" ;;
+    *) echo "error: unsupported provider runtime target: $target" >&2; return 1 ;;
+  esac
+  command -v bun >/dev/null || { echo "error: provider runtime builds require Bun 1.4.4 or newer" >&2; return 1; }
+  mkdir -p "$work"
+  cp -R "$ROOT/provider-runtime/." "$work/"
+  PROVIDER_RUNTIME_DIR="$CARGO_TARGET_DIR/provider-runtime-$target"
+  mkdir -p "$PROVIDER_RUNTIME_DIR"
+  (cd "$work" && bun install --frozen-lockfile && bun build.ts --target "$target" --out "$PROVIDER_RUNTIME_DIR/$name")
+  test -s "$PROVIDER_RUNTIME_DIR/$name" && test -s "$PROVIDER_RUNTIME_DIR/PROVIDER-RUNTIME-LICENSES.txt"
+  export PROVIDER_RUNTIME_DIR
+}
+
 # Copy the readme and every licence text into a package directory.
 copy_docs() {
   local dest="$1"
   cp "$ROOT/README.md" "$dest/"
+  mkdir -p "$dest/assets"
+  cp "$ROOT/assets/omca-hero.webp" "$dest/assets/"
   stage_licences "$dest"
 }
 
@@ -125,6 +145,11 @@ stage_licences() {
     THIRD_PARTY_LICENCES_MADE=1
   fi
   cp "$bundle" "$dest/"
+  if [ ! -s "${PROVIDER_RUNTIME_DIR:-}/PROVIDER-RUNTIME-LICENSES.txt" ]; then
+    echo "error: build the provider runtime before staging release licences" >&2
+    return 1
+  fi
+  cp "$PROVIDER_RUNTIME_DIR/PROVIDER-RUNTIME-LICENSES.txt" "$dest/"
 }
 
 # The app embeds the fonts in assets/fonts (OFL-1.1) and, built with CRAFT_FONTS_DIR (releases),

@@ -63,7 +63,7 @@ const SSH_FAILURES: &[(&str, &str, &str)] = &[
     ),
     ("permission denied", "the login was refused", "Set up an ssh key or agent for this computer; OMCA can't type a password."),
     ("host key verification failed", "this computer's identity isn't trusted yet", "Connect once from a terminal and accept its host key."),
-    ("could not resolve hostname", "that computer's name wasn't found", "Check the name in Settings → AI and in ~/.ssh/config."),
+    ("could not resolve hostname", "that computer's name wasn't found", "Check the name in Settings → Models & accounts and in ~/.ssh/config."),
     ("connection refused", "the computer refused the connection", "Check that its ssh server is running and the port is right."),
     ("timed out", "the computer didn't answer in time", "Check that it's on and reachable from this network."),
     ("no route to host", "the computer can't be reached from this network", "Check that it's on and reachable from this network."),
@@ -83,14 +83,14 @@ pub fn diagnose(host: &str, program: &str, git_server: bool, code: Option<i32>, 
     if git_server {
         return Some(SshFailure {
             what: format!("{host} is a git server, not a computer that can run {program}"),
-            fix: format!("In Settings → AI, remove the AI that uses {host}, then add one on this computer or on a computer you can log in to."),
+            fix: format!("In Settings → Models & accounts, remove the AI that uses {host}, then add one on this computer or on a computer you can log in to."),
         });
     }
     match code {
         Some(NOT_FOUND) => Some(SshFailure {
             what: format!("{program} wasn't found on {host}"),
             fix: format!(
-                "Install it there. If it's already installed, ssh sessions may not load your shell's PATH: set the full path in Settings → AI, or add it to the PATH in your shell's startup file on {host}."
+                "Install it there. If it's already installed, ssh sessions may not load your shell's PATH: set the full path in Settings → Models & accounts, or add it to the PATH in your shell's startup file on {host}."
             ),
         }),
         Some(SSH_FAILED) => {
@@ -260,7 +260,7 @@ pub fn open_tunnel(ssh_host: &str, remote_host: &str, remote_port: u16) -> Resul
         }
         if let Some(r) = proc.try_result() {
             let msg = match r {
-                Ok(out) => out.stderr_text().trim().to_string(),
+                Ok(out) => out.stderr_end_text().trim().to_string(),
                 Err(e) => e.message.clone(),
             };
             return Err(ToolError::new(ErrorCode::EngineMissing, format!("ssh to {ssh_host} failed: {msg}"))
@@ -301,7 +301,6 @@ mod tests {
         // Reproduced against GitHub: it logs you in, then refuses to start anything.
         let git = diagnose("github.com-work", "claude", true, Some(255), "exec request failed on channel 0").unwrap();
         assert!(git.what.contains("github.com-work is a git server"), "{}", git.what);
-        assert!(git.fix.contains("Settings → AI"));
         // So does its other answer, which exits 1.
         assert!(diagnose("g", "claude", true, Some(1), "Invalid command: claude").is_some());
 

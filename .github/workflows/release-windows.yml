@@ -11,6 +11,10 @@ on:
         type: string
         required: true
 
+      publish:
+        description: "Attach files to the release; disable for a pre-release build check"
+        type: boolean
+        default: true
 permissions:
   contents: write
 
@@ -29,6 +33,15 @@ jobs:
       - name: Rust
         run: rustup update stable --no-self-update && rustup default stable
       - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - name: Provider account runtime
+        shell: bash
+        run: |
+          . packaging/env.sh
+          build_provider_runtime bun-windows-x64
+          echo "PROVIDER_RUNTIME_DIR=$(cygpath -w "$PROVIDER_RUNTIME_DIR")" >>"$GITHUB_ENV"
       - name: WiX v5
         run: |
           dotnet tool install --global wix --version 5.0.2
@@ -46,13 +59,44 @@ jobs:
         shell: bash
         run: |
           . packaging/env.sh
-          CRAFT_FONTS_DIR="$(cygpath -u "$CRAFT_FONTS_DIR")" stage_licences "$CARGO_TARGET_DIR/licences"
+          CRAFT_FONTS_DIR="$(cygpath -u "$CRAFT_FONTS_DIR")" PROVIDER_RUNTIME_DIR="$(cygpath -u "$PROVIDER_RUNTIME_DIR")" stage_licences "$CARGO_TARGET_DIR/licences"
           echo "LICENCES_DIR=$(cygpath -w "$CARGO_TARGET_DIR/licences")" >>"$GITHUB_ENV"
       - name: Package
         shell: pwsh
         run: pwsh packaging/windows/package.ps1
+      - name: Verify installed MSI and portable payloads
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = (Get-ChildItem dist/release/*.msi).FullName
+          $log = Join-Path $env:RUNNER_TEMP 'omca-install.log'
+          $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart /l*v `"$log`"" -Wait -PassThru
+          if ($install.ExitCode -notin @(0, 3010)) {
+            Get-Content $log -Tail 80
+            throw "MSI installation failed: $($install.ExitCode)"
+          }
+          $zip = Get-Item dist/release/*-portable.zip
+          $expanded = Join-Path $env:RUNNER_TEMP 'omca-portable'
+          Expand-Archive $zip.FullName $expanded
+          $roots = @((Join-Path $env:ProgramFiles 'OMCA'), (Join-Path $expanded $zip.BaseName))
+          foreach ($root in $roots) {
+            & (Join-Path $root 'craft-anything-cli.exe') --version | Out-Host
+            if ($LASTEXITCODE -ne 0) { throw "Installed CLI failed: $root" }
+            bun provider-runtime/smoke.ts (Join-Path $root 'omca-provider-runtime.exe') (Join-Path $env:RUNNER_TEMP 'omca-installed-provider-smoke')
+            if ($LASTEXITCODE -ne 0) { throw "Installed provider runtime failed: $root" }
+          }
       - name: Attach to the release
+        if: inputs.publish
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag }}" (Get-ChildItem dist/release/*.msi, dist/release/*.zip).FullName --clobber
+      - name: Keep pre-release build artifacts
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: omca-windows-x64
+          path: |
+            dist/release/*.msi
+            dist/release/*.zip
+          if-no-files-found: error

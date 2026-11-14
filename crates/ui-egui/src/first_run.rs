@@ -5,7 +5,6 @@ use crate::i18n::tr;
 use crate::state::FirstRunStep;
 use crate::theme::{self, Tokens, size, space};
 use crate::{CraftApp, icons, widgets};
-use craft_anything_ai::{BackendKind, Detected};
 use craft_anything_engine::Mode;
 use egui::{Align2, RichText, Ui, Vec2};
 
@@ -30,7 +29,7 @@ pub fn show(app: &mut CraftApp, ui: &mut Ui) {
     // Where you are, the ArtCraft way: "02 / 04  AI", plus a progress hairline.
     let step = app.state.first_run.index();
     let y = full.bottom() - 34.0;
-    let names = ["Welcome", "AI", "Purpose", "Ready"];
+    let names = ["Welcome", "Models & accounts", "Purpose", "Ready"];
     let label = format!("{:02} / 04   {}", step + 1, tr(names.get(step).copied().unwrap_or_default()));
     let g = widgets::label_galley(ui, &label, theme::SMALL, t.text_dim);
     ui.painter().galley_with_override_text_color(egui::pos2(full.center().x - g.size().x / 2.0, y - g.size().y / 2.0), g, t.text_dim);
@@ -98,7 +97,7 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
     header(
         ui,
         "Who builds what you make",
-        "A coding agent such as Claude Code builds it, and an AI answers your questions in plain words. Change this any time in Settings → AI.",
+        "A coding agent such as Claude Code builds it, and an AI answers your questions in plain words. Change this any time in Settings → Models & accounts.",
     );
     // Whether something can build yet, in one line: the same rule Make and Start use.
     match app.default_builder() {
@@ -119,53 +118,25 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
         }
     }
     ui.add_space(space::M);
-    let detected: Vec<Detected> = app.detected.clone().unwrap_or_default();
-    let tab = crate::detect_tabs::bar(ui, &mut app.state.detect_tab, &detected);
-    let list_h = (ui.ctx().content_rect().height() - 330.0).clamp(220.0, 520.0);
-    egui::ScrollArea::vertical().max_height(list_h).show(ui, |ui| {
-        ui.set_width(width);
-        if app.detecting {
-            ui.horizontal(|ui| {
-                ui.add(crate::widgets::Spinner::new().color(t.accent));
-                ui.label(RichText::new(tr("Looking for AI on this computer…")).color(t.text_dim));
-            });
-            ui.add_space(space::SM);
+    ui.set_width(width);
+    let mut selected_backend = None;
+    for b in &app.backends {
+        let selected = app.state.backend.as_ref() == Some(&b.name);
+        if ui.selectable_label(selected, &b.name).clicked() {
+            selected_backend = Some(b.name.clone());
         }
-        ui.add_space(space::XS);
-        let mut shown = 0;
-        for d in detected.iter().filter(|d| crate::detect_tabs::tab_of(d) == tab) {
-            brain_card(app, ui, d);
-            ui.add_space(space::SM);
-            shown += 1;
-        }
-        if !app.detecting && shown == 0 && !detected.is_empty() {
-            ui.label(RichText::new(tr("Nothing of this kind was found.")).color(t.text_faint));
-        }
-        // Once an AI is added by its address, "we didn't find one" no longer applies.
-        if !app.detecting && detected.is_empty() && app.backends.is_empty() {
-            widgets::card(&t).show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
-                    icons::show(ui, "radar", size::ICON_XL, t.text_faint);
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(tr("We didn't find an AI on this computer yet")).font(theme::medium(theme::BODY)));
-                        ui.label(RichText::new(tr("You can add a Claude, ChatGPT or OpenRouter key, a local model (Ollama, LM Studio) or an agent you already use, later in Settings → AI.")).color(t.text_dim));
-                    });
-                });
-            });
-            ui.add_space(space::SM);
-        }
-        // A model server on another computer can't be found by looking here (#54, #98).
-        crate::settings_ui::server_form(app, ui);
-        ui.add_space(space::SM);
-        // "No AI for now"
-        let none_on = app.state.backend.is_none();
-        let r = option_row(ui, "circle-stop", "No AI for now", "The built-in engines still show you everything they find.", none_on);
-        if r.clicked() {
-            app.choose_backend(None);
-            app.state.first_run = FirstRunStep::Purpose;
-        }
-    });
+    }
+    if let Some(name) = selected_backend {
+        app.choose_backend(Some(name));
+    }
+    // "No AI for now"
+    let none_on = app.state.backend.is_none();
+    let r = option_row(ui, "circle-stop", "No AI for now", "The built-in engines still show you everything they find.", none_on);
+    if r.clicked() {
+        app.choose_backend(None);
+        app.state.first_run = FirstRunStep::Purpose;
+    }
+
     ui.add_space(space::L);
     ui.horizontal(|ui| {
         ui.add_space(((ui.available_width() - 240.0) / 2.0).max(0.0));
@@ -176,66 +147,29 @@ fn brain(app: &mut CraftApp, ui: &mut Ui, width: f32) {
             app.state.first_run = FirstRunStep::Purpose;
         }
     });
-}
-
-fn kind_icon(k: BackendKind) -> &'static str {
-    match k {
-        BackendKind::Anthropic | BackendKind::Openai | BackendKind::Openrouter | BackendKind::Gemini => "key-round",
-        BackendKind::OpenaiCompatible => "server",
-        BackendKind::AgentCli => "terminal",
-    }
-}
-
-fn brain_card(app: &mut CraftApp, ui: &mut Ui, d: &Detected) {
-    let t = Tokens::get(ui.ctx());
-    let name = d.suggestion.name.clone();
-    let on = app.state.backend.as_ref() == Some(&name);
-    let configured = app.backends.iter().any(|b| b.name == name);
-    let frame = widgets::card(&t).fill(if on { t.accent_soft } else { t.card }).stroke(theme::hairline(if on { t.accent } else { t.card_border }));
-    frame.show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            let (rect, _) = ui.allocate_exact_size(Vec2::splat(size::TILE_LG), egui::Sense::hover());
-            ui.painter().rect_filled(rect, t.radius, t.raised);
-            icons::paint(ui, rect, kind_icon(d.suggestion.kind), size::ICON_LG, t.accent_ink);
-            ui.vertical(|ui| {
-                ui.label(theme::heading(&name, theme::CARD));
-                ui.label(RichText::new(&d.reason).color(t.text_dim).size(theme::SMALL));
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if on {
-                    widgets::pill(ui, "Selected", t.on_accent, t.accent);
-                } else if configured {
-                    if widgets::action(ui, "Use this").clicked() {
-                        app.choose_backend(Some(name.clone()));
-                    }
-                } else if !d.needs_key && widgets::primary(ui, "Use this").clicked() {
-                    app.add_backend(d.suggestion.clone(), None);
-                }
-            });
-        });
-        // A subscription key is worth pasting even when the environment already has one, so a
-        // different key can be used without restarting the app.
-        let pastable = d.needs_key || d.suggestion.base_url.as_deref().is_some_and(craft_anything_ai::openai::is_opencode_go);
-        if pastable && !configured {
-            ui.add_space(space::S);
-            ui.horizontal(|ui| {
-                let key = app.key_inputs.entry(name.clone()).or_default();
-                ui.add(
-                    egui::TextEdit::singleline(key)
-                        .password(true)
-                        .hint_text(tr("Paste your API key (kept in your system keychain)"))
-                        .desired_width(ui.available_width() - 140.0)
-                        .frame(widgets::text_field_frame(&t)),
-                );
-                let key = key.trim().to_string();
-                if widgets::primary_icon(ui, None, "Connect", !key.is_empty()).clicked() && !key.is_empty() {
-                    // The key goes to the keychain; the app keeps no copy of it.
-                    app.key_inputs.remove(&name);
-                    app.add_backend(d.suggestion.clone(), Some(key));
-                }
-            });
+    ui.add_space(space::M);
+    crate::provider_connect::show(app, ui);
+    egui::CollapsingHeader::new(tr("Advanced")).id_salt("first-run-ai-advanced").show(ui, |ui| {
+        if app.detecting {
+            ui.add(widgets::Spinner::new());
         }
+        let mut add = None;
+        for found in app.detected.iter().flatten().filter(|found| found.suggestion.kind == craft_anything_ai::BackendKind::AgentCli && !found.needs_key) {
+            if !app.backends.iter().any(|backend| backend.name == found.suggestion.name) {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(&found.reason);
+                    if widgets::secondary(ui, None, &found.suggestion.name).clicked() {
+                        add = Some(found.suggestion.clone());
+                    }
+                });
+            }
+        }
+        if let Some(config) = add {
+            app.add_backend(config, None);
+        }
+        egui::CollapsingHeader::new(tr("Custom server")).id_salt("first-run-custom-server").show(ui, |ui| {
+            crate::settings_ui::server_form(app, ui);
+        });
     });
 }
 
@@ -317,7 +251,7 @@ fn done(app: &mut CraftApp, ui: &mut Ui) {
     let brain = app.state.backend.clone().unwrap_or_else(|| tr("the built-in engines"));
     let builds = match app.default_builder() {
         Some(b) => crate::i18n::trf("{name} builds what you make; answers come from {brain}.", &[("name", &b), ("brain", &brain)]),
-        None => crate::i18n::trf("Answers come from {brain}. To build, set up a coding agent in Settings → AI.", &[("brain", &brain)]),
+        None => crate::i18n::trf("Answers come from {brain}. To build, set up a coding agent in Settings → Models & accounts.", &[("brain", &brain)]),
     };
     ui.label(RichText::new(builds).size(theme::BODY).color(t.text_dim));
     ui.add_space(space::SM);

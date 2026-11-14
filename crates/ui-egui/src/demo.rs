@@ -12,6 +12,88 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Token-free example accounts for screenshots and isolated UI tests.
+pub fn provider_accounts(app: &mut CraftApp) {
+    let reset = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() + 26 * 60 * 60;
+    use craft_anything_ai::provider_runtime::{AccountInfo, ModelInfo, ProviderInfo, Snapshot, UsageLimit};
+    let snapshot = Snapshot {
+        providers: vec![
+            ProviderInfo {
+                id: "openai".into(),
+                name: "Example AI".into(),
+                login_available: true,
+                authenticated: true,
+                disabled_reason: None,
+                risk_warning: None,
+                auth_kind: Some("api_key".into()),
+                usage_error: None,
+                accounts: vec![
+                    AccountInfo {
+                        id: 1,
+                        label: "Example account".into(),
+                        detail: Some("Example workspace".into()),
+                        kind: "oauth".into(),
+                        selected: true,
+                        in_use: false,
+                        state: "available".into(),
+                        fetched_at: None,
+                        credits: Some("2 saved resets".into()),
+                        usage_error: None,
+                        limits: vec![UsageLimit {
+                            id: "weekly".into(),
+                            label: "Weekly".into(),
+                            used_fraction: Some(0.42),
+                            used: None,
+                            limit: None,
+                            unit: None,
+                            window_id: Some("7d".into()),
+                            resets_at: Some(reset),
+                        }],
+                    },
+                    AccountInfo {
+                        id: 2,
+                        label: "Second account".into(),
+                        detail: None,
+                        kind: "api_key".into(),
+                        selected: false,
+                        in_use: false,
+                        state: "available".into(),
+                        limits: vec![],
+                        fetched_at: None,
+                        credits: None,
+                        usage_error: None,
+                    },
+                ],
+            },
+            ProviderInfo {
+                id: "other".into(),
+                name: "Other AI".into(),
+                login_available: true,
+                authenticated: false,
+                disabled_reason: None,
+                risk_warning: None,
+                auth_kind: Some("api_key".into()),
+                accounts: vec![],
+                usage_error: None,
+            },
+        ],
+        models: vec![ModelInfo {
+            provider_id: "openai".into(),
+            id: "example-model".into(),
+            name: "Example model".into(),
+            context_window: None,
+            reasoning: false,
+        }],
+    };
+    crate::provider_connect::set_demo_snapshot(app, snapshot);
+}
+
+/// Prepare one deterministic account workflow scene without starting a runtime.
+pub fn provider_account_scene(app: &mut CraftApp, scene: &str) {
+    provider_accounts(app);
+    crate::provider_connect::set_demo_scene(app, scene);
+}
+
 /// Bytes that sniff as a small Linux program, with some readable strings inside.
 pub fn sample_program() -> Vec<u8> {
     let mut b = vec![0x7f, b'E', b'L', b'F', 2, 1, 1, 0];
@@ -232,6 +314,7 @@ fn workspace(slug: &str, name: &str, request: &str, target: TargetRef, status: S
             agent_session: None,
             agent_session_by: None,
             agent_session_deep: None,
+            capture_deep: None,
             allowed_actions: Vec::new(),
             last_reply: String::new(),
             asset_budget_usd: craft_anything_engine::workspace::ASSET_BUDGET_USD,

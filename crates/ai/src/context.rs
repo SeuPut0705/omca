@@ -36,6 +36,7 @@ pub fn estimate_tokens(history: &[Msg]) -> u64 {
             Block::RedactedThinking { data } => data.len(),
             Block::ToolUse { input, name, .. } => name.len() + input.to_string().len(),
             Block::ToolExtra { extra, .. } => extra.to_string().len(),
+            Block::ProviderData { provider, data } => provider.len() + data.to_string().len(),
             Block::ToolResult { content, .. } => content.len(),
         })
         .sum();
@@ -56,6 +57,10 @@ pub fn trim_old(history: &mut [Msg]) -> usize {
     let end = history.len().saturating_sub(KEEP_RECENT);
     let mut changed = 0;
     for m in history.iter_mut().take(end) {
+        // Provider metadata can refer to any content block in the same message.
+        if m.blocks.iter().any(|b| matches!(b, Block::ProviderData { .. })) {
+            continue;
+        }
         let before = m.blocks.len();
         // Earlier turns' reasoning isn't needed again (providers ignore it outside the current step).
         m.blocks.retain(|b| !matches!(b, Block::Thinking { .. } | Block::RedactedThinking { .. }));
@@ -194,6 +199,27 @@ mod tests {
                     h.get(i + 1).is_some_and(|n| n.blocks.iter().any(|b| matches!(b, Block::ToolResult { tool_use_id, .. } if tool_use_id == id)))
                 })
             })
+    }
+
+    #[test]
+    fn provider_metadata_roundtrips_and_stays_with_its_content() {
+        let message = Msg {
+            role: Speaker::Assistant,
+            blocks: vec![
+                Block::Thinking { thinking: "reason".into(), signature: "signed".into() },
+                Block::Text { text: "answer".into() },
+                Block::ProviderData { provider: "test".into(), data: json!({"signature": "opaque"}) },
+            ],
+        };
+        let encoded = serde_json::to_string(&message).unwrap();
+        assert!(encoded.contains("provider_data"));
+        let decoded: Msg = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, message);
+        assert!(estimate_tokens(std::slice::from_ref(&message)) > estimate_tokens(&[Msg { role: Speaker::Assistant, blocks: message.blocks[..2].to_vec() }]));
+        let mut history = vec![message.clone()];
+        history.extend((0..KEEP_RECENT).map(|_| Msg::user_text("later")));
+        trim_old(&mut history);
+        assert_eq!(history[0], message);
     }
 
     #[test]

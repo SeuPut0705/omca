@@ -32,6 +32,11 @@ pub enum Block {
         tool_use_id: String,
         extra: Value,
     },
+    /// Opaque metadata required to replay this message to its originating provider.
+    ProviderData {
+        provider: String,
+        data: Value,
+    },
     ToolResult {
         tool_use_id: String,
         content: String,
@@ -272,4 +277,9 @@ pub trait ChatModel: Send {
     fn turn(&mut self, req: &TurnRequest<'_>, on_delta: &mut dyn FnMut(Delta), stop: &Stop) -> Result<TurnResult, ToolError>;
     /// Model id, for display, journal and pricing.
     fn model(&self) -> String;
+    /// The context window its server says it has loaded, when it says one (see [`crate::window`]).
+    /// Asked on the agent's worker, never on the UI thread.
+    fn context_window(&self) -> Option<crate::window::Window> {
+        None
+    }
 }

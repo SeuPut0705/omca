@@ -331,6 +331,7 @@ pub enum SettingsTab {
     Builds,
     Plugins,
     Safety,
+    Updates,
 }
 
 /// A list or view that a tool fills.

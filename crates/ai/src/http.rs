@@ -98,7 +98,7 @@ pub fn status_error(what: &str, status: u16, body: &str) -> ToolError {
     let detail: String = full.unwrap_or_else(|| body.chars().take(300).collect()).chars().take(1000).collect();
     let (code, remediation) = match status {
         _ if dropped_request => (ErrorCode::BadSettings, ""),
-        401 | 403 => (ErrorCode::NoPermission, "The API key was rejected. Check it in Settings → AI."),
+        401 | 403 => (ErrorCode::NoPermission, "The API key was rejected. Check it in Settings → Models & accounts."),
         404 => (ErrorCode::BadSettings, "The model or address wasn't found. Check the model name and base URL."),
         408 | 504 => (ErrorCode::TimedOut, "The service took too long. Try again."),
         429 => (ErrorCode::OverLimit, "You've hit a rate or spending limit. Wait a moment or check your plan."),
@@ -109,7 +109,7 @@ pub fn status_error(what: &str, status: u16, body: &str) -> ToolError {
         .as_ref()
         .and_then(|v| v.pointer("/error/code").and_then(Value::as_str).or_else(|| v.pointer("/error/type").and_then(Value::as_str)).map(str::to_string));
     const RAISE: &str = "Give the model a larger context in its server (Ollama: the Context length setting or OLLAMA_CONTEXT_LENGTH; \
-                         LM Studio: the model's Context Length), or set context_tokens for this AI in Settings → AI so less is sent.";
+                         LM Studio: the model's Context Length), or set context_tokens for this AI in Settings → Models & accounts so less is sent.";
     let remediation = match overflow {
         Some((window, _)) => format!("The conversation is longer than the model's context window ({window} tokens). {RAISE}"),
         None if dropped_request => format!(

@@ -44,6 +44,13 @@ fn korean_startup_language_menu_and_saved_selection() {
     // set_language after app construction. Check both lookup and a rendered settings row.
     assert_eq!(i18n::language(), "ko");
     h.get_by_label("언어");
+    let providers = i18n::tr("Models & accounts");
+    assert_ne!(providers, "Models & accounts");
+    h.get_by_label(&providers).click();
+    h.run_steps(3);
+    h.get_by_label(&i18n::tr("Add account"));
+    h.get_by_label(&i18n::tr("General")).click();
+    h.run_steps(3);
     assert_eq!(i18n::trf("Opened {name}", &[("name", "sample.exe")]), "sample.exe 열림");
     assert_eq!(i18n::tr("A deliberately uncatalogued message"), "A deliberately uncatalogued message");
     assert_eq!(i18n::trf("Uncatalogued {name}", &[("name", "sample.exe")]), "Uncatalogued sample.exe");

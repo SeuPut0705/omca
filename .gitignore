@@ -16,3 +16,4 @@ corpus/
 *.pfx
 *.key
 .claude/settings.local.json
+/provider-runtime/node_modules/

@@ -382,9 +382,16 @@ impl AcpCore {
     }
 
     fn turn_done(&self) -> Out {
-        // This client has no attributable ACP usage totals. Leave the cost unknown instead of
-        // treating another provider's prices, or a session-wide total, as this turn's bill.
-        Out::Event(AgentEvent::TurnDone { backend: self.backend.clone(), input_tokens: 0, output_tokens: 0, cost_usd: None, cost_is_estimate: false })
+        // ACP usage updates describe the current context, without a per-turn token split.
+        // Leave usage and cost unknown.
+        Out::Event(AgentEvent::TurnDone {
+            backend: self.backend.clone(),
+            input_tokens: 0,
+            output_tokens: 0,
+            tokens_unknown: true,
+            cost_usd: None,
+            cost_is_estimate: false,
+        })
     }
 
     fn response(&mut self, id: u64, msg: &Value) -> Vec<Out> {
@@ -410,7 +417,9 @@ impl AcpCore {
                 _ => FailureKind::Unknown,
             }));
             let fix = match kind {
-                Pending::Authenticate => Some(format!("{} refused the key: add a fresh one in Settings → AI for this backend.", self.agent_name)),
+                Pending::Authenticate => {
+                    Some(format!("{} refused the key: add a fresh one in Settings → Models & accounts for this backend.", self.agent_name))
+                }
                 Pending::Initialize | Pending::NewSession => {
                     // "Needs a stored key" guidance only for an agent that takes one, and only
                     // when the refusal is auth: the typed failure kind first, the agent's own
@@ -420,7 +429,7 @@ impl AcpCore {
                         || text_lower.contains("authenticat")
                         || text_lower.contains("api_key");
                     if key_auth_method(&self.agent).is_some() && auth_refusal {
-                        Some(format!("{} needs an API key for ACP sessions: add one in Settings → AI for this backend.", self.agent_name))
+                        Some(format!("{} needs an API key for ACP sessions: add one in Settings → Models & accounts for this backend.", self.agent_name))
                     } else {
                         Some(
                             self.sign_in_fix
@@ -896,7 +905,7 @@ impl AcpConversation {
                 }
             })
             .label(name.clone())
-            .remediation(format!("Install {name}, or choose its program in Settings → AI."))
+            .remediation(format!("Install {name}, or choose its program in Settings → Models & accounts."))
             .spawn()?;
         let stdin = proc.take_stdin();
         self.proc = Some(proc);
@@ -938,6 +947,7 @@ impl AcpConversation {
                     backend: self.backend.clone(),
                     input_tokens: 0,
                     output_tokens: 0,
+                    tokens_unknown: true,
                     cost_usd: None,
                     cost_is_estimate: false,
                 });
@@ -1004,7 +1014,14 @@ impl Conversation for AcpConversation {
                 )),
                 log,
             });
-            events.push(AgentEvent::TurnDone { backend: self.backend.clone(), input_tokens: 0, output_tokens: 0, cost_usd: None, cost_is_estimate: false });
+            events.push(AgentEvent::TurnDone {
+                backend: self.backend.clone(),
+                input_tokens: 0,
+                output_tokens: 0,
+                tokens_unknown: true,
+                cost_usd: None,
+                cost_is_estimate: false,
+            });
         }
         events
     }
@@ -1126,9 +1143,13 @@ mod tests {
             r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s-1","update":{"sessionUpdate":"tool_call_update","toolCallId":"t1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"fn main"}}]}}}"#,
         ));
         assert!(matches!(&ev[..], [AgentEvent::ToolFinished { ok: true, summary, tool, .. }] if summary == "fn main" && tool == "Read main.rs"));
+        let usage = c.line(
+            r#"{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s-1","update":{"sessionUpdate":"usage_update","used":850,"size":100000}}}"#,
+        );
+        assert!(events(usage).is_empty(), "context usage is not a per-turn token count");
         let end = c.line(r#"{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}"#);
         assert!(end.contains(&Out::TurnEnded));
-        assert!(matches!(events(end)[..], [AgentEvent::TurnDone { .. }]));
+        assert!(matches!(events(end)[..], [AgentEvent::TurnDone { tokens_unknown: true, cost_usd: None, .. }]));
         // The next message goes straight out on the same session.
         assert_eq!(sent(&c.prompt("And then?"))[0]["params"]["sessionId"], "s-1");
     }

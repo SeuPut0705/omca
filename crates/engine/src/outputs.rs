@@ -136,19 +136,32 @@ fn cargo_programs(app: &Path) -> Vec<String> {
     out
 }
 
+/// The program a child should start when it runs with `app` as its working directory: an
+/// app-relative file is made absolute so the working directory is not applied to it twice. A
+/// bare command name stays for PATH lookup.
+pub fn absolute_program(program: &Path) -> PathBuf {
+    if program.is_relative() && program.components().count() > 1 { crate::workspace::absolute(program) } else { program.to_path_buf() }
+}
+
 /// What "Play" starts for a finished game or app: (program, arguments), run from app/. A Godot
 /// project opens in the Godot it was built with, an Electron app in the Electron it installed.
 /// Other toolchains may declare an interpreted/runner launch when no packaged program exists.
 pub fn launch(app: &Path, godot: Option<&Path>) -> Option<(PathBuf, Vec<String>)> {
     if app.join("project.godot").is_file() {
-        let root = std::path::absolute(app).ok()?;
-        return godot.map(|g| (g.to_path_buf(), vec!["--path".to_string(), root.display().to_string()]));
+        return godot_launch(app, godot?);
     }
     if uses_electron(app) {
         let root = std::path::absolute(app).ok()?;
         return electron_program(&root).map(|e| (e, vec![root.display().to_string()]));
     }
     built_program(app).or_else(|| packaged_program(&app.join("Build"))).map(|p| (p, Vec::new())).or_else(|| crate::toolchains::found_in(app)?.launch(app))
+}
+
+fn godot_launch(app: &Path, godot: &Path) -> Option<(PathBuf, Vec<String>)> {
+    let root = std::path::absolute(app).ok()?;
+    // Godot decodes --path as UTF-8. A lossy conversion could open a different project.
+    let project = root.to_str()?;
+    Some((godot.to_path_buf(), vec!["--path".into(), project.into()]))
 }
 
 /// The packages `app`'s package.json depends on (dev dependencies too); none without a readable one.
@@ -248,6 +261,30 @@ pub fn is_program(p: &Path) -> bool {
 #[cfg(test)]
 mod launch_tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn godot_does_not_open_a_different_project_after_lossy_conversion() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join(std::ffi::OsStr::from_bytes(b"game-\xff"));
+        let other = dir.path().join("game-\u{fffd}");
+        std::fs::create_dir(&other).unwrap();
+        std::fs::write(other.join("project.godot"), "").unwrap();
+        match std::fs::create_dir(&app) {
+            Ok(()) => {
+                std::fs::write(app.join("project.godot"), "").unwrap();
+                assert_eq!(launch(&app, Some(Path::new("godot"))), None);
+            }
+            #[cfg(target_os = "macos")]
+            Err(e) if e.raw_os_error() == Some(92) => {}
+            Err(e) => panic!("creating non-UTF-8 project: {e}"),
+        }
+        let godot = Path::new("godot");
+        assert_eq!(launch(&other, Some(godot)), Some((godot.into(), vec!["--path".into(), other.to_str().unwrap().into()])));
+        assert_eq!(godot_launch(&app, godot), None);
+    }
 
     /// The child runs inside the project, so an app path passed to it must survive that cwd change.
     #[test]

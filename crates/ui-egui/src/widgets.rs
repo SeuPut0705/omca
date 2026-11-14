@@ -924,4 +924,31 @@ mod tests {
         assert_eq!(wait_note(4000, Some(Duration::from_secs(5))), None, "it's visibly moving: nothing to add");
         assert!(wait_note(4000, None).unwrap().contains("big one"), "without news to go on, the old note");
     }
+
+    /// The working card's clock keeps its own space: the words wrap before it instead of running
+    /// under it, the way `stat_row`'s value does.
+    #[test]
+    fn the_works_clock_never_paints_over_the_words() {
+        use egui_kittest::{Harness, kittest::Queryable};
+        let began = std::time::Instant::now() - Duration::from_secs(42);
+        let mut h = Harness::new_ui_state(
+            move |ui, first: &mut bool| {
+                crate::theme::install_fonts(ui.ctx());
+                // Installed fonts become active at the next pass, and the card's title is set in
+                // the "semibold" family: draw it once they are.
+                if std::mem::replace(first, false) {
+                    ui.ctx().request_repaint();
+                    return;
+                }
+                ui.set_width(300.0);
+                working_since(ui, "Working on it", Some("Now: Running a long command (42s)  ·  12 actions done so far"), Some(began), None);
+            },
+            true,
+        );
+        h.run_steps(3);
+        let clock = h.get_by_label("42s").rect();
+        let words = h.get_by_label_contains("Now: Running a long command").rect();
+        assert!(!clock.intersects(words), "the clock paints over the words: {clock:?} vs {words:?}");
+        assert!(clock.left() > words.right(), "the clock sits beside the words: {clock:?} vs {words:?}");
+    }
 }

@@ -19,7 +19,7 @@ HERE="$ROOT/packaging/macos"
 
 ARCH=aarch64
 SKIP_BUILD=0
-while [ $# -gt 0 ]; do
+while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-build) SKIP_BUILD=1; shift ;;
     -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
@@ -29,8 +29,12 @@ done
 TARGETS=(aarch64-apple-darwin)
 
 # Keep in sync with LSMinimumSystemVersion in Info.plist.in.
-export MACOSX_DEPLOYMENT_TARGET=11.0
+export MACOSX_DEPLOYMENT_TARGET=13.0
 IDENTITY="${MACOS_SIGN_IDENTITY:--}"
+PROVIDER_ENTITLEMENTS="$HERE/provider-runtime-entitlements.plist"
+if [[ "$IDENTITY" = "-" ]]; then
+  PROVIDER_ENTITLEMENTS="$HERE/provider-runtime-adhoc-entitlements.plist"
+fi
 SHORT_VERSION="${VERSION%%-*}"
 WORK="$CARGO_TARGET_DIR/macos-package"
 APP="$WORK/OMCA.app"
@@ -38,18 +42,19 @@ DMG="$DIST/craft-anything-$VERSION-macos-$ARCH.dmg"
 CLI_ZIP="$DIST/craft-anything-cli-$VERSION-macos-$ARCH.zip"
 
 NOTARIZE=0
-if [ "$IDENTITY" = "-" ]; then
+if [[ "$IDENTITY" = "-" ]]; then
   warn "macOS: ad-hoc signing (no MACOS_SIGN_IDENTITY); artifacts are not notarized"
-elif [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+elif [[ -n "${APPLE_ID:-}" ]] && [[ -n "${APPLE_PASSWORD:-}" ]] && [[ -n "${APPLE_TEAM_ID:-}" ]]; then
   NOTARIZE=1
 else
   warn "macOS: APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID incomplete; signed but not notarized"
 fi
 
 echo "==> OMCA $VERSION for macOS ($ARCH; ${BINS[*]}), identity: $IDENTITY, notarize: $NOTARIZE"
+build_provider_runtime bun-darwin-arm64
 
 # ---- build -------------------------------------------------------------------------------------
-if [ "$SKIP_BUILD" = 0 ]; then
+if [[ "$SKIP_BUILD" = 0 ]]; then
   ensure_craft_fonts
   args=()
   for t in "${TARGETS[@]}"; do args+=(--target "$t"); done
@@ -69,9 +74,9 @@ done
 sign() {
   # Hardened runtime + secure timestamp for a real identity; ad-hoc can't be timestamped.
   local ts=(--timestamp)
-  [ "$IDENTITY" = "-" ] && ts=(--timestamp=none)
+  [[ "$IDENTITY" = "-" ]] && ts=(--timestamp=none)
   local kc=()
-  [ -n "${MACOS_KEYCHAIN:-}" ] && kc=(--keychain "$MACOS_KEYCHAIN")
+  [[ -n "${MACOS_KEYCHAIN:-}" ]] && kc=(--keychain "$MACOS_KEYCHAIN")
   codesign --force --sign "$IDENTITY" ${kc[@]+"${kc[@]}"} "${ts[@]}" "$@"
 }
 
@@ -83,8 +88,8 @@ notarize() {
   echo "$out"
   id="$(printf '%s' "$out" | plutil -extract id raw -o - - 2>/dev/null || true)"
   status="$(printf '%s' "$out" | plutil -extract status raw -o - - 2>/dev/null || true)"
-  if [ "$status" != "Accepted" ]; then
-    if [ -n "$id" ]; then
+  if [[ "$status" != "Accepted" ]]; then
+    if [[ -n "$id" ]]; then
       xcrun notarytool log "$id" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" || true
     fi
     echo "error: notarization of $(basename "$file") failed (status: ${status:-unknown})" >&2
@@ -103,7 +108,11 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$WORK/bin/craft-anything" "$APP/Contents/MacOS/craft-anything"
 # The CLI goes beside it: the app starts it as the MCP server its coding agents use, and finds it
 # next to its own executable (`self_cli_path`). Without it every Claude Code build fails (#91).
-if [ "$HAS_CLI" = 1 ]; then cp "$WORK/bin/craft-anything-cli" "$APP/Contents/MacOS/craft-anything-cli"; fi
+if [[ "$HAS_CLI" = 1 ]]; then cp "$WORK/bin/craft-anything-cli" "$APP/Contents/MacOS/craft-anything-cli"; fi
+cp "$PROVIDER_RUNTIME_DIR/omca-provider-runtime" "$APP/Contents/MacOS/"
+if [ -d "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" ]; then
+  cp -R "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" "$APP/Contents/Resources/"
+fi
 cp "$ICNS" "$APP/Contents/Resources/craft-anything.icns"
 # Every licence text the app must carry (packaging/env.sh), inside the bundle.
 stage_licences "$APP/Contents/Resources/Licenses"
@@ -116,14 +125,18 @@ printf 'APPL????' >"$APP/Contents/PkgInfo"
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
 # The nested code is the main executable and the CLI; frameworks/helpers would be signed here too.
 # The CLI keeps the identifier its zip has.
-if [ "$HAS_CLI" = 1 ]; then
+if [[ "$HAS_CLI" = 1 ]]; then
   sign --options runtime --identifier com.seuput.omca-cli "$APP/Contents/MacOS/craft-anything-cli"
+fi
+sign --options runtime --entitlements "$PROVIDER_ENTITLEMENTS" --identifier com.seuput.omca-provider-runtime "$APP/Contents/MacOS/omca-provider-runtime"
+if [ -d "$APP/Contents/Resources/provider-runtime-assets" ]; then
+  while IFS= read -r -d '' native; do sign --options runtime "$native"; done < <(find "$APP/Contents/Resources/provider-runtime-assets" -type f \( -name '*.node' -o -name '*.dylib' \) -print0)
 fi
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/craft-anything"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"
 
-if [ "$NOTARIZE" = 1 ]; then
+if [[ "$NOTARIZE" = 1 ]]; then
   ditto -c -k --keepParent "$APP" "$WORK/craft-anything-notarize.zip"
   notarize "$WORK/craft-anything-notarize.zip"
   retry xcrun stapler staple "$APP"
@@ -156,7 +169,7 @@ hdiutil_retry() {
     if hdiutil "$@"; then
       return 0
     fi
-    [ "$attempt" = 5 ] && { echo "hdiutil $what failed 5 times" >&2; return 1; }
+    [[ "$attempt" = 5 ]] && { echo "hdiutil $what failed 5 times" >&2; return 1; }
     echo "hdiutil $what failed (attempt $attempt of 5); retrying in $((attempt * 10))s" >&2
     sleep $((attempt * 10))
   done
@@ -174,20 +187,24 @@ if ! codesign --verify --strict --deep --verbose=2 "$MOUNT/OMCA.app"; then
   exit 1
 fi
 # The licences travel with the app as shipped, not only with the CLI zip.
-for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md LICENSE-lucide.txt THIRD-PARTY-LICENSES.html; do
-  if [ ! -s "$MOUNT/OMCA.app/Contents/Resources/Licenses/$f" ]; then
+for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md LICENSE-lucide.txt THIRD-PARTY-LICENSES.html PROVIDER-RUNTIME-LICENSES.txt; do
+  if [[ ! -s "$MOUNT/OMCA.app/Contents/Resources/Licenses/$f" ]]; then
     echo "error: $f is missing from OMCA.app in the DMG" >&2
     hdiutil_retry detach detach "$MOUNT" >/dev/null
     exit 1
   fi
 done
-if [ "$HAS_CLI" = 1 ] && ! "$MOUNT/OMCA.app/Contents/MacOS/craft-anything-cli" --version; then
+if [[ "$HAS_CLI" = 1 ]] && ! "$MOUNT/OMCA.app/Contents/MacOS/craft-anything-cli" --version; then
   echo "error: the app in the DMG has no working craft-anything-cli beside its executable" >&2
   hdiutil_retry detach detach "$MOUNT" >/dev/null || true
   exit 1
 fi
+if ! bun "$ROOT/provider-runtime/smoke.ts" "$MOUNT/OMCA.app/Contents/MacOS/omca-provider-runtime" "$WORK/provider-artifact-smoke"; then
+  hdiutil_retry detach detach "$MOUNT" >/dev/null || true
+  exit 1
+fi
 hdiutil_retry detach detach "$MOUNT" >/dev/null
-if [ "$NOTARIZE" = 1 ]; then
+if [[ "$NOTARIZE" = 1 ]]; then
   notarize "$DMG"
   retry xcrun stapler staple "$DMG"
   retry xcrun stapler validate "$DMG"
@@ -195,11 +212,17 @@ if [ "$NOTARIZE" = 1 ]; then
 fi
 
 # ---- CLI ---------------------------------------------------------------------------------------
-if [ "$HAS_CLI" = 1 ]; then
+if [[ "$HAS_CLI" = 1 ]]; then
   echo "==> building $CLI_ZIP"
   CLI_DIR="$WORK/craft-anything-cli-$VERSION-macos-$ARCH"
   mkdir -p "$CLI_DIR"
   cp "$WORK/bin/craft-anything-cli" "$CLI_DIR/"
+  cp "$PROVIDER_RUNTIME_DIR/omca-provider-runtime" "$CLI_DIR/"
+  if [ -d "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" ]; then
+    cp -R "$PROVIDER_RUNTIME_DIR/provider-runtime-assets" "$CLI_DIR/"
+    while IFS= read -r -d '' native; do sign --options runtime "$native"; done < <(find "$CLI_DIR/provider-runtime-assets" -type f \( -name '*.node' -o -name '*.dylib' \) -print0)
+  fi
+  sign --options runtime --entitlements "$PROVIDER_ENTITLEMENTS" --identifier com.seuput.omca-provider-runtime "$CLI_DIR/omca-provider-runtime"
   copy_docs "$CLI_DIR"
   # Same Developer ID and hardened runtime as the app, with an explicit reverse-DNS identifier
   # (codesign would otherwise use the bare file name).
@@ -209,7 +232,7 @@ if [ "$HAS_CLI" = 1 ]; then
   ditto -c -k --keepParent "$CLI_DIR" "$CLI_ZIP"
   # notarytool accepts a zip of the bare binary. A bare Mach-O can't carry a stapled ticket, so
   # Gatekeeper looks the notarization up online when a quarantined copy first runs.
-  if [ "$NOTARIZE" = 1 ]; then notarize "$CLI_ZIP"; fi
+  if [[ "$NOTARIZE" = 1 ]]; then notarize "$CLI_ZIP"; fi
   "$WORK/bin/craft-anything-cli" --version
 else
   warn "apps/craft-anything-cli is not in this workspace: no CLI zip"

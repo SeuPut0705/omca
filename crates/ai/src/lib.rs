@@ -24,12 +24,15 @@ pub mod openai;
 mod pace;
 pub mod price;
 pub mod prompt;
+pub mod provider_runtime;
 pub mod providers;
 pub mod rebuild;
 pub mod ssh;
+pub mod window;
 
+pub use agent::FULL_TOOLS_BUDGET;
 pub use cli_agents::models::{AgentModel, ModelContext};
-pub use config::{AiConfig, BackendEntry, BackendOptions, Price};
+pub use config::{AiConfig, BackendEntry, BackendOptions, Price, ToolList};
 pub use failure::{FailureKind, TurnFailure};
 pub use keys::KeyStore;
 pub use model::Effort;
@@ -38,6 +41,7 @@ use crate::agent::{ApiConversation, EngineHost, LoopConfig, ModelSlot};
 use crate::model::{ChatModel, Delta, Msg, Stop, TurnRequest, TurnResult};
 use craft_anything_engine::{CancelToken, Engine, Settings};
 use craft_anything_evidence::{ErrorCode, ToolError};
+use craft_anything_platform::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -62,6 +66,7 @@ pub enum BackendKind {
     OpenaiCompatible,
     /// Claude Code, Codex, Gemini CLI, Hermes Agent, OpenCode… run as a subprocess with our MCP server.
     AgentCli,
+    Managed,
 }
 
 impl BackendKind {
@@ -73,6 +78,7 @@ impl BackendKind {
             BackendKind::Gemini => "Gemini (Google AI Studio)",
             BackendKind::OpenaiCompatible => "Local / OpenAI-compatible server",
             BackendKind::AgentCli => "Agent app (command line)",
+            BackendKind::Managed => "Managed provider",
         }
     }
 
@@ -83,7 +89,7 @@ impl BackendKind {
             BackendKind::Openai => &[openai::OPENAI_DEFAULT_MODEL],
             BackendKind::Openrouter => openai::OPENROUTER_MODELS,
             BackendKind::Gemini => openai::GEMINI_MODELS,
-            BackendKind::OpenaiCompatible => &[],
+            BackendKind::OpenaiCompatible | BackendKind::Managed => &[],
             BackendKind::AgentCli => {
                 &["claude-code", "codex", "copilot", "grok", "gemini-cli", "opencode", "antigravity", "hermes", "maki", "aider", "dsh", "devin"]
             }
@@ -94,7 +100,12 @@ impl BackendKind {
     pub fn is_harness(self) -> bool {
         match self {
             BackendKind::AgentCli => true,
-            BackendKind::Anthropic | BackendKind::Openai | BackendKind::Openrouter | BackendKind::Gemini | BackendKind::OpenaiCompatible => false,
+            BackendKind::Anthropic
+            | BackendKind::Openai
+            | BackendKind::Openrouter
+            | BackendKind::Gemini
+            | BackendKind::OpenaiCompatible
+            | BackendKind::Managed => false,
         }
     }
 
@@ -200,15 +211,37 @@ fn opencode_go_models_base(base: &str) -> String {
     }
 }
 
-/// The effort an AI thinks at, when it can be chosen (Settings → AI): the Claude API and Claude
-/// Code, which take every level in [`Effort::ALL`]. `None` for the others, which don't use it.
+/// The reasoning levels OpenAI's API takes, which OpenAI-compatible services follow.
+pub const OPENAI_EFFORTS: [Effort; 6] = [Effort::None, Effort::Minimal, Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh];
+
+/// The levels every Gemini model takes through its OpenAI-compatible API: `xhigh` is for one
+/// model only, and `none` can't turn reasoning off on 2.5 Pro, 3 or 4 (Google's OpenAI
+/// compatibility page). shortcut: not per model, so a model's extra level isn't offered;
+/// add a per-model table if someone needs `none` or `xhigh` on Gemini.
+pub const GEMINI_EFFORTS: [Effort; 4] = [Effort::Minimal, Effort::Low, Effort::Medium, Effort::High];
+
+/// The effort levels an AI can be set to (Settings → AI): every Claude level for the Claude API
+/// and Claude Code, OpenAI's for the OpenAI-style APIs (#1813), none for the others.
+pub fn effort_levels(config: &BackendConfig) -> &'static [Effort] {
+    match config.kind {
+        BackendKind::Anthropic => &Effort::ALL,
+        BackendKind::AgentCli if config.model == "claude-code" => &Effort::ALL,
+        BackendKind::Gemini => &GEMINI_EFFORTS,
+        BackendKind::Openai | BackendKind::Openrouter | BackendKind::OpenaiCompatible | BackendKind::Managed => &OPENAI_EFFORTS,
+        BackendKind::AgentCli => &[],
+    }
+}
+
+/// The effort an AI thinks at: for Claude, the chosen level or high; for an OpenAI-style API,
+/// the chosen level, since not every model there takes one, so nothing is sent until it's
+/// chosen. `None` when no level is sent.
 pub fn effort_in_use(config: &BackendConfig, options: Option<&BackendOptions>) -> Option<Effort> {
-    let claude = match config.kind {
-        BackendKind::Anthropic => true,
-        BackendKind::AgentCli => config.model == "claude-code",
-        _ => false,
-    };
-    claude.then(|| prompt::choose_effort(options.and_then(|o| o.effort)))
+    let chosen = options.and_then(|o| o.effort);
+    match effort_levels(config) {
+        [] => None,
+        levels if levels == Effort::ALL => Some(prompt::choose_effort(chosen)),
+        levels => chosen.filter(|e| levels.contains(e)),
+    }
 }
 
 /// The model an AI uses, when it can be chosen (Settings → AI, #123): an API's own, or the one
@@ -317,6 +350,9 @@ pub enum AgentEvent {
         /// Every prompt token, cached ones included, as agent apps report them.
         input_tokens: u64,
         output_tokens: u64,
+        /// The backend didn't report token counts attributable to this turn.
+        #[serde(default)]
+        tokens_unknown: bool,
         cost_usd: Option<f64>,
         /// `cost_usd` is the agent's own guess at API prices, not what a key was charged: a
         /// subscription may cover the whole of it.
@@ -404,6 +440,10 @@ impl ChatModel for Tunneled {
     fn model(&self) -> String {
         self.inner.model()
     }
+
+    fn context_window(&self) -> Option<window::Window> {
+        self.inner.context_window()
+    }
 }
 
 /// The tools this layer adds to the engine's (rebuild control), for
@@ -421,20 +461,64 @@ pub struct AiHub {
     pub engine: Arc<Engine>,
     settings_path: Option<PathBuf>,
     keys: KeyStore,
+    /// Serializes a backend's key and configuration changes, so a save can't land after a remove
+    /// has deleted the key and the backend. Held across a keychain call or a settings save, so a
+    /// waiter is a job, not a stuck lock.
+    backend_edits: Mutex<()>,
 }
 
 impl AiHub {
     pub fn new(engine: Arc<Engine>) -> Self {
-        AiHub { engine, settings_path: None, keys: KeyStore::system() }
+        AiHub { engine, settings_path: None, keys: KeyStore::system(), backend_edits: Mutex::new(()) }
     }
 
     /// A hub with explicit settings file and key store (tests, portable installs).
     pub fn with_stores(engine: Arc<Engine>, settings_path: PathBuf, keys: KeyStore) -> Self {
-        AiHub { engine, settings_path: Some(settings_path), keys }
+        AiHub { engine, settings_path: Some(settings_path), keys, backend_edits: Mutex::new(()) }
     }
 
     fn settings_path(&self) -> PathBuf {
         self.settings_path.clone().unwrap_or_else(Settings::path)
+    }
+
+    pub fn provider_client(&self) -> provider_runtime::ProviderClient {
+        let settings = self.settings_path();
+        provider_runtime::ProviderClient::new(settings.parent().unwrap_or(std::path::Path::new(".")).join("providers"))
+    }
+
+    pub fn connect_provider(&self, provider_id: &str, model_id: &str) -> Result<String, ToolError> {
+        let snapshot = self.provider_client().snapshot(false)?;
+        let provider = snapshot.providers.iter().find(|p| p.id == provider_id).ok_or_else(|| ToolError::invalid("Unknown provider."))?;
+        if !provider.authenticated || provider.disabled_reason.is_some() {
+            return Err(ToolError::unavailable("This provider is not available or signed in."));
+        }
+        if !self.provider_client().models(provider_id)?.iter().any(|m| m.id == model_id) {
+            return Err(ToolError::invalid("Unknown provider model."));
+        }
+        let existing =
+            self.config().backends.into_iter().find(|b| b.config.kind == BackendKind::Managed && b.options.provider_id.as_deref() == Some(provider_id));
+        let mut entry = existing.unwrap_or_else(|| BackendEntry {
+            config: BackendConfig {
+                name: format!("{} ({})", provider.name, provider.id),
+                kind: BackendKind::Managed,
+                model: model_id.to_string(),
+                base_url: None,
+                ssh_host: None,
+                enabled: true,
+            },
+            options: BackendOptions { provider_id: Some(provider_id.to_string()), ..Default::default() },
+        });
+        entry.config.model = model_id.to_string();
+        entry.config.enabled = true;
+        let name = entry.config.name.clone();
+        self.add_backend_with(entry, None)?;
+        Ok(name)
+    }
+
+    /// Where a failed model turn writes its log: `logs/` beside the settings file, as an agent
+    /// CLI's failures do (see [`failure_log`]).
+    fn failure_logs(&self) -> Option<PathBuf> {
+        self.settings_path().parent().map(failure_log::dir_in)
     }
 
     /// The current AI configuration. Never blocks on a running tool: if the session is busy the
@@ -501,9 +585,8 @@ impl AiHub {
         let role = config::role_key(role).to_string();
         match name {
             Some(n) if cfg.get(n).is_none() => {
-                return Err(
-                    ToolError::invalid(format!("No AI backend named {n:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
-                );
+                return Err(ToolError::invalid(format!("No AI backend named {n:?}"))
+                    .with_remediation("See `craft-anything-cli ai list`, or add one in Settings → Models & accounts."));
             }
             Some(n) => {
                 cfg.roles.insert(role, n.to_string());
@@ -694,6 +777,21 @@ impl AiHub {
         self.config().backends.into_iter().map(|b| (b.config.name, b.options)).collect()
     }
 
+    /// For each agent app on this computer whose saved program can't be used (an update moved it,
+    /// #721), the program that runs in its place. It looks at the disk and PATH: call it on a worker.
+    pub fn replaced_programs(&self) -> std::collections::BTreeMap<String, String> {
+        self.config()
+            .backends
+            .into_iter()
+            .filter(|b| b.config.kind == BackendKind::AgentCli && b.config.ssh_host.as_deref().is_none_or(|h| h.trim().is_empty()))
+            .filter_map(|b| {
+                let program = cli_agents::program_of(&b.config, &b.options).ok()?;
+                cli_agents::replaced_program(&b.options, &program)?;
+                Some((b.config.name, program))
+            })
+            .collect()
+    }
+
     /// The model a backend uses: an API's model, or the one its agent is asked for. Returns
     /// false when there was no such backend.
     pub fn set_model(&self, name: &str, model: &str) -> Result<bool, ToolError> {
@@ -721,13 +819,18 @@ impl AiHub {
         Ok(true)
     }
 
-    /// How hard a backend thinks (`None`: the usual level again). Only the Claude API and Claude
-    /// Code take one ([`effort_in_use`]). Returns false when there was no such backend.
+    /// How hard a backend thinks (`None`: the usual level again). Only the levels in
+    /// [`effort_levels`] are taken. Returns false when there was no such backend.
     pub fn set_effort(&self, name: &str, effort: Option<Effort>) -> Result<bool, ToolError> {
         let mut cfg = self.config_to_change()?;
         let Some(b) = cfg.backends.iter_mut().find(|b| b.config.name == name) else { return Ok(false) };
-        if effort.is_some() && effort_in_use(&b.config, Some(&b.options)).is_none() {
-            return Err(ToolError::invalid(format!("{name} doesn't take an effort level.")).with_remediation("Effort is for the Claude API and Claude Code."));
+        let levels = effort_levels(&b.config);
+        if let Some(e) = effort.filter(|e| !levels.contains(e)) {
+            let fix = match levels {
+                [] => "Effort is for the Claude API, Claude Code and OpenAI-style APIs.".to_string(),
+                levels => format!("Use one of: {}.", levels.iter().map(|l| l.as_str()).collect::<Vec<_>>().join(", ")),
+            };
+            return Err(ToolError::invalid(format!("{name} doesn't take the effort level {}.", e.as_str())).with_remediation(fix));
         }
         b.options.effort = effort;
         self.save_config(&cfg)?;
@@ -755,7 +858,8 @@ impl AiHub {
         let session = self.engine.try_session().ok_or_else(|| ToolError::invalid("The app is busy with another task. Try again in a moment."))?;
         let config = AiConfig::from_table(&session.settings.ai)?;
         let backend = config.get(name).cloned().ok_or_else(|| {
-            ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
+            ToolError::invalid(format!("No AI backend named {name:?}"))
+                .with_remediation("See `craft-anything-cli ai list`, or add one in Settings → Models & accounts.")
         })?;
         Ok(ModelContext { backend, directory: session.project.as_ref().map(|p| p.root.clone()) })
     }
@@ -801,6 +905,8 @@ impl AiHub {
 
     /// Remove a backend and its stored key. Returns false when there was no such backend.
     pub fn remove_backend(&self, name: &str) -> Result<bool, ToolError> {
+        let edit = self.backend_edits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        edit.label("Backend key or removal");
         if self.config_to_change()?.get(name).is_none() {
             return Ok(false);
         }
@@ -856,6 +962,59 @@ impl AiHub {
         })
     }
 
+    /// Which backends have a key saved in the app, rather than only in the environment. The
+    /// keychain can be slow, so the app reads this on a worker.
+    pub fn stored_backend_keys(&self) -> std::collections::BTreeMap<String, bool> {
+        self.config()
+            .backends
+            .iter()
+            .filter(|b| b.config.kind != BackendKind::AgentCli)
+            .map(|b| (b.config.name.clone(), self.keys.get(&b.config.name).is_some()))
+            .collect()
+    }
+
+    /// Whether an API backend has a key saved in the app (not the environment); never the key.
+    pub fn saved_backend_key(&self, name: &str) -> Result<bool, ToolError> {
+        if self.entry(name)?.config.kind == BackendKind::AgentCli {
+            return Err(ToolError::invalid("A coding agent keeps its own sign-in; there is no saved key to report here."));
+        }
+        Ok(self.keys.get(name).is_some())
+    }
+
+    /// Replace the key saved for an API backend (#1358). The backend and its options stay as they
+    /// are; an older key in the system keychain must not keep winning, so the new one is read back.
+    pub fn set_backend_key(&self, name: &str, key: &str) -> Result<(), ToolError> {
+        let edit = self.backend_edits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        edit.label("Backend key or removal");
+        if self.entry(name)?.config.kind == BackendKind::AgentCli {
+            return Err(ToolError::invalid("A coding agent keeps its own sign-in; there is no key to save for it here."));
+        }
+        let key = key.trim();
+        if key.is_empty() {
+            return Err(ToolError::invalid("The key is empty."));
+        }
+        self.keys.set(name, key)?;
+        // A keychain that refused the write can leave the fallback file holding the new key while
+        // the keychain still wins with the old one. Reading back makes that a loud failure; trying
+        // again after unlocking the keychain is safe.
+        if self.keys.get(name).as_deref() != Some(key) {
+            return Err(ToolError::new(ErrorCode::NoPermission, format!("The new key for {name} wasn't used: the system keychain still has an older one."))
+                .with_remediation("Unlock the keychain, or delete this AI's entry in your keychain app, then save the key again."));
+        }
+        Ok(())
+    }
+
+    /// Forget the key saved for an API backend, so the one in the environment is used again. The
+    /// backend itself stays.
+    pub fn remove_backend_key(&self, name: &str) -> Result<(), ToolError> {
+        let edit = self.backend_edits.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        edit.label("Backend key or removal");
+        if self.entry(name)?.config.kind == BackendKind::AgentCli {
+            return Err(ToolError::invalid("A coding agent keeps its own sign-in; there is no saved key to forget here."));
+        }
+        self.keys.delete(name)
+    }
+
     /// This installation's OpenCode Go session id. A backend added before one was made, or found
     /// from an environment key, has none saved: it gets one for the life of this process, as
     /// OpenCode Go refuses a request without the header (#1225). Reading never writes:
@@ -868,7 +1027,8 @@ impl AiHub {
 
     fn entry(&self, name: &str) -> Result<BackendEntry, ToolError> {
         self.config().get(name).cloned().ok_or_else(|| {
-            ToolError::invalid(format!("No AI backend named {name:?}")).with_remediation("See `craft-anything-cli ai list`, or add one in Settings → AI.")
+            ToolError::invalid(format!("No AI backend named {name:?}"))
+                .with_remediation("See `craft-anything-cli ai list`, or add one in Settings → Models & accounts.")
         })
     }
 
@@ -883,7 +1043,7 @@ impl AiHub {
                 keys::env_var(e.config.kind).unwrap_or("an API key")
             };
             ToolError::new(ErrorCode::BadSettings, format!("{} has no API key.", e.config.name))
-                .with_remediation(format!("Add the key in Settings → AI, or set {var}."))
+                .with_remediation(format!("Add the key in Settings → Models & accounts, or set {var}."))
         })
     }
 
@@ -914,8 +1074,10 @@ impl AiHub {
         // large context and a bill, as any other cloud API (#374).
         let local = c.kind == BackendKind::OpenaiCompatible && base.is_none_or(detect::on_this_network);
         let limit = stream_limit(&e.options);
+        let sends_effort = effort_in_use(c, Some(&e.options)).is_some();
         let with_limit = |mut o: openai::OpenAi| {
             o.stream_limit = limit;
+            o.sends_effort = sends_effort;
             Box::new(o) as Box<dyn ChatModel>
         };
         let model: Box<dyn ChatModel> = match c.kind {
@@ -933,8 +1095,16 @@ impl AiHub {
                 let key = self.keys.get(&c.name).or_else(|| go_env_key(base).or_else(|| providers::env_key(base)));
                 let mut o = compatible_client(&c.name, base, key, &c.model, &self.session_id());
                 o.react = e.options.react_fallback.unwrap_or(false);
+                o.asks_window = true;
+                o.on_this_network = local;
                 with_limit(o)
             }
+            BackendKind::Managed => Box::new(provider_runtime::ManagedModel {
+                client: self.provider_client(),
+                provider_id: e.options.provider_id.clone().ok_or_else(|| ToolError::invalid("Managed provider ID is missing."))?,
+                model_id: c.model.clone(),
+                session_id: new_session_id(),
+            }),
             BackendKind::AgentCli => return Err(ToolError::invalid(format!("{} is an agent app, not an API backend.", c.name))),
         };
         let model = match tunnel {
@@ -952,6 +1122,7 @@ impl AiHub {
             effort: e.options.effort,
             max_turns: e.options.max_turns.unwrap_or(agent::DEFAULT_MAX_TURNS),
             context_tokens: e.options.context_tokens.unwrap_or(0),
+            tools: e.options.tools.unwrap_or_default(),
         })
     }
 
@@ -963,11 +1134,11 @@ impl AiHub {
             None => cfg
                 .backend_for(Role::Lead)
                 .cloned()
-                .ok_or_else(|| ToolError::unavailable("No AI is set up yet.").with_remediation("Add one in Settings → AI."))?,
+                .ok_or_else(|| ToolError::unavailable("No AI is set up yet.").with_remediation("Add one in Settings → Models & accounts."))?,
         };
         if !first.config.enabled {
             return Err(ToolError::new(ErrorCode::BadSettings, format!("{} is turned off.", first.config.name))
-                .with_remediation("Turn it on in Settings → AI, or choose another backend for this conversation."));
+                .with_remediation("Turn it on in Settings → Models & accounts, or choose another backend for this conversation."));
         }
         if first.config.kind == BackendKind::AgentCli {
             return Ok(Box::new(cli_agents::SharedConversation::new(self.engine.clone(), self.keys.clone(), first, beginner)?));
@@ -982,7 +1153,8 @@ impl AiHub {
             }
         }
         let host = Arc::new(EngineHost(self.engine.clone()));
-        let conv = ApiConversation::start(host, chain, LoopConfig { beginner, prices: cfg.prices.clone(), ..LoopConfig::default() })?;
+        let conv =
+            ApiConversation::start(host, chain, LoopConfig { beginner, prices: cfg.prices.clone(), logs: self.failure_logs(), ..LoopConfig::default() })?;
         Ok(Box::new(conv))
     }
 
@@ -1020,7 +1192,7 @@ impl AiHub {
         ApiConversation::start_with(
             host,
             vec![slot],
-            LoopConfig { beginner, prices: self.config().prices.clone(), transcript, deep, lean_for_local, ..LoopConfig::default() },
+            LoopConfig { beginner, prices: self.config().prices.clone(), transcript, deep, lean_for_local, logs: self.failure_logs(), ..LoopConfig::default() },
             toolsets.iter().copied().collect(),
         )
     }
@@ -1030,7 +1202,7 @@ impl AiHub {
         let cfg = self.config();
         let e = cfg.backend_for(role).ok_or_else(|| {
             ToolError::unavailable(format!("No backend is set for the {} role.", config::role_key(role)))
-                .with_remediation("Choose one in Settings → AI → Roles.")
+                .with_remediation("Choose one in Settings → Models & accounts.")
         })?;
         self.start(Some(&e.config.name), beginner)
     }
@@ -1066,6 +1238,10 @@ impl AiHub {
                 }
                 compatible_client(&e.config.name, b, key, "", "").list_models(t)
             }
+            BackendKind::Managed => self
+                .provider_client()
+                .models(e.options.provider_id.as_deref().ok_or_else(|| ToolError::invalid("Managed provider ID is missing."))?)
+                .map(|models| models.into_iter().map(|m| m.id).collect()),
             BackendKind::AgentCli => self.model_choices(name),
         }
     }
@@ -1112,7 +1288,9 @@ impl AiHub {
             .name("ai-test".into())
             .spawn(move || {
                 let msgs = req_parts();
-                let r = slot.model.turn(&req_owned(&msgs), &mut |_| {}, &stop).map(|r| (r, slot.model.model()));
+                // The level the AI is set to, so the test sends what its conversations will.
+                let req = TurnRequest { effort: prompt::choose_effort(slot.effort), ..req_owned(&msgs) };
+                let r = slot.model.turn(&req, &mut |_| {}, &stop).map(|r| (r, slot.model.model()));
                 let _ = tx.send(r);
             })
             .map_err(|e| ToolError::internal(e.to_string()))?;
@@ -1136,10 +1314,11 @@ impl AiHub {
         let (tx, rx) = std::sync::mpsc::channel();
         for (i, e) in entries.iter().enumerate() {
             let e = e.clone();
-            let key = self.keys.resolve(&e.config.name, e.config.kind);
+            let key = if e.config.kind == BackendKind::Managed { None } else { self.keys.resolve(&e.config.name, e.config.kind) };
+            let client = self.provider_client();
             let tx = tx.clone();
             let _ = std::thread::Builder::new().name("ai-reach".into()).spawn(move || {
-                let _ = tx.send((i, reach(&e, key)));
+                let _ = tx.send((i, reach(&e, key, client)));
             });
         }
         drop(tx);
@@ -1167,17 +1346,24 @@ fn req_owned(msgs: &[Msg]) -> TurnRequest<'_> {
     TurnRequest { system: "You are a connectivity check. Answer in one word.", messages: msgs, tools: &[], effort: Effort::High, max_tokens: 2048 }
 }
 
-fn reach(e: &BackendEntry, key: Option<String>) -> Result<u64, String> {
+fn reach(e: &BackendEntry, key: Option<String>, client: provider_runtime::ProviderClient) -> Result<u64, String> {
     let start = Instant::now();
     let t = Duration::from_secs(8);
     let base = e.config.base_url.as_deref().filter(|b| !b.trim().is_empty());
-    let need =
-        |k: Option<String>| k.ok_or_else(|| format!("no API key (set it in Settings → AI or {})", keys::env_var(e.config.kind).unwrap_or("the environment")));
+    let need = |k: Option<String>| {
+        k.ok_or_else(|| format!("no API key (set it in Settings → Models & accounts or {})", keys::env_var(e.config.kind).unwrap_or("the environment")))
+    };
     let r: Result<(), String> = match e.config.kind {
         BackendKind::Anthropic => anthropic::Anthropic::new(base, need(key)?, &e.config.model).list_models(t).map(|_| ()).map_err(|x| x.message),
         BackendKind::Openai => openai::OpenAi::official(base, need(key)?, &e.config.model).list_models(t).map(|_| ()).map_err(|x| x.message),
         BackendKind::Openrouter => openai::OpenAi::openrouter(base, need(key)?, &e.config.model).list_models(t).map(|_| ()).map_err(|x| x.message),
         BackendKind::Gemini => openai::OpenAi::gemini(base, need(key)?, &e.config.model).list_models(t).map(|_| ()).map_err(|x| x.message),
+        BackendKind::Managed => {
+            let provider_id = e.options.provider_id.clone().ok_or_else(|| "Managed provider ID is missing.".to_string())?;
+            let mut model = provider_runtime::ManagedModel { client, provider_id, model_id: e.config.model.clone(), session_id: new_session_id() };
+            let messages = req_parts();
+            model.turn(&req_owned(&messages), &mut |_| {}, &Stop::default()).map(|_| ()).map_err(|e| e.message)
+        }
         BackendKind::OpenaiCompatible | BackendKind::AgentCli if e.config.ssh_host.as_deref().is_some_and(|h| !h.trim().is_empty()) => {
             let host = e.config.ssh_host.clone().unwrap_or_default();
             craft_anything_platform::Process::new("ssh")

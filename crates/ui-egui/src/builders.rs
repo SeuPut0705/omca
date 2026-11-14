@@ -288,11 +288,11 @@ impl CraftApp {
         });
     }
 
-    /// How hard a Claude AI thinks from now on.
-    pub fn set_effort(&mut self, name: &str, effort: craft_anything_ai::Effort) {
+    /// How hard an AI thinks from now on (`None`: its usual level).
+    pub fn set_effort(&mut self, name: &str, effort: Option<craft_anything_ai::Effort>) {
         let (hub, name) = (self.hub.clone(), name.to_string());
         self.jobs.spawn(tr("Change how hard an AI thinks"), false, move |_| {
-            hub.set_effort(&name, Some(effort)).map_err(|e| e.message)?;
+            hub.set_effort(&name, effort).map_err(|e| e.message)?;
             Ok(crate::backends(&hub))
         });
     }
@@ -375,7 +375,7 @@ pub fn built_by(app: &mut CraftApp, ui: &mut Ui) {
     ui.label(RichText::new(tr("Built by")).size(theme::BODY).color(t.text_dim));
     let mut pick = None;
     let r = egui::ComboBox::from_id_salt("built-by").icon(widgets::combo_icon).selected_text(shown).width(220.0).show_ui(ui, |ui| {
-        if ui.selectable_label(app.state.make.ai.is_none(), automatic).on_hover_text(tr("Whatever Settings → AI builds with.")).clicked() {
+        if ui.selectable_label(app.state.make.ai.is_none(), automatic).on_hover_text(tr("Whatever Settings → Models & accounts builds with.")).clicked() {
             pick = Some(None);
         }
         for c in &choices {
