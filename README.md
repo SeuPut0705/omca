@@ -8,12 +8,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.2/craft-anything-0.4.2-macos-aarch64.dmg"><img src="https://img.shields.io/badge/Install-macOS%20Apple%20silicon-111827?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="Install for macOS Apple silicon"></a>
-  <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.2/craft-anything-0.4.2-windows-x64.msi"><img src="https://img.shields.io/badge/Install-Windows%20x64-0078D4?style=for-the-badge" alt="Install for Windows x64"></a>
+  <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.3/craft-anything-0.4.3-macos-aarch64.dmg"><img src="https://img.shields.io/badge/Install-macOS%20Apple%20silicon-111827?style=for-the-badge&amp;logo=apple&amp;logoColor=white" alt="Install for macOS Apple silicon"></a>
+  <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.3/craft-anything-0.4.3-windows-x64.msi"><img src="https://img.shields.io/badge/Install-Windows%20x64-0078D4?style=for-the-badge" alt="Install for Windows x64"></a>
 </p>
 <p align="center">
-  Published release: <a href="https://github.com/seuput-inc/omca/releases/tag/v0.4.2">v0.4.2</a>
-  · <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.2/craft-anything-0.4.2-windows-x64-portable.zip">Windows portable ZIP</a>
+  Published release: <a href="https://github.com/seuput-inc/omca/releases/tag/v0.4.3">v0.4.3</a>
+  · <a href="https://github.com/seuput-inc/omca/releases/download/v0.4.3/craft-anything-0.4.3-windows-x64-portable.zip">Windows portable ZIP</a>
 </p>
 
 ## What it is
