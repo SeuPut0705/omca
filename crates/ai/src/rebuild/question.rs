@@ -85,14 +85,28 @@ pub fn ask(
     ws: &Workspace,
     question: &str,
     cancel: &CancelToken,
+    backend: Option<&str>,
 ) -> Result<Answered, ToolError> {
     let question = question.trim();
     if question.is_empty() || question.len() > MAX_QUESTION {
         return Err(ToolError::invalid(format!("A question is 1 to {MAX_QUESTION} characters.")));
     }
-    let cfg = crate::AiConfig::from_settings(settings);
-    let builder_notice = super::builder_replacement(&cfg, ws, None).map(|r| super::replaced_builder_notice(&r.saved, &r.used));
-    let entry = builder_backend(&cfg, project_builder(&cfg, ws))?;
+    let raw = crate::AiConfig::from_settings(settings);
+    let cfg = hub.scoped_config(raw.clone());
+    if hub.managed_only && backend.is_none() && ws.manifest.builder.as_deref().is_none_or(|s| s.trim().is_empty()) {
+        if let Some(name) = raw.roles.get(crate::config::role_key(Role::Builder)) {
+            if cfg.get(name).is_none_or(|entry| !entry.config.enabled) {
+                return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                    .with_remediation("Choose a connected model in Settings → Models & accounts."));
+            }
+        }
+    }
+    let builder_notice = if hub.managed_only || backend.is_some() {
+        None
+    } else {
+        super::builder_replacement(&cfg, ws, None).map(|r| super::replaced_builder_notice(&r.saved, &r.used))
+    };
+    let entry = hub.selected_backend(&cfg, ws, backend)?;
     let deep = settings.deep_mode;
     super::refuse_deep_session_reuse_in_clean_room(ws, &entry.config.model, &entry.options.args, deep)?;
     let cli = |resume: Option<String>| -> Box<dyn Conversation> {
@@ -438,7 +452,7 @@ mod tests {
             ws.manifest.agent_session_by = Some("claude-code".into());
             ws.manifest.agent_session_deep = Some(true);
             ws.save().unwrap();
-            let answered = ask(&hub, &settings, Some(d.path().join("logs")), &ws, "What is it?", &CancelToken::default());
+            let answered = ask(&hub, &settings, Some(d.path().join("logs")), &ws, "What is it?", &CancelToken::default(), None);
             let argv = std::fs::read_to_string(d.path().join("argv")).unwrap_or_default();
             let spawned = !argv.is_empty();
             (answered.map(|a| (a, argv)), spawned)

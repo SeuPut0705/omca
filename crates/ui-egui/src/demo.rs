@@ -93,6 +93,20 @@ pub fn provider_account_scene(app: &mut CraftApp, scene: &str) {
     provider_accounts(app);
     crate::provider_connect::set_demo_scene(app, scene);
 }
+pub fn composer_scene(app: &mut CraftApp, empty: bool) {
+    app.state.screen = Screen::Ask;
+    app.state.input = "What can you help me make?".into();
+    if empty {
+        crate::provider_connect::set_demo_snapshot(app, Default::default());
+        return;
+    }
+    provider_accounts(app);
+    let name = "Example AI".to_string();
+    app.backends =
+        vec![BackendConfig { name: name.clone(), kind: BackendKind::Managed, model: "example-model".into(), base_url: None, ssh_host: None, enabled: true }];
+    app.backend_options.insert(name.clone(), craft_anything_ai::BackendOptions { provider_id: Some("openai".into()), ..Default::default() });
+    app.state.backend = Some(name);
+}
 
 /// Bytes that sniff as a small Linux program, with some readable strings inside.
 pub fn sample_program() -> Vec<u8> {

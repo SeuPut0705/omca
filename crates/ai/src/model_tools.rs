@@ -55,8 +55,17 @@ struct SetParams {
     thinking: Option<Effort>,
 }
 
+pub(crate) fn require_cli_tools(ctx: &Ctx<'_>) -> Result<(), ToolError> {
+    if ctx.session.ext.get::<crate::ManagedExecution>().is_some() {
+        return Err(ToolError::new(craft_anything_evidence::ErrorCode::BadSettings, "Agent CLI model tools are unavailable in managed-only mode.")
+            .with_remediation("Choose a connected model in Settings → Models & accounts."));
+    }
+    Ok(())
+}
+
 /// Capture a catalogue-capable backend from the tool's already-held session without locking it again.
 fn context(ctx: &Ctx<'_>, name: &str) -> Result<ModelContext, ToolError> {
+    require_cli_tools(ctx)?;
     let config = AiConfig::from_table(&ctx.session.settings.ai)?;
     let backend = config.get(name).cloned().ok_or_else(|| ToolError::invalid(format!("No AI backend named {name:?}.")))?;
     if backend.config.kind != crate::BackendKind::AgentCli || !cli_agents::adapter_for(&backend.config.model).has_model_catalog() {
@@ -93,6 +102,54 @@ fn ai_model_set(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErro
 mod tests {
     use super::*;
     use craft_anything_engine::{CallOptions, Caller, Engine};
+
+    #[cfg(unix)]
+    #[test]
+    fn managed_tool_dispatch_never_starts_external_model_discovery() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let program = dir.path().join("agent");
+        let marker = dir.path().join("launched");
+        std::fs::write(&program, format!("#!/bin/sh\nprintf launched > '{}'\nprintf '%s\\n' '{{\"data\":[]}}'\n", marker.display())).unwrap();
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut session = craft_anything_engine::testing::session();
+        let mut config = AiConfig::default();
+        for (name, model) in [("OpenCode", "opencode"), ("Copilot", "copilot")] {
+            config.upsert(crate::BackendEntry {
+                config: crate::BackendConfig {
+                    name: name.into(),
+                    kind: crate::BackendKind::AgentCli,
+                    model: model.into(),
+                    base_url: None,
+                    ssh_host: None,
+                    enabled: true,
+                },
+                options: crate::BackendOptions { command: Some(program.display().to_string()), ..Default::default() },
+            });
+        }
+        session.settings.ai = config.to_table().unwrap();
+        let settings = session.settings.clone();
+        let mut tools = specs();
+        tools.extend(crate::model_options::specs());
+        let engine = Engine::shared(session, tools);
+        let hub = crate::AiHub::new(engine.clone()).managed_only();
+        for (id, params) in [
+            ("ai_models_list", json!({"name":"OpenCode"})),
+            ("ai_model_set", json!({"name":"OpenCode","model":"provider/model"})),
+            ("ai_model_options_show", json!({"backend":"Copilot"})),
+            ("ai_model_options_set", json!({"backend":"Copilot","expected_cli_model":null,"context":null})),
+        ] {
+            let err = hub.engine.call(id, params, CallOptions::new(Caller::Cli)).unwrap_err();
+            assert_eq!(err.code, craft_anything_evidence::ErrorCode::BadSettings, "{id}");
+            assert!(!marker.exists(), "{id} launched an external program");
+        }
+        assert_eq!(hub.engine.session().settings, settings);
+        let mut plain_session = craft_anything_engine::testing::session();
+        plain_session.settings.ai = settings.ai;
+        let plain = Engine::shared(plain_session, specs());
+        plain.call("ai_models_list", json!({"name":"OpenCode"}), CallOptions::new(Caller::Cli)).unwrap();
+        assert!(marker.exists(), "unscoped CLI discovery still runs the configured program");
+    }
 
     /// Build hub and tool clients sharing an isolated settings file and an explicit saved selection.
     fn selection_clients() -> (crate::AiHub, std::path::PathBuf) {

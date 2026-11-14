@@ -63,7 +63,7 @@ impl CraftApp {
         if request.is_empty() {
             return;
         }
-        let Some(backend) = self.builder_backend(draft.ai.as_deref()) else { return self.need_builder(true) };
+        let Some(backend) = self.default_builder() else { return self.need_builder() };
         // Make's pictures are still being checked: start once they are in.
         if self.pending_make_checks > 0 {
             // Retain this draft. Editing Make while the checks run cancels the deferred Start (the
@@ -136,13 +136,6 @@ impl CraftApp {
             self.start_run(ws, Some(backend), message, None, Vec::new());
             return;
         }
-        // An attached project uses the builder it saved; a new one uses the one Make was started with.
-        let backend = if attached {
-            let Some(saved) = self.builder_backend(ws.manifest.builder.as_deref()) else { return self.need_builder(false) };
-            saved
-        } else {
-            backend
-        };
         if attached {
             // The project already has a conversation: keep it, and append the request. The run
             // records the request in the feed when it starts; the app only reads the feed.
@@ -257,7 +250,7 @@ impl CraftApp {
             return;
         }
         let Some(ws) = self.workspace.clone() else { return };
-        let Some(backend) = self.builder_backend(ws.manifest.builder.as_deref()) else { return self.need_builder(false) };
+        let Some(backend) = self.default_builder() else { return self.need_builder() };
         let ws = Workspace::open(&ws.root).unwrap_or(ws);
         let opts = RunOptions { continuing: true, ..self.run_options(Some(backend), None, None, Vec::new()) };
         self.start_run_with(ws, opts);
@@ -367,7 +360,7 @@ impl CraftApp {
             } else if !left.is_empty() {
                 // Another project's notes start its next run in the background.
                 let Ok(ws) = Workspace::open(&root) else { continue };
-                let Some(backend) = self.builder_backend(ws.manifest.builder.as_deref()) else { continue };
+                let Some(backend) = self.default_builder() else { continue };
                 let opts = self.run_options(Some(backend), Some(message), Some(shown), pictures);
                 if let Err(e) = self.launch(ws, opts) {
                     self.toast(e.message, true);
@@ -1827,14 +1820,17 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens, last_waitin
     };
     ui.allocate_ui(Vec2::new(width, 0.0), |ui| {
         let previews = app.previews(ui.ctx(), &app.state.project_attachments.clone());
-        let history = || {
-            let asked = app.workspace.as_ref().and_then(|w| app.asked.get(&w.root)).map_or(&[][..], Vec::as_slice);
-            crate::just_ask::prompts(&app.state.feed, asked)
-        };
-        let out = prompt_box::show(
+        let feed = std::mem::take(&mut app.state.feed);
+        let asked = std::mem::take(&mut app.asked);
+        let workspace = app.workspace.take();
+        let history = || crate::just_ask::prompts(&feed, workspace.as_ref().and_then(|w| asked.get(&w.root)).map_or(&[][..], Vec::as_slice));
+        let mut input = std::mem::take(&mut app.state.project_input);
+        let attachments = std::mem::take(&mut app.state.project_attachments);
+        let enabled = crate::provider_connect::selection_ready(app);
+        let out = prompt_box::show_with_footer(
             ui,
-            &mut app.state.project_input,
-            &app.state.project_attachments,
+            &mut input,
+            &attachments,
             prompt_box::PromptBox {
                 name: "Ask for a change",
                 hint,
@@ -1847,9 +1843,16 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens, last_waitin
                 send: true,
                 recall: last_waiting.is_some(),
                 history: Some(&history),
-                font_size: theme::BODY,
+                font_size: theme::CARD,
             },
+            enabled,
+            |ui| crate::provider_connect::composer(app, ui),
         );
+        app.state.feed = feed;
+        app.asked = asked;
+        app.workspace = workspace;
+        app.state.project_input = input;
+        app.state.project_attachments = attachments;
         // Like the x on a note: the last one waiting comes back into the box to be edited.
         if out.recall
             && let Some(note) = last_waiting
@@ -1872,7 +1875,7 @@ fn composer(app: &mut CraftApp, ui: &mut Ui, width: f32, t: &Tokens, last_waitin
         if out.stop {
             app.pause();
         }
-        if out.send {
+        if out.send && crate::provider_connect::selection_ready(app) {
             // /approvals changes a choice and sends nothing.
             match crate::approvals::command_in(&app.state.project_input) {
                 Some(Ok((kind, choice))) => {
@@ -1909,8 +1912,8 @@ fn send_or_ask(app: &mut CraftApp) {
 /// Why a question about the open project won't be answered: its builder is an agent that can't be
 /// held to reading. Said before it's sent, not after (#1695).
 fn cannot_answer(app: &CraftApp) -> Option<String> {
-    let ws = app.workspace.as_ref()?;
-    let b = rebuild::question::cannot_answer(&app.backends, ws.manifest.builder.as_deref(), app.builder.as_deref())?;
+    app.workspace.as_ref()?;
+    let b = rebuild::question::cannot_answer(&app.backends, app.state.backend.as_deref(), None)?;
     Some(trf(
         "{name} can't be kept to only reading, so it isn't asked questions. Ask with Claude Code, or with an AI that has an API key.",
         &[("name", &b.name)],
@@ -2148,7 +2151,7 @@ impl CraftApp {
             return self.deliver(ws.root, text, attachments, Ok(Vec::new()));
         }
         // Pictures are copied into the project on a worker, then the message goes.
-        self.jobs.spawn(tr("Attach pictures"), false, move |_| {
+        self.jobs.spawn(tr("Attach pictures"), true, move |_| {
             let files = ws.add_attachments(&attachments).map_err(|e| e.message);
             Ok(Done::Attached { root: ws.root, text, attachments, files })
         });
@@ -2200,7 +2203,7 @@ impl CraftApp {
     fn resume(&mut self, message: Option<String>, shown: Option<String>, pictures: Vec<PathBuf>) {
         let Some(ws) = self.workspace.clone() else { return };
         let ws = Workspace::open(&ws.root).unwrap_or(ws);
-        let Some(backend) = self.builder_backend(ws.manifest.builder.as_deref()) else { return self.need_builder(false) };
+        let Some(backend) = self.default_builder() else { return self.need_builder() };
         self.start_run(ws, Some(backend), message, shown, pictures);
     }
 }
@@ -2209,6 +2212,21 @@ impl CraftApp {
 mod tests {
     use super::*;
     use craft_anything_ai::AgentEvent;
+
+    fn select_managed_model(app: &mut CraftApp) {
+        crate::demo::provider_accounts(app);
+        let name = "Example AI".to_string();
+        app.backends.push(craft_anything_ai::BackendConfig {
+            name: name.clone(),
+            kind: craft_anything_ai::BackendKind::Managed,
+            model: "example-model".into(),
+            base_url: None,
+            ssh_host: None,
+            enabled: true,
+        });
+        app.backend_options.insert(name.clone(), craft_anything_ai::BackendOptions { provider_id: Some("openai".into()), ..Default::default() });
+        app.state.backend = Some(name);
+    }
 
     #[test]
     fn the_app_starts_with_the_persons_settings_while_the_engine_is_busy() {
@@ -2381,15 +2399,7 @@ mod tests {
     #[test]
     fn make_start_waits_for_picture_checks() {
         let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, true));
-        app.backends.push(craft_anything_ai::BackendConfig {
-            name: "Claude Code".into(),
-            kind: craft_anything_ai::BackendKind::AgentCli,
-            model: "claude-code".into(),
-            base_url: None,
-            ssh_host: None,
-            enabled: true,
-        });
-        app.builder = Some("Claude Code".into());
+        select_managed_model(&mut app);
         app.state.make.request = "A notes app".into();
         app.pending_make_checks = 1;
         app.start_make();
@@ -2405,15 +2415,7 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, true));
         app.settings.projects_dir = Some(d.path().join("projects"));
-        app.backends.push(craft_anything_ai::BackendConfig {
-            name: "Claude Code".into(),
-            kind: craft_anything_ai::BackendKind::AgentCli,
-            model: "claude-code".into(),
-            base_url: None,
-            ssh_host: None,
-            enabled: true,
-        });
-        app.builder = Some("Claude Code".into());
+        select_managed_model(&mut app);
         app.state.make.request = "A notes app".into();
         app.pending_make_checks = 1;
         app.start_make();
@@ -2431,18 +2433,11 @@ mod tests {
         let d = tempfile::tempdir().unwrap();
         let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, true));
         app.settings.projects_dir = Some(d.path().join("projects"));
-        app.backends.push(craft_anything_ai::BackendConfig {
-            name: "Claude Code".into(),
-            kind: craft_anything_ai::BackendKind::AgentCli,
-            model: "claude-code".into(),
-            base_url: None,
-            ssh_host: None,
-            enabled: true,
-        });
-        app.builder = Some("Claude Code".into());
+        select_managed_model(&mut app);
         app.state.make.request = "A notes app".into();
         app.pending_make_checks = 1;
         app.start_make();
+        assert!(app.start_after_pictures.is_some());
         app.state.make.request = "Something else".into();
         let pic = d.path().join("shot.png");
         std::fs::write(&pic, b"\x89PNG\r\n\x1a\n").unwrap();
@@ -2573,7 +2568,7 @@ mod tests {
     /// follow-up instead of being dropped.
     #[test]
     fn an_attached_project_starts_with_the_typed_request() {
-        use craft_anything_ai::{AiConfig, BackendConfig, BackendEntry, BackendKind};
+        use craft_anything_ai::{AiConfig, BackendConfig, BackendEntry, BackendKind, BackendOptions};
         let d = tempfile::tempdir().unwrap();
         let mut ws = Workspace::create(d.path(), "Notes", "A notes app", TargetRef::None).unwrap();
         ws.set_person(|m| {
@@ -2586,21 +2581,19 @@ mod tests {
         ws.save().unwrap();
         craft_anything_ai::rebuild::feed::save(&ws.root, &[FeedItem::User(UserItem::Text("earlier message".into()))]).unwrap();
         let mut app = crate::demo::app(crate::demo::engine(craft_anything_engine::Mode::Beginner, true));
-        let local = BackendConfig {
-            name: "Local".into(),
-            kind: BackendKind::OpenaiCompatible,
-            model: "qwen3:8b".into(),
-            // Nothing listens there: the run only has to start and write its feed.
-            base_url: Some("http://127.0.0.1:0/v1".into()),
+        crate::demo::composer_scene(&mut app, false);
+        let managed = BackendConfig {
+            name: "Example AI".into(),
+            kind: BackendKind::Managed,
+            model: "example-model".into(),
+            base_url: None,
             ssh_host: None,
             enabled: true,
         };
-        app.backends = vec![local.clone()];
         let mut cfg = AiConfig::default();
-        cfg.upsert(BackendEntry { config: local, options: Default::default() });
+        cfg.upsert(BackendEntry { config: managed, options: BackendOptions { provider_id: Some("openai".into()), ..Default::default() } });
         app.hub.save_config(&cfg).unwrap();
-        // "Off" isn't a backend: the attached project must use the builder it saved instead.
-        app.created(ws.clone(), "add a jump".into(), "Off".into(), None, true);
+        app.created(ws.clone(), "add a jump".into(), "Example AI".into(), None, true);
         assert!(app.state.feed.iter().any(|i| matches!(i, FeedItem::User(u) if u.text() == "earlier message")), "the saved feed is kept: {:?}", app.state.feed);
         assert!(app.state.feed.iter().any(|i| matches!(i, FeedItem::User(u) if u.text() == "add a jump")), "the new request is appended: {:?}", app.state.feed);
         let saved_feed = craft_anything_ai::rebuild::feed::load(&ws);

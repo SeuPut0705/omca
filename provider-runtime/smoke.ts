@@ -7,8 +7,8 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 if (!helper || !data || !isAbsolute(helper) || !isAbsolute(data)) throw new Error('Usage: bun smoke.ts /absolute/helper /absolute/new-data-dir');
 await mkdir(data, { recursive: false, mode: 0o700 });
-async function request(command: Record<string, unknown>): Promise<unknown> {
-  const child = Bun.spawn([helper], { env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, OMCA_PROVIDER_DATA_DIR: data }, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+async function request(command: Record<string, unknown>, expectedError?: string): Promise<unknown> {
+  const child = Bun.spawn([helper], { env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, OMCA_PROVIDER_DATA_DIR: data, OPENAI_API_KEY: 'fake-ambient-openai-key', GEMINI_API_KEY: 'fake-ambient-gemini-key', GOOGLE_API_KEY: 'fake-ambient-google-key', AWS_ACCESS_KEY_ID: 'fake-ambient-access', AWS_SECRET_ACCESS_KEY: 'fake-ambient-secret' }, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
   const timer = setTimeout(() => child.kill(), 30_000);
   const errors = new Response(child.stderr).text();
   child.stdin.write(JSON.stringify({ id: 'smoke', version: 1, ...command }) + '\n');
@@ -25,8 +25,14 @@ async function request(command: Record<string, unknown>): Promise<unknown> {
         const event: unknown = JSON.parse(pending.slice(0, end));
         pending = pending.slice(end + 1);
         if (!record(event) || event.id !== 'smoke') throw new Error('Invalid runtime identifier');
-        if (event.kind === 'error') throw new Error(`${command.command}: ${typeof event.error === 'string' ? event.error : 'Runtime error'}`);
-        if (event.kind === 'result') return event.data;
+        if (event.kind === 'error') {
+          if (expectedError && event.error === expectedError) return undefined;
+          throw new Error(`${command.command}: ${typeof event.error === 'string' ? event.error : 'Runtime error'}`);
+        }
+        if (event.kind === 'result') {
+          if (expectedError) throw new Error(`${command.command}: expected rejection`);
+          return event.data;
+        }
         throw new Error('Unexpected interactive event');
       }
     }
@@ -37,12 +43,16 @@ async function request(command: Record<string, unknown>): Promise<unknown> {
   }
 }
 try {
+  await request({ command: 'login', provider_id: 'devin-cli' }, 'Provider operation failed');
   const snapshot = await request({ command: 'snapshot', refresh: false });
   if (!record(snapshot) || !Array.isArray(snapshot.providers) || !snapshot.providers.some(p => record(p) && p.id === 'openai') || snapshot.providers.some(p => !record(p) || !Array.isArray(p.accounts) || p.accounts.length !== 0)) throw new Error('Invalid empty account catalog');
   const apiOnly = snapshot.providers.find(provider => record(provider) && provider.id === 'abliteration');
   if (!record(apiOnly) || apiOnly.auth_kind !== 'api_key' || apiOnly.login_available !== false) throw new Error('API-key provider advertises a subscription login');
   const models = await request({ command: 'models', provider_id: 'openai' });
   if (!Array.isArray(models) || !models.some(m => record(m) && m.provider_id === 'openai' && typeof m.id === 'string')) throw new Error('Missing model catalog');
+  const firstModel = models.find(m => record(m) && m.provider_id === 'openai' && typeof m.id === 'string');
+  if (!record(firstModel) || typeof firstModel.id !== 'string') throw new Error('Missing model ID');
+  await request({ command: 'turn', provider_id: 'openai', model_id: firstModel.id, session_id: 'smoke', request: { system: '', messages: [], tools: [], effort: 'none', max_tokens: 1 } }, 'No connected account');
   const marker = 'omca-artifact-smoke-not-a-real-api-key';
   const saved = await request({ command: 'set_key', provider_id: 'openai', key: marker });
   if (!record(saved) || !Array.isArray(saved.providers) || JSON.stringify(saved).includes(marker)) throw new Error('Credential leaked in account snapshot');

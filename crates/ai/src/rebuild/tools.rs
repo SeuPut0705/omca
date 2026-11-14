@@ -267,12 +267,18 @@ fn engine(ctx: &Ctx<'_>) -> Option<Arc<Engine>> {
     ctx.session.ext.get::<EngineRef>().and_then(|r| r.0.upgrade())
 }
 
+fn scoped_hub(ctx: &Ctx<'_>, engine: Arc<Engine>) -> AiHub {
+    let mut hub = AiHub::with_stores(engine, ctx.session.config_dir().join("config.toml"), crate::KeyStore::system());
+    hub.managed_only = ctx.session.ext.get::<crate::ManagedExecution>().is_some();
+    hub
+}
+
 /// Bring every run up to date and start queued ones in free places. Events are kept in each
 /// project's feed by the run itself, so they're dropped here.
 fn refresh(ctx: &Ctx<'_>, set: &mut RunSet) {
     set.set_limit(ctx.session.settings.build.parallel);
     if let Some(engine) = engine(ctx) {
-        let hub = AiHub::with_stores(engine, ctx.session.config_dir().join("config.toml"), crate::KeyStore::system());
+        let hub = scoped_hub(ctx, engine);
         let _ = set.poll(&hub);
     }
 }
@@ -294,6 +300,9 @@ pub struct QuestionParams {
     pub project: PathBuf,
     /// The question, in plain words.
     pub question: String,
+    /// Explicit backend for this question, without changing the project's saved builder.
+    #[serde(default)]
+    pub backend: Option<String>,
 }
 
 fn rebuild_question_ask(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
@@ -308,8 +317,16 @@ fn rebuild_question_ask(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, 
     // The session is this call's while it runs: the question gets its settings from here.
     let mut settings = ctx.session.settings.clone();
     settings.deep_mode = !ctx.session.clean_room();
-    let answered =
-        super::question::ask(&AiHub::new(engine), &settings, Some(crate::failure_log::dir_in(&ctx.session.config_dir())), &ws, &p.question, &ctx.cancel)?;
+    let hub = scoped_hub(ctx, engine);
+    let answered = super::question::ask(
+        &hub,
+        &settings,
+        Some(crate::failure_log::dir_in(&ctx.session.config_dir())),
+        &ws,
+        &p.question,
+        &ctx.cancel,
+        p.backend.as_deref(),
+    )?;
     let question = p.question.trim();
     let from_session = answered.from == super::question::AnsweredFrom::BuildersSession;
     let asked = AskedQuestion {
@@ -335,7 +352,10 @@ fn record_question_usage(ws: &Workspace, answered: &super::question::Answered) {
 /// the project's own choice as it was.
 fn project_builder_set(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let p: BuilderParams = parse_params(params)?;
-    let cfg = crate::AiConfig::from_settings(&ctx.session.settings);
+    let mut cfg = crate::AiConfig::from_settings(&ctx.session.settings);
+    if ctx.session.ext.get::<crate::ManagedExecution>().is_some() {
+        cfg.backends.retain(|entry| entry.config.kind == BackendKind::Managed);
+    }
     let mut ws = open(&p.project)?;
     if let Some(name) = p.builder.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
         if name.eq_ignore_ascii_case("default") {
@@ -367,11 +387,24 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
     let engine = engine(ctx).ok_or_else(|| {
         ToolError::new(ErrorCode::FeatureMissing, "Building isn't available in this engine.").with_remediation("Use the app or `craft-anything-cli rebuild`.")
     })?;
+    let hub = scoped_hub(ctx, engine);
     let runs = runs(ctx);
-    let cfg = crate::AiConfig::from_settings(&ctx.session.settings);
-    // Refuse an unknown or switched-off name before opening or making a project or adding pictures:
-    // a refused start must not leave anything behind.
+    let raw = crate::AiConfig::from_settings(&ctx.session.settings);
+    let cfg = hub.scoped_config(raw.clone());
+    if hub.managed_only && p.backend.is_none() && p.project.is_none() && !p.project_folder.as_deref().is_some_and(project::has_project) {
+        if let Some(name) = raw.roles.get(crate::config::role_key(Role::Builder)) {
+            if cfg.get(name).is_none_or(|entry| !entry.config.enabled) {
+                return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                    .with_remediation("Choose a connected model in Settings → Models & accounts."));
+            }
+        }
+        builder_backend(&cfg, None)?;
+    }
     if let Some(name) = p.backend.as_deref() {
+        if hub.managed_only && cfg.get(name).is_none() {
+            return Err(ToolError::new(ErrorCode::BadSettings, format!("The selected AI {name:?} is not connected in the app."))
+                .with_remediation("Choose a connected model in Settings → Models & accounts."));
+        }
         builder_backend(&cfg, Some(name))?;
     }
     let (ws, message) = match &p.project {
@@ -383,6 +416,7 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
                 return Err(ToolError::invalid("generate_assets is for new projects.").with_remediation("Use project_assets_allow for an existing project."));
             }
             let ws = open(dir)?;
+            hub.selected_backend(&cfg, &ws, p.backend.as_deref())?;
             ctx.session.remember_project(&ws.root)?;
             (ws, (!p.resume).then(|| p.request.clone()))
         }
@@ -401,6 +435,10 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
                         ToolError::invalid("generate_assets is for new projects.").with_remediation("Use project_assets_allow for an existing project.")
                     );
                 }
+            }
+            if attached {
+                let ws = open(p.project_folder.as_deref().unwrap())?;
+                hub.selected_backend(&cfg, &ws, p.backend.as_deref())?;
             }
             let target = p.target.as_deref().unwrap_or("-");
             let place = match (&p.project_folder, &p.projects_dir) {
@@ -441,7 +479,7 @@ fn rebuild_start(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolErr
     };
     // A tool runs with the session locked, so the hub reads the saved file: use this session's
     // config file (the person's own in the app), not the machine's default one.
-    let hub = AiHub::with_stores(engine, ctx.session.config_dir().join("config.toml"), crate::KeyStore::system());
+    // The hub carries the originating session's execution policy.
     let mut out = match set.start(&hub, ws, opts)? {
         Started::Running => json!({"project": root.display().to_string(), "started": true}),
         Started::Queued { position } => {

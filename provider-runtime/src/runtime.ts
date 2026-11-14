@@ -7,6 +7,7 @@ import { fromAssistant, toContext, type WireRequest } from './messages';
 import { accountUsage } from './usage';
 import { Observations } from './observations';
 import { canActOnAccount, modelList, supportsApiKey } from './catalog';
+import { assertDirectTransport, DirectAuthError, directCredentialResolver, supportsDirectLogin } from './direct-auth';
 
 const dir = process.env.OMCA_PROVIDER_DATA_DIR;
 if (!dir || !isAbsolute(dir)) process.exit(1);
@@ -59,7 +60,7 @@ function checkProvider(id: string) {
 
 async function snapshot(refresh: boolean) {
   const selected = await selections();
-  const ids = new Set<string>([...getBundledProviders(), ...logins.map(p => p.id)]);
+  const ids = new Set<string>([...getBundledProviders(), ...logins.filter(p => supportsDirectLogin(p.id)).map(p => p.id)]);
   const providers = [];
   for (const id of ids) {
     const login = logins.find(p => p.id === id);
@@ -85,7 +86,7 @@ async function snapshot(refresh: boolean) {
       accounts.push({ id: row.id, label: credential.type === 'oauth' ? (credential.email || credential.orgName || credential.accountId || `Account ${row.id}`) : `API key ${row.id}`, detail: credential.type === 'oauth' ? (credential.orgName || credential.orgId) : undefined, kind: credential.type, selected: selected[storedProvider] === row.id, in_use: lastUsed === row.id, state: row.disabledCause ? 'disabled' : 'available', limits, fetched_at, credits, usage_error });
     }
     const definition = PROVIDER_REGISTRY.find(p => p.id === id);
-    providers.push({ id, name: login?.name ?? definition?.name ?? id, login_available: !!login?.available && authPolicyFor(id)?.login?.kind !== 'api-key', authenticated: accounts.some(a => a.state === 'available'), disabled_reason: providerPauseReason(id), risk_warning: loginRiskWarning(id), auth_kind: supportsApiKey(id) ? 'api_key' : login ? 'oauth' : undefined, accounts });
+    providers.push({ id, name: login?.name ?? definition?.name ?? id, login_available: !!login?.available && supportsDirectLogin(id), authenticated: accounts.some(a => a.state === 'available'), disabled_reason: providerPauseReason(id), risk_warning: loginRiskWarning(id), auth_kind: supportsApiKey(id) ? 'api_key' : supportsDirectLogin(id) ? 'oauth' : undefined, accounts });
   }
   return { providers, models: [] };
 }
@@ -100,7 +101,7 @@ async function execute(req: Record<string, unknown>) {
   if (command === 'models') return modelList(id);
   if (command === 'login') {
     const warning = loginRiskWarning(id);
-    if (authPolicyFor(id)?.login?.kind === 'api-key' || !logins.some(p => p.id === id && p.available)) throw new Error('Login unavailable');
+    if (!supportsDirectLogin(id) || !logins.some(p => p.id === id && p.available)) throw new Error('Login unavailable');
     await storage.oauth.login(id, {
       signal: abort.signal,
       onAuth: info => emit('login', { event: { type: 'open_url', url: info.url, instructions: info.instructions } }),
@@ -150,13 +151,11 @@ async function execute(req: Record<string, unknown>) {
     if (typeof req.model_id !== 'string' || typeof req.session_id !== 'string' || !req.request || typeof req.request !== 'object') throw new Error('Invalid turn');
     const model = getBundledModel(provider, req.model_id);
     if (!model) throw new Error('Unknown model');
+    assertDirectTransport(id, model.api);
+    assertDirectTransport(provider, model.api);
     const selection = (await selections())[provider];
-    const row = selection === undefined ? undefined : storage.credentials.list(provider).find(c => c.id === selection && !c.disabledCause);
-    if (selection !== undefined && !row) throw new Error('Selected account unavailable');
-    const resolver = storage.keys.resolver(provider, { sessionId: req.session_id, modelId: model.id, baseUrl: model.baseUrl });
-    if (row?.credential.type === 'oauth' && !storage.sessions.pin(provider, req.session_id, row.id)) throw new Error('Selected account unavailable');
+    const apiKey = directCredentialResolver(storage, provider, selection);
     const request = req.request as WireRequest;
-    const apiKey = row?.credential.type === 'api_key' ? () => ({ apiKey: row.credential.type === 'api_key' ? row.credential.key : '', credentialId: row.id }) : resolver;
     const effort = request.effort;
     if (!['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(effort)) throw new Error('Invalid effort');
     const stream = streamSimple(model, toContext(request, model), { apiKey, signal: abort.signal, maxTokens: request.max_tokens, reasoning: effort === 'none' ? undefined : effort as Effort, disableReasoning: effort === 'none' });
@@ -184,7 +183,7 @@ function handleLine(line: Buffer) {
   if (!started) {
     if (typeof data.id !== 'string' || data.version !== 1) { process.stdin.pause(); return; }
     started = true; requestId = data.id;
-    void execute(data).then(result => { if (!finished) { finished = true; emit('result', { data: result }); } }, () => { if (!finished) { finished = true; emit('error', { error: abort.signal.aborted ? 'Cancelled' : 'Provider operation failed' }); } }).finally(() => { storage.close(); process.stdin.pause(); });
+    void execute(data).then(result => { if (!finished) { finished = true; emit('result', { data: result }); } }, error => { if (!finished) { finished = true; emit('error', { error: abort.signal.aborted ? 'Cancelled' : error instanceof DirectAuthError ? error.message : 'Provider operation failed' }); } }).finally(() => { storage.close(); process.stdin.pause(); });
   } else if (data.command === 'cancel') cancel();
   else if (data.command === 'respond' && pending && data.request_id === pending.id) {
     const active = pending; pending = undefined;

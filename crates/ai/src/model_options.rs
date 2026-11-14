@@ -71,6 +71,7 @@ pub fn specs() -> Vec<ToolSpec> {
 
 fn show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let params: ShowModelOptions = parse_params(params)?;
+    crate::model_tools::require_cli_tools(ctx)?;
     let config = AiConfig::from_table(&ctx.session.settings.ai)?;
     let entry = config.get(&params.backend).ok_or_else(|| ToolError::invalid("No such AI backend."))?;
     if !supported(&entry.config) {
@@ -85,6 +86,7 @@ fn show(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
 
 fn set(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let params: SetModelOptions = parse_params(params)?;
+    crate::model_tools::require_cli_tools(ctx)?;
     let mut config = AiConfig::from_table(&ctx.session.settings.ai)?;
     update(&mut config, &params)?;
     let mut settings = ctx.session.settings.clone();

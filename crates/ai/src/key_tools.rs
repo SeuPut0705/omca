@@ -97,17 +97,23 @@ fn hub(ctx: &Ctx<'_>) -> Result<AiHub, ToolError> {
     Ok(AiHub::new(engine))
 }
 
+fn key_present(store: &crate::KeyStore, provider: &dyn AssetProvider, managed_only: bool) -> bool {
+    crate::keys::asset_key_scoped(store, provider, managed_only).is_some()
+}
+
 fn assets_key_status(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {
     let p: ProviderParams = parse_params(params)?;
     let asked = provider(ctx, p.provider.as_deref())?;
-    let (hub, all) = (hub(ctx)?, providers(ctx));
+    let hub = hub(ctx)?;
+    let managed_only = ctx.session.ext.get::<crate::ManagedExecution>().is_some();
+    let all = providers(ctx);
     let each: Vec<Value> = all
         .ids()
         .into_iter()
         .filter_map(|id| all.get(id))
-        .map(|p| json!({"provider": p.id(), "name": p.name(), "stored": hub.has_asset_key(&all, p.id())}))
+        .map(|p| json!({"provider": p.id(), "name": p.name(), "stored": key_present(&hub.keys, p.as_ref(), managed_only)}))
         .collect();
-    Ok(ToolOutput::Value(json!({"provider": asked.id(), "stored": hub.has_asset_key(&all, asked.id()), "providers": each})))
+    Ok(ToolOutput::Value(json!({"provider": asked.id(), "stored": key_present(&hub.keys, asked.as_ref(), managed_only), "providers": each})))
 }
 
 fn assets_key_set(ctx: &mut Ctx<'_>, params: Value) -> Result<ToolOutput, ToolError> {

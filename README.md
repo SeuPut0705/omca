@@ -46,11 +46,19 @@ The engine, workflow, Clean room / Deep modes and tool set come from upstream Cr
   and `CRAFT_ANYTHING_*` environment variables are unchanged, to keep upstream merges simple.
 
 Settings → Models & accounts groups connected providers and their accounts, with sign-in,
-account selection, model selection and provider-reported quota windows. The bundled provider
-runtime uses the public omp SDK; its credentials stay in OMCA's private provider store, separate
-from other apps. Provider-specific warnings and disabled-provider rules still apply.
-API keys use a separate connection form. Legacy command-line agents, local/custom endpoints
-and game assets are under Advanced.
+account selection, model selection, and provider-reported quota windows. The desktop app uses
+only accounts signed into OMCA or API keys entered in OMCA. It does not discover or adopt
+installed CLI accounts, environment keys, or other apps' credentials. Legacy configuration stays
+on disk but cannot select an external agent for a desktop conversation or build.
+
+Every chat and build input shows its selected provider and model. Open **Change model** to
+search connected providers and choose the model for the next request. Switching models keeps
+the draft and conversation visible. Active or queued work must finish before switching.
+Unavailable saved project builders require an explicit selection instead of a silent fallback.
+
+The bundled provider runtime uses the public omp SDK with OMCA's private credential store.
+Provider-specific warnings and disabled-provider rules still apply. API keys use a separate
+connection form. The standalone CLI retains its separately configured agent integrations.
 
 ## Platforms and languages
 
@@ -80,8 +88,6 @@ export OMCA_PROVIDER_RUNTIME="$PROVIDER_RUNTIME_DIR/omca-provider-runtime"
 cargo run -p craft-anything
 ```
 
-Building with Claude Code needs `claude` on `PATH` (or in `~/.local/bin`) and signed in
-(`claude auth login`).
 
 ## CI (local)
 

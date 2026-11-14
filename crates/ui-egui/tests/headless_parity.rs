@@ -46,10 +46,6 @@ const ACTIONS: &[Action] = &[
     // ---- Projects: making something --------------------------------------------------------
     a("start_make",          "start a new project from the Home prompt",       Cli("rebuild <target> <request> --build-with --backend --generate-assets")),
     a("New project › Work on my project", "edit a project the person already has, in place", Cli("rebuild <target> <request> --project-folder --existing")),
-    a("set_backend_enabled", "turn an AI on or off",                           Cli("ai on <name> / ai off <name>")),
-    a("remove_backend",      "remove an AI and its key",                       Cli("ai remove <name>")),
-    a("set_agent_program",   "run an agent app from a program it isn't found as", Cli("ai program <name> <path>")),
-    a("set_agent_folder",    "keep Claude Code's sign-in in another folder (another account)", Cli("ai folder <name> <path>")),
     a("refresh_projects",    "list the projects",                              Tool(&["project_list"])),
     a("remember_project",    "keep a project in a picked folder in the list",  Tool(&["rebuild_start"])),
     a("add_project_folder",  "list projects from another folder too",          Tool(&["settings_set"])),
@@ -109,22 +105,9 @@ const ACTIONS: &[Action] = &[
 
     // ---- AI brains ---------------------------------------------------------------------------
     a("refresh_backends",    "the connected AI brains",                        Cli("ai list")),
-    a("detect_backends",     "find AI on this computer",                       Cli("ai detect")),
-    a("check_agent_connection", "check a selected local agent's executable and adapter sign-in", Cli("ai test <name>")),
-    a("add_backend",         "connect an AI brain",                            Cli("ai add <name> --kind --model --base-url --ssh-host --key-env --key-stdin")),
-    a("add_server",          "connect an AI server by its address",            Cli("ai add <name> --kind --base-url --key-env --key-stdin")),
     a("save_backend_key",    "replace an API key saved in the app",            Cli("ai key <name> --key-env --key-stdin")),
     a("remove_backend_key",  "forget an API key saved in the app",             Cli("ai key <name> --forget")),
-    a("pick_model",          "list the models an AI can use",                  Cli("ai model <name>")),
-    a("set_model",           "change the model an AI uses",                    Cli("ai model <name> <model>")),
-    a("set_effort",          "change how hard an AI thinks",                   Cli("ai effort <name> <level>")),
-    a("pick_agent_model",    "list an agent's visible models and thinking depths", Tool(&["ai_models_list"])),
-    a("reload_agent_model",  "reload model-specific thinking choices",         Tool(&["ai_models_list"])),
-    a("set_agent_model",     "choose an agent's model and thinking depth",     Tool(&["ai_model_set"])),
-    a("pick_model_options",  "discover context and reasoning for a model",     Tool(&["ai_model_options_show"])),
-    a("set_model_options",   "save a model's context and reasoning choices",   Tool(&["ai_model_options_set"])),
     a("choose_backend",      "pick the AI brain",                              Cli("chat <question> --backend")),
-    a("set_role",            "choose which AI builds or extracts",             Cli("ai extractor <name>")),
 
     // ---- Studying a target -------------------------------------------------------------------
     a("open_path",           "open an app or file as the target",              Tool(&["core_target_open"])),
@@ -148,7 +131,6 @@ const ACTIONS: &[Action] = &[
 #[rustfmt::skip]
 const PLUMBING: &[(&str, &str)] = &[
     ("show_update_outcome_on_start", "native startup queues the previous helper result for the first window frame; no document action"),
-    ("load_agent_model_catalog", "worker dispatch shared by the model picker and its reload action"),
     ("check_backend_keys", "a worker that fills the saved-key status rows"),
     ("stuck_banner", "draws what the lock watchdog found; `sync::problems` and its log are the headless side"),
     ("act", "runs a button's tool on a worker (play, preview, open folder)"),
@@ -167,7 +149,7 @@ const PLUMBING: &[(&str, &str)] = &[
     ("handle_done", "a job's result"), ("tool_done", "a job's result"),
     ("select_backend", "part of choose_backend; also selects an AI that finished connecting"),
     ("tick", "the frame loop"), ("show", "drawing"), ("toasts", "drawing"), ("shortcuts", "keys"),
-    ("builder_backend", "part of start_make"), ("need_builder", "part of start_make"), ("start_run", "part of start_make"), ("start_run_with", "part of start_run and continue_build"),
+    ("need_builder", "part of start_make"), ("start_run", "part of start_make"), ("start_run_with", "part of start_run and continue_build"),
     ("resume", "part of follow_up"), ("poll_run", "polling"), ("launch", "part of start_run: RunSet::start, the queue rebuild_start uses too"),
     ("thumb_ready", "a job's result"), ("thumb", "drawing"), ("refresh_side_panel", "a view tally"),
     ("previews", "drawing"), ("preview", "drawing"), ("preview_ready", "a job's result"),

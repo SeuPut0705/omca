@@ -142,9 +142,11 @@ pub fn hero(app: &mut CraftApp, ui: &mut Ui, w: f32) {
         engine_choices(app, ui);
         ui.add_space(space::L);
         ui.horizontal(|ui| {
-            crate::builders::built_by(app, ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let ready = !app.state.make.request.trim().is_empty() && url_problem(&app.state.make.url).is_none() && app.creating.is_none();
+                let ready = !app.state.make.request.trim().is_empty()
+                    && url_problem(&app.state.make.url).is_none()
+                    && app.creating.is_none()
+                    && crate::provider_connect::selection_ready(app);
                 let start = widgets::primary_sized(ui, Some("sparkles"), "Start", ready, size::CONTROL_XL, theme::BODY);
                 let start = if ready { start } else { start.on_disabled_hover_text(tr("Say what you want first.")) };
                 if (start.clicked() || submit) && ready {
@@ -203,10 +205,9 @@ fn mine(app: &mut CraftApp, ui: &mut Ui, w: f32) {
         engine_choices(app, ui);
         ui.add_space(space::L);
         ui.horizontal(|ui| {
-            crate::builders::built_by(app, ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let said = !app.state.make.request.trim().is_empty();
-                let ready = folder.is_some() && said && app.creating.is_none();
+                let ready = folder.is_some() && said && app.creating.is_none() && crate::provider_connect::selection_ready(app);
                 let start = widgets::primary_sized(ui, Some("sparkles"), "Start", ready, 50.0, theme::BODY);
                 let start = if ready {
                     start
@@ -225,10 +226,13 @@ fn mine(app: &mut CraftApp, ui: &mut Ui, w: f32) {
 /// paperclip; `None` takes none). True when it was sent from the keyboard.
 fn request_box(app: &mut CraftApp, ui: &mut Ui, hint: &str, attach: Option<&str>) -> bool {
     let previews = app.previews(ui.ctx(), &app.state.make.pictures.clone());
-    let out = crate::prompt_box::show(
+    let mut request = std::mem::take(&mut app.state.make.request);
+    let pictures = std::mem::take(&mut app.state.make.pictures);
+    let enabled = crate::provider_connect::selection_ready(app);
+    let out = crate::prompt_box::show_with_footer(
         ui,
-        &mut app.state.make.request,
-        &app.state.make.pictures,
+        &mut request,
+        &pictures,
         crate::prompt_box::PromptBox {
             name: "Say what you want",
             hint: tr(hint),
@@ -240,9 +244,13 @@ fn request_box(app: &mut CraftApp, ui: &mut Ui, hint: &str, attach: Option<&str>
             send: false,
             recall: false,
             history: None,
-            font_size: theme::BODY,
+            font_size: theme::CARD,
         },
+        enabled,
+        |ui| crate::provider_connect::composer(app, ui),
     );
+    app.state.make.request = request;
+    app.state.make.pictures = pictures;
     if let Some(i) = out.remove {
         app.state.make.pictures.remove(i);
     }
@@ -252,7 +260,7 @@ fn request_box(app: &mut CraftApp, ui: &mut Ui, hint: &str, attach: Option<&str>
     if out.paste {
         app.paste_pictures(false);
     }
-    out.send
+    out.send && crate::provider_connect::selection_ready(app)
 }
 
 /// For a game: the engine it's built with, and whether the builder may generate its assets.

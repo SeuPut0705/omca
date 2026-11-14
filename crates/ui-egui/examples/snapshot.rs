@@ -41,6 +41,10 @@ fn render(out: &std::path::Path, name: &str, w: f32, h: f32, scale: f32, make: i
         harness.step();
     }
     match name {
+        "composer-picker" | "composer-empty-picker" => {
+            harness.get_by_label_contains(&craft_anything_ui_egui::i18n::tr("Change model")).click();
+            harness.run_steps(3);
+        }
         "providers-search" | "providers-connect" => {
             harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Add account")).click();
             harness.run_steps(3);
@@ -52,15 +56,6 @@ fn render(out: &std::path::Path, name: &str, w: f32, h: f32, scale: f32, make: i
                 harness.get_by_label(&craft_anything_ui_egui::i18n::tr("API key")).click();
                 harness.run_steps(3);
             }
-        }
-        "providers-custom" => {
-            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Advanced AI settings")).click();
-            harness.run_steps(3);
-            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Custom server")).scroll_to_me();
-            harness.run_steps(3);
-            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Custom server")).click();
-            harness.run_steps(3);
-            harness.get_by_label(&craft_anything_ui_egui::i18n::tr("Server address"));
         }
         "providers-detail" => {}
         _ => {}
@@ -402,7 +397,26 @@ fn main() {
     if want("settings-ai-error") {
         render(&out, "settings-ai-error", w, h, scale, move || ai_app(true));
     }
-    for scene in ["providers-empty", "providers-search", "providers-connect", "providers-custom"] {
+    for scene in ["composer-selected", "composer-picker", "composer-empty", "composer-empty-picker", "composer-project", "composer-make"] {
+        if want(scene) {
+            render(&out, scene, w, h, scale, move || {
+                let mut a = demo::app(demo::engine(Mode::Beginner, true));
+                if scene == "composer-project" {
+                    demo::fill_project(&mut a);
+                }
+                demo::composer_scene(&mut a, scene.starts_with("composer-empty"));
+                if scene == "composer-project" {
+                    a.state.screen = Screen::Project;
+                    a.state.project_input = "Add a dark theme without changing the layout.".into();
+                } else if scene == "composer-make" {
+                    a.state.screen = Screen::Home;
+                    a.state.make.request = "Build a notes app with keyboard shortcuts.".into();
+                }
+                a
+            });
+        }
+    }
+    for scene in ["providers-empty", "providers-search", "providers-connect"] {
         if want(scene) {
             render(&out, scene, w, h, scale, move || {
                 let mut a = engine_app(None, false);

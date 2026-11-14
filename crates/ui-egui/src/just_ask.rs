@@ -90,7 +90,7 @@ impl CraftApp {
         let root = ws.root;
         let after = self.state.feed.len();
         self.asked.entry(root.clone()).or_default().push(Asked { question: question.clone(), answer: None, after, collapsed: false, reveal: true });
-        self.act("rebuild_question_ask", json!({"project": root, "question": question}), tr("Ask about the build"));
+        self.act("rebuild_question_ask", json!({"project": root, "question": question, "backend": self.state.backend}), tr("Ask about the build"));
     }
 
     /// A question's answer came (or it failed).
