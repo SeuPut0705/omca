@@ -543,7 +543,7 @@ fn the_prompt_box_sends_on_enter_with_its_pictures() {
     );
     assert!(root.join("attachments/picture-1.png").is_file(), "the picture is copied into the project");
     assert!(h.state().state.project_input.is_empty() && h.state().state.project_attachments.is_empty());
-    assert_eq!(runs.started(), [root.clone()], "the message starts a build");
+    assert_eq!(runs.started().as_slice(), std::slice::from_ref(&root), "the message starts a build");
     assert!(runs.finish(&root));
 }
 
